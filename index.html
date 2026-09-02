@@ -1,0 +1,1023 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>인연 접수처</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap">
+<style id="page-style">
+  :root {
+    --ink: #2A1F26;
+    --paper: #FBF3EE;
+    --card: #FFFDFB;
+    --line: #E8DAD2;
+    --muted: #8A7370;
+    --accent: #B23A48;
+    --accent-deep: #7A222E;
+    --accent-soft: #F4DADC;
+    --gold: #C08A34;
+    --gold-soft: #F1E2C4;
+    --shadow: rgba(42, 31, 38, 0.12);
+    --focus: #B23A48;
+    --lock: #5B7A8C;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #F4EAE6;
+      --paper: #1C1519;
+      --card: #291F25;
+      --line: #3E313A;
+      --muted: #B4A29E;
+      --accent: #E58C96;
+      --accent-deep: #F2AEB6;
+      --accent-soft: #45262B;
+      --gold: #D9A94F;
+      --gold-soft: #463823;
+      --shadow: rgba(0, 0, 0, 0.45);
+      --focus: #E58C96;
+      --lock: #8FB2C7;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #F4EAE6;
+    --paper: #1C1519;
+    --card: #291F25;
+    --line: #3E313A;
+    --muted: #B4A29E;
+    --accent: #E58C96;
+    --accent-deep: #F2AEB6;
+    --accent-soft: #45262B;
+    --gold: #D9A94F;
+    --gold-soft: #463823;
+    --shadow: rgba(0, 0, 0, 0.45);
+    --focus: #E58C96;
+    --lock: #8FB2C7;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Gowun Dodum', -apple-system, BlinkMacSystemFont, 'Noto Sans KR', sans-serif;
+    line-height: 1.6;
+  }
+  h1, h2, h3, .display {
+    font-family: 'Gowun Batang', Georgia, 'Noto Serif KR', serif;
+    text-wrap: balance;
+    margin: 0;
+  }
+  ::selection { background: var(--accent-soft); }
+  a { color: var(--accent); }
+  button { font-family: inherit; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .page { max-width: 880px; margin: 0 auto; padding: 0 20px 64px; }
+
+  /* ---------- Header / masthead ---------- */
+  .masthead {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 36px 20px 20px;
+    border-bottom: 3px dashed var(--gold);
+    margin-bottom: 32px;
+  }
+  .masthead-inner { max-width: 880px; margin: 0 auto; display: flex; align-items: center; gap: 14px; }
+  .masthead-icon { color: var(--accent); flex-shrink: 0; }
+  .masthead h1 { font-size: clamp(1.5rem, 4vw, 2.1rem); letter-spacing: 0.01em; }
+  .masthead p { margin: 6px 0 0; color: var(--paper); opacity: 0.72; font-size: 0.92rem; }
+  .admin-bar { max-width: 880px; margin: 14px auto 0; display: flex; justify-content: flex-end; }
+  .admin-link {
+    background: none; border: 1px solid rgba(251,243,238,0.3); color: var(--paper);
+    opacity: 0.8; font-size: 0.78rem; padding: 5px 12px; border-radius: 999px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .admin-link:hover { opacity: 1; border-color: rgba(251,243,238,0.6); }
+  .admin-link.unlocked { background: var(--accent); border-color: var(--accent); opacity: 1; }
+
+  /* ---------- Tabs ---------- */
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 28px;
+    border-bottom: 1px solid var(--line);
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    padding: 12px 6px;
+    font-size: 1rem;
+    color: var(--muted);
+    cursor: pointer;
+    position: relative;
+    font-family: 'Gowun Batang', Georgia, serif;
+  }
+  .tab-btn[aria-selected="true"] { color: var(--ink); }
+  .tab-btn[aria-selected="true"]::after {
+    content: "";
+    position: absolute; left: 0; right: 0; bottom: -1px;
+    height: 3px; background: var(--accent); border-radius: 2px;
+  }
+  .tab-btn .count {
+    display: inline-block; margin-left: 6px;
+    background: var(--gold-soft); color: var(--gold);
+    border-radius: 999px; padding: 1px 9px; font-size: 0.78rem;
+    font-family: 'Gowun Dodum', sans-serif;
+  }
+
+  /* ---------- Form ---------- */
+  .form-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 32px;
+    box-shadow: 0 6px 24px var(--shadow);
+  }
+  .form-lede { margin-bottom: 24px; }
+  .form-lede h2 { font-size: 1.4rem; margin-bottom: 8px; }
+  .form-lede p { color: var(--muted); font-size: 0.92rem; margin: 0; }
+
+  .field-group { display: grid; gap: 20px; }
+  .field { display: flex; flex-direction: column; gap: 6px; position: relative; }
+  .field label {
+    font-size: 0.88rem; font-weight: 700; color: var(--ink);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .field .req { color: var(--accent); font-size: 0.8rem; }
+  .field .opt { color: var(--muted); font-size: 0.78rem; font-weight: 400; }
+  .field input[type="text"],
+  .field input[type="number"],
+  .field select,
+  .field textarea {
+    font-family: inherit;
+    font-size: 0.98rem;
+    padding: 11px 13px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--paper);
+    color: var(--ink);
+    width: 100%;
+    resize: vertical;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
+  .field .hint { font-size: 0.78rem; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 520px) { .row-2 { grid-template-columns: 1fr; } }
+
+  .section-label {
+    font-size: 0.8rem; font-weight: 700; color: var(--gold); text-transform: uppercase;
+    letter-spacing: 0.06em; margin: 4px 0 -6px;
+  }
+
+  .gender-toggle { display: flex; gap: 10px; }
+  .gender-toggle label {
+    flex: 1; text-align: center; padding: 11px 8px;
+    border: 1px solid var(--line); border-radius: 10px;
+    cursor: pointer; font-weight: 400; color: var(--muted);
+    background: var(--paper); user-select: none;
+  }
+  .gender-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+  .gender-toggle input:checked + span { color: inherit; }
+  .gender-toggle label:has(input:checked) {
+    border-color: var(--accent); background: var(--accent-soft); color: var(--accent-deep); font-weight: 700;
+  }
+
+  /* ---------- Degree radio group (relationship to Benny) ---------- */
+  .degree-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+  .degree-group label {
+    flex: 1; min-width: 120px; text-align: center; padding: 9px 6px;
+    border: 1px solid var(--line); border-radius: 10px;
+    cursor: pointer; font-size: 0.85rem; color: var(--muted);
+    background: var(--paper); user-select: none;
+  }
+  .degree-group input { position: absolute; opacity: 0; pointer-events: none; }
+  .degree-group label:has(input:checked) {
+    border-color: var(--gold); background: var(--gold-soft); color: var(--gold); font-weight: 700;
+  }
+
+  .photo-field { display: flex; align-items: center; gap: 16px; }
+  .photo-preview {
+    width: 76px; height: 76px; border-radius: 14px;
+    border: 1px dashed var(--line); background: var(--paper);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; flex-shrink: 0; color: var(--muted); font-size: 0.75rem;
+  }
+  .photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+  .photo-pick {
+    display: inline-block; padding: 9px 16px; border-radius: 999px;
+    background: var(--paper); border: 1px solid var(--line);
+    cursor: pointer; font-size: 0.88rem;
+  }
+  .photo-pick:hover { border-color: var(--accent); }
+  .field input[type="file"] { display: none; }
+
+  .perforation {
+    border: none; border-top: 2px dotted var(--line); margin: 28px 0;
+  }
+
+  .submit-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .submit-btn {
+    background: var(--accent); color: #fff; border: none;
+    padding: 14px 30px; border-radius: 999px; font-size: 1rem; font-weight: 700;
+    cursor: pointer; box-shadow: 0 4px 14px var(--shadow);
+    transition: transform 0.1s ease, background 0.15s ease;
+  }
+  .submit-btn:hover { background: var(--accent-deep); }
+  .submit-btn:active { transform: scale(0.97); }
+  .submit-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .status-msg { font-size: 0.86rem; color: var(--muted); }
+  .status-msg.error { color: var(--accent); }
+  .retry-btn {
+    background: none; border: 1px solid var(--accent); color: var(--accent);
+    padding: 6px 14px; border-radius: 999px; font-size: 0.82rem; cursor: pointer;
+  }
+
+  /* ---------- Success stamp ---------- */
+  .stamp-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    display: flex; align-items: center; justify-content: center; z-index: 50;
+    padding: 20px;
+  }
+  .stamp {
+    background: var(--card); border-radius: 20px; padding: 40px 36px;
+    text-align: center; max-width: 300px; box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+    animation: stamp-in 0.35s ease-out;
+  }
+  @media (prefers-reduced-motion: reduce) { .stamp { animation: none; } }
+  @keyframes stamp-in { from { transform: scale(0.85) rotate(-6deg); opacity: 0; } to { transform: scale(1) rotate(-4deg); opacity: 1; } }
+  .stamp-ring {
+    width: 84px; height: 84px; margin: 0 auto 16px; border-radius: 50%;
+    border: 3px solid var(--accent); display: flex; align-items: center; justify-content: center;
+    transform: rotate(-4deg); color: var(--accent);
+  }
+  .stamp h3 { font-size: 1.15rem; margin-bottom: 6px; }
+  .stamp p { color: var(--muted); font-size: 0.88rem; margin: 0 0 20px; }
+  .stamp button {
+    background: var(--ink); color: var(--paper); border: none; padding: 10px 22px;
+    border-radius: 999px; cursor: pointer; font-size: 0.9rem;
+  }
+
+  /* ---------- List / roster ---------- */
+  .list-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
+  }
+  .summary { font-size: 0.9rem; color: var(--muted); }
+  .summary strong { color: var(--ink); }
+  .filter-group { display: flex; gap: 6px; }
+  .filter-btn {
+    background: var(--card); border: 1px solid var(--line); color: var(--muted);
+    padding: 7px 16px; border-radius: 999px; font-size: 0.85rem; cursor: pointer;
+  }
+  .filter-btn[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+  .roster-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px;
+  }
+  .pf-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    overflow: hidden; box-shadow: 0 3px 12px var(--shadow);
+    animation: card-in 0.3s ease-out both;
+    display: flex; flex-direction: column;
+  }
+  @media (prefers-reduced-motion: reduce) { .pf-card { animation: none; } }
+  @keyframes card-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .pf-num {
+    font-size: 0.72rem; color: var(--gold); font-weight: 700; letter-spacing: 0.04em;
+    padding: 10px 14px 0;
+  }
+  .pf-photo { width: 100%; height: 190px; object-fit: cover; display: block; margin-top: 6px; }
+  .pf-photo--empty {
+    width: calc(100% - 28px); height: 150px; margin: 6px 14px 0; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-family: 'Gowun Batang', serif; font-size: 2.2rem;
+  }
+  .pf-photo.blurred { filter: blur(12px); cursor: pointer; transition: filter 0.3s; }
+  .pf-photo--empty.blurred { filter: blur(12px); cursor: pointer; }
+  .pf-body { padding: 14px 16px 12px; flex: 1; }
+  .pf-name { font-size: 1.08rem; margin-bottom: 8px; }
+  .pf-chips { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .chip {
+    font-size: 0.78rem; padding: 3px 10px; border-radius: 999px;
+    background: var(--paper); border: 1px solid var(--line); color: var(--muted);
+  }
+  .chip--gender-male { color: #4A6FA5; border-color: #4A6FA5; background: transparent; }
+  .chip--gender-female { color: var(--accent); border-color: var(--accent); background: transparent; }
+  .chip--degree { color: var(--gold); border-color: var(--gold); background: transparent; font-weight: 700; }
+  .pf-meta { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
+  .pf-meta li { display: flex; align-items: center; gap: 7px; font-size: 0.85rem; color: var(--muted); }
+  .pf-meta svg { flex-shrink: 0; color: var(--gold); }
+  .pf-extra { font-size: 0.82rem; color: var(--muted); margin: 0 0 8px; line-height: 1.5; }
+  .pf-extra b { color: var(--ink); }
+  .pf-ref {
+    font-size: 0.8rem; color: var(--muted); border-top: 1px dashed var(--line);
+    padding-top: 10px; font-style: normal;
+  }
+  .pf-ref b { color: var(--ink); font-weight: 700; }
+  .pf-contact {
+    font-size: 0.82rem; margin-top: 8px; display: flex; align-items: center; gap: 6px;
+  }
+  .pf-contact.locked { color: var(--lock); }
+  .pf-contact.open { color: var(--ink); font-weight: 700; }
+  .pf-actions {
+    display: flex; gap: 8px; padding: 10px 16px 16px; border-top: 1px solid var(--line); flex-wrap: wrap;
+  }
+  .card-btn {
+    flex: 1; font-size: 0.78rem; padding: 7px 10px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--paper); color: var(--muted);
+  }
+  .card-btn.danger { color: var(--accent); border-color: var(--accent); }
+  .card-btn.primary { color: #fff; background: var(--accent); border-color: var(--accent); }
+  .card-btn.approve { color: #fff; background: #3F8C6E; border-color: #3F8C6E; }
+
+  /* Admin detail button on roster card */
+  .admin-detail-btn {
+    font-size: 0.78rem; padding: 7px 10px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--gold); background: var(--gold-soft); color: var(--gold);
+    flex: 1;
+  }
+
+  .empty-state {
+    text-align: center; padding: 60px 20px; color: var(--muted);
+  }
+  .empty-state .big { font-size: 2.4rem; margin-bottom: 10px; }
+
+  .readonly-note {
+    background: var(--gold-soft); color: var(--ink); border-radius: 12px;
+    padding: 12px 16px; font-size: 0.85rem; margin-bottom: 20px;
+  }
+
+  /* ---------- Admin panel ---------- */
+  .admin-panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 28px; }
+  .admin-panel h2 { font-size: 1.2rem; margin-bottom: 6px; display: flex; align-items: center; }
+  .admin-panel .sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 20px; }
+  .request-item {
+    border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px;
+    display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .request-item .who { font-size: 0.94rem; }
+  .request-item .who b { color: var(--accent); }
+  .request-item .note { color: var(--muted); font-size: 0.82rem; margin-top: 4px; }
+  .request-item .when { color: var(--muted); font-size: 0.76rem; }
+
+  /* Pending count badge (matches tab count styling) */
+  .pending-count {
+    display: inline-block; margin-left: 6px;
+    background: var(--accent-soft); color: var(--accent);
+    border-radius: 999px; padding: 1px 9px; font-size: 0.78rem;
+    font-family: 'Gowun Dodum', sans-serif;
+  }
+
+  /* Pending section in admin */
+  .pending-section { margin-bottom: 28px; }
+  .pending-item {
+    border: 1px solid var(--gold); border-radius: 12px; padding: 16px;
+    margin-bottom: 10px; background: var(--gold-soft);
+  }
+  .pending-item .p-name { font-weight: 700; font-size: 1rem; }
+  .pending-item .p-meta { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+  .pending-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .pending-actions .card-btn.approve {
+    color: #fff; background: #3F8C6E; border-color: #3F8C6E;
+  }
+
+  /* ---------- Generic modal (replaces native prompt/confirm/alert, which
+     browsers commonly block inside a sandboxed artifact iframe) ---------- */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    display: flex; align-items: center; justify-content: center; z-index: 60;
+    padding: 20px;
+  }
+  .modal-box {
+    background: var(--card); border-radius: 18px; padding: 28px;
+    max-width: 340px; width: 100%; box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+    max-height: 86vh; overflow-y: auto;
+  }
+  .modal-box h3 { font-size: 1.1rem; margin-bottom: 8px; }
+  .modal-msg { color: var(--muted); font-size: 0.86rem; margin: 0 0 16px; line-height: 1.5; }
+  .modal-input {
+    width: 100%; font-family: inherit; font-size: 0.98rem; padding: 11px 13px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--paper); color: var(--ink);
+    resize: vertical;
+  }
+  .modal-input:focus { border-color: var(--accent); }
+  .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+  .modal-actions .card-btn { flex: 1; padding: 10px; font-size: 0.86rem; }
+
+  /* Detail modal */
+  .detail-grid { display: grid; gap: 10px; margin-top: 12px; }
+  .detail-row { display: flex; gap: 8px; }
+  .detail-label { font-size: 0.82rem; color: var(--muted); min-width: 60px; flex-shrink: 0; }
+  .detail-value { font-size: 0.9rem; color: var(--ink); word-break: break-all; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script id="state-json" type="application/json">{"entries":[{"id":"900ebce1-bc7b-4cb2-a377-c244c70fa59d","nickname":"베친구1","gender":"male","birthYear":1995,"region":"서울 마포구","workplace":"서울 강남구","photo":null,"height":"180","idealType":"유머러스하고 대화 잘 통하는 사람","dealbreaker":"흡연자","realNameEnc":{"iv":"hTXMJBS7TEutIbYy","ciphertext":"ZnKcdly2LV3kO6YH2E2h586FZW2cxCtffhd85ZhsVDWf7X1GLWzoww==","wrappedKey":"jrTAPatG1RBPlTdJYZho3Wm/JTjTvSS3qnsyqffAg+xGBXGQs2lfLkufve3sP7ZpPw324LvID/SShaF0WoVMpZI2HFO8FMCdAE9w3CcyK2p1oRByqcrCZRi881tRxIiOabG/lk99eFbmmxHGpvogDURjQTQSvMsmATiCT8bEAbceOq80OltzgVe97EOK6drali41O2w9lkOJj9sxcE4oQathjvXm2bBqJCrjSU33omBGYgUO57w/F/538HYoi87gSVPWQeNC0dX0b++mrZqdr54vuKXjE/6iPwwWtWEs7qSQdWQ/hfKTc7MzQKKZvly3NaBazAHs4MkoIpuM6Ub40Q=="},"referrerEnc":{"iv":"NechyKwT0qU4isrG","ciphertext":"A/IhJPN2w4YKbw96XMD//EiVc0RL/HmVi4hAwaRXYI4oMdf5NZLQHA==","wrappedKey":"IE+Emvd8XNS/7jLxmkggKGoqSPe7WFO7u4yUipH36vSLEJKf/xZmjr5Tdxlk5JC/VXmppJ3Oyvnirn7AAv3aVVknNxK54ekfC22PgRWDn2ZZF138si+j74FIcsxLP1iMbPyMS1FhAEUGkEXTO0Tzsvee4nI32HzCwoa5JGerAkvmNNahkMjiQIFtRs44XMWFqaqozJ7A7Cl8EtibEJMAT1lys7vILNhxEFicxDDzMpNvlbuBlPJfN+6dJ2zYUrgT6ReVx5UvPZ3fiKFtmVTftLnmCoGGyQbXK8ObDvAz1HP9BnI3BapjRrgv6T5dU5G7PSpPx4OJ9akbAi+CvaLf/A=="},"degreeChoice":"2","pinHash":"03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4","contactEnc":{"iv":"2i7Ao0MpU9+FaR5U","ciphertext":"t1Okcjhhqg9X69SBtfUDloInKX89aMCiKpqLg4QK6+7m","wrappedKey":"oTrcwQsirby0shcPfKdrvDhmDYsvP8PK47LdJcNBdltxWARpej7TLiv/IKOcBqp9OV2Kd1+e126CMptQFVKKhpMWpndkEv+zjTMCYv5NYLCTZudFkWQpp/U6eFrNw8fOnSQGPldormIsHAas1YUvrlSxDnXPk2m0h31CdNuKSaqrnj5I1PsuLIk08SBgGUF1H6hMKKJalaF3G84SS33ODDYHXfDVkXdonYbV8xfXtVtll/nQan+V8mYgGIGnYEO2cKH+9Wh5kOIYNmeNKreSqjBqBh/F9cKQX8GX1UnnCXrihi2XHXmWZStmAoChPn8xdIugncVfxLYusA8UpRMpfg=="},"submittedAt":"2026-09-02T22:04:55.679Z"},{"id":"42ca6006-0f0a-4774-859d-5faf60933037","nickname":"민지","gender":"female","birthYear":1998,"region":"서울","workplace":"동탄 (삼성전자)","photo":null,"height":"160","idealType":"남성적인","dealbreaker":"흡연자","realNameEnc":{"iv":"S8P2NoqIAU0TO9UQ","ciphertext":"pP4lVoUeNXv+8PoEtrmM+ZdmBwGfjP4pX+Mh1AN3/AY1RjQKrNFpVw==","wrappedKey":"CCGSmdb7kCJ5p/DrCKFu2cl804b8HjEErAdW0UG5lz872odkOxO1f0u+n7luT430ddM4AASeKofKG3+epQr8lUV55Z9kK1CRQ6HNeOnF88rwUs6qQ4qk2XzJm3lYoAovhk8Oz3Wzyd0lh1Fa1VEZz5oGCxJP+AKcfZsIF4ZpaUN8ONNEn4KkIo+fJlDOFCDnoK29+xHd5Uc39o0PV5KXeexc/9SwTVXOPjJj9L+3xlQ4RfwGW1knqn3rLnPFOcIty12ZdG8luOCblIFslUtQ+ZzA27F4t4RLlXRJEJ5wX7zrv8MVW2zwAXKk/N54z1fnGXH6reloj3AkL2I8Ntuxmg=="},"referrerEnc":{"iv":"mDdBh2Eic5dxJE3n","ciphertext":"Mb+gK6BLsY1+7JDIduc04S5LCfLFGmfAZhsHpMr6uTuPGEzUKUriBw==","wrappedKey":"FwraDzf73AiWZgfN/4JwMMXw4CJSzN56XgOrnzL+EGY3s8A3qCNxU721gPGTQpU9DmGmaf2QfBAYM4Zpny0tKEgT3HFM/mWNG1INgudGnYaq9BRL/NvOF8atGBllJtQVAwTjX5vCZYsr3ia3l68rkR1yVdfztjS3p+KF2TdP841L97oDuHM3H5Zsgpb3f42aaFJCxypw+m7uJT4TofwL9kU3PlzYUMKo2/TJ88pw+TExQZI/0iWOiewDHBWB0p/gjfpoWgga6Lw3wYqzKZd/pqpiBxXbbj4ZpmXAv1tkZFx+Fs1SI1BdUn+hL96JmI8bAwklX/m5dzTCKfp538qSJw=="},"degreeChoice":"1","pinHash":"03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4","contactEnc":{"iv":"Q329ZCScrTyhw3on","ciphertext":"NTBEi5XdVJgJMthGjgGWGtK1Kvu60mUYzt+mBW7rJtOE+Q==","wrappedKey":"pgW6srjF5ZXEzOIa0WwSaFR+d8yRxfIbp3BZDrt5QcNfo3ZKOgGqJcG0bY/QMvrVlysbEdvMefBicl57e6EoVYgAjp55TU5RylzhyYlxKnkIAKMy3gjf3X4Z4/hJc8p93c6vDPTStQaLReuYA8Prl/NvD/O9tx8N5lV58MUMbW6NwSsmzaJCcAJz7Cx8RuMpSS5NI0mJAx036iYlPJWaOrhP22mGW6eEa4XREnkMTUlyjovUK1ruZFhIBwhcCPJKieZd4cypqtB0LlTibEbKTM9zwXyRSZEbclCDaOj+OpjXpE5HY3AOqE8I6B/Xq4ryvj5eBsNORk/9oUFGTV2qlw=="},"submittedAt":"2026-09-02T22:05:52.391Z"}],"dateRequests":[{"id":"bcc2fb7a-993b-4465-93e5-d24751d12895","toId":"900ebce1-bc7b-4cb2-a377-c244c70fa59d","submittedAt":"2026-09-02T22:17:42.937Z","iv":"HRWNBe9wndvRqkfc","ciphertext":"gwdxbn56o6ss5I4bO6pb+ROSj+2SfevSi2LN/c+av2PIGv0PdPK4yKGGu/ntwSdOHPByEgQHCYtdD75oZkOKy3qkhtXCLHTIVPLrQEdi7zW39ZQz15fDtidm7PLCx3FlBjJPtgv9FbrY0e2S0Vq26jqvJ2jq+VK1col8Eamm5yRX2jn2ZJf9CcGrYlT1Qp8aGpcjaUSDVo/N","wrappedKey":"XVUv7yBOnXSNzGIsbxL4jvxSXXBSNp8TT9DqBtWDyHwPtPM33jnvTo/1mOGA2e8/y82+6j7qEr9pdTe/vvHvEp6tMOVVZRoNsl6411uhOmVNXTdl8lVb6dspMwJpoXUB8fFoq8X/UMDy7OAfF7f3y7cuc3UJC1wC7gnjXMaxgcV53r5Zmt6je1yaCYFb0zZicfi4Kule8AWUGbCvKcBcHETYmc4Ds/ue9bM4tcKiP2+z/Kz/Z6g69+8misqnO7+BvHlXzlFOPu7cLfJxREGZvZa7AV0/q4loYjnxZWo+oD19dRUVCsU3do6EUDmwAM6HUXTReWaY0jXmv51mlf9jPw=="}],"adminAuth":{"publicKeyJwk":{"alg":"RSA-OAEP-256","e":"AQAB","ext":true,"key_ops":["encrypt"],"kty":"RSA","n":"sMz9Q92UPBIOB3lgl88D9leI2sEwGYcEFeSTFczdaITVVdDHSYVnl5_SZeFI7WpCZb0ZllQ9lZLVtGI6H0apVrZC337WtDXy_byJAtjN_cG3wTI-gLf7djNeWBIeZ74FwM8tWc1iB3B6Cqa-45Av4ZxHh48-aNg_6n-dsrghgPgOgCJwvCNtY7SVoQ_s8bAr5MXbZl3-Lixc6xuytSI0dmblqbDthnQ7VvBG9GjkuTTMnhCD5ZCeEw091OEXgv8WZqfRoVjQ9gv8wC2IUg2eS5MtxpPLRV9C8am3qf41SFYDwp3ZeN96Ckhs5hudUN-ohZWcozDYtZLk1gkh3z-P6Q"},"salt":"VCBCG/55PZxEfs2DjkFTeQ==","iv":"uLnknmcJDjh5HH50","wrappedPrivateKey":"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"},"pendingEntries":[]}</script>
+
+<script id="app-logic">
+(function () {
+  'use strict';
+
+  var ROOT_NAME = '베니';
+  var listFilter = 'all';
+  var activeTab = 'form';
+  var lastAttemptedEntry = null;
+  var artifactCap = null;
+  var capChecked = false;
+  var isAdminUnlocked = false;
+  var adminPrivateKey = null;
+  var decryptedContacts = {};
+  var decryptedRequests = {};
+  var decryptedDetails = {};
+
+  var ICON_PIN = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>';
+  var ICON_BRIEF = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+  var ICON_HEART = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 21s-7.5-4.9-10-9.5C.6 8.1 2.4 4 6.3 4 8.6 4 10.6 5.2 12 7c1.4-1.8 3.4-3 5.7-3 3.9 0 5.7 4.1 4.3 7.5C19.5 16.1 12 21 12 21z"/></svg>';
+  var ICON_STAMP = '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>';
+  var ICON_LOCK = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/></svg>';
+  var ICON_UNLOCK = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 9-3"/></svg>';
+
+  /* ---------- utils ---------- */
+  function escapeHtml(str) {
+    return String(str == null ? '' : str).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function genId() {
+    return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('e' + Date.now() + Math.random().toString(16).slice(2));
+  }
+
+  function readState() {
+    try {
+      var el = document.getElementById('state-json');
+      var parsed = JSON.parse(el.textContent || '{}');
+      if (!parsed || !Array.isArray(parsed.entries)) parsed = { entries: [] };
+      if (!Array.isArray(parsed.pendingEntries)) parsed.pendingEntries = [];
+      if (!Array.isArray(parsed.dateRequests)) parsed.dateRequests = [];
+      if (!Array.isArray(parsed.approvedPairs)) parsed.approvedPairs = [];
+      if (parsed.adminAuth === undefined) parsed.adminAuth = null;
+      return parsed;
+    } catch (e) {
+      return { entries: [], pendingEntries: [], dateRequests: [], approvedPairs: [], adminAuth: null };
+    }
+  }
+
+  function safeJson(obj) {
+    return JSON.stringify(obj).replace(/</g, '\\u003c');
+  }
+
+  function genderLabel(g) { return g === 'male' ? '남성' : g === 'female' ? '여성' : '-'; }
+
+  function initials(name) {
+    var s = (name || '').trim();
+    return s ? s.slice(0, 1) : '?';
+  }
+
+  function avatarColor(seed) {
+    var palette = ['#B23A48', '#C08A34', '#5B7A8C', '#7A5B8C', '#3F8C6E'];
+    var h = 0;
+    seed = String(seed || '');
+    for (var i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+    return palette[h % palette.length];
+  }
+
+  function degreeLabel(d) {
+    if (d === '1' || d === 1) return '1촌 · ' + ROOT_NAME + '의 친구';
+    if (d === '2' || d === 2) return '2촌 · 건너 친구';
+    if (d === '3' || d === 3) return '3촌 · 건너건너 친구';
+    if (d === 'other') return '그 외';
+    var n = parseInt(d, 10) || 1;
+    if (n <= 1) return '1촌 · ' + ROOT_NAME + '의 친구';
+    var bridge = '';
+    for (var i = 0; i < n - 1; i++) bridge += '건너';
+    return n + '촌 · ' + bridge + ' 친구';
+  }
+
+  /* ---------- crypto ---------- */
+  var textEnc = new TextEncoder();
+  var textDec = new TextDecoder();
+
+  function b64encode(buf) {
+    var bytes = new Uint8Array(buf), bin = '';
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+  function b64decode(str) {
+    var bin = atob(str), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  function sha256Hex(str) {
+    return crypto.subtle.digest('SHA-256', textEnc.encode(str)).then(function (buf) {
+      return Array.prototype.map.call(new Uint8Array(buf), function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+    });
+  }
+
+  function pbkdf2Key(pin, saltBuf) {
+    return crypto.subtle.importKey('raw', textEnc.encode(pin), 'PBKDF2', false, ['deriveKey']).then(function (base) {
+      return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: saltBuf, iterations: 150000, hash: 'SHA-256' },
+        base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+      );
+    });
+  }
+
+  function setupAdminPin(pin) {
+    return crypto.subtle.generateKey(
+      { name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
+      true, ['encrypt', 'decrypt']
+    ).then(function (keyPair) {
+      return Promise.all([
+        crypto.subtle.exportKey('jwk', keyPair.publicKey),
+        crypto.subtle.exportKey('jwk', keyPair.privateKey)
+      ]);
+    }).then(function (pair) {
+      var pubJwk = pair[0], privJwk = pair[1];
+      var salt = crypto.getRandomValues(new Uint8Array(16));
+      var iv = crypto.getRandomValues(new Uint8Array(12));
+      return pbkdf2Key(pin, salt).then(function (wrapKey) {
+        return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, wrapKey, textEnc.encode(JSON.stringify(privJwk)));
+      }).then(function (wrapped) {
+        return {
+          publicKeyJwk: pubJwk,
+          salt: b64encode(salt.buffer),
+          iv: b64encode(iv.buffer),
+          wrappedPrivateKey: b64encode(wrapped)
+        };
+      });
+    });
+  }
+
+  function unlockAdminKey(pin, adminAuth) {
+    var salt = b64decode(adminAuth.salt);
+    return pbkdf2Key(pin, salt).then(function (key) {
+      var iv = new Uint8Array(b64decode(adminAuth.iv));
+      var wrapped = b64decode(adminAuth.wrappedPrivateKey);
+      return crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, wrapped);
+    }).then(function (plainBuf) {
+      var privJwk = JSON.parse(textDec.decode(plainBuf));
+      return crypto.subtle.importKey('jwk', privJwk, { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['decrypt']);
+    });
+  }
+
+  function encryptForAdmin(publicKeyJwk, obj) {
+    return crypto.subtle.importKey('jwk', publicKeyJwk, { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['encrypt']).then(function (pubKey) {
+      return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']).then(function (aesKey) {
+        var iv = crypto.getRandomValues(new Uint8Array(12));
+        var payload = textEnc.encode(JSON.stringify(obj));
+        return Promise.all([
+          crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, aesKey, payload),
+          crypto.subtle.exportKey('raw', aesKey)
+        ]).then(function (r) {
+          var ciphertext = r[0], rawAesKey = r[1];
+          return crypto.subtle.encrypt({ name: 'RSA-OAEP' }, pubKey, rawAesKey).then(function (wrappedKey) {
+            return { iv: b64encode(iv.buffer), ciphertext: b64encode(ciphertext), wrappedKey: b64encode(wrappedKey) };
+          });
+        });
+      });
+    });
+  }
+
+  function decryptWithAdmin(privateKey, encObj) {
+    return crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, b64decode(encObj.wrappedKey)).then(function (rawAesKey) {
+      return crypto.subtle.importKey('raw', rawAesKey, { name: 'AES-GCM' }, false, ['decrypt']).then(function (aesKey) {
+        var iv = new Uint8Array(b64decode(encObj.iv));
+        return crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, aesKey, b64decode(encObj.ciphertext));
+      });
+    }).then(function (plainBuf) {
+      return JSON.parse(textDec.decode(plainBuf));
+    });
+  }
+
+  /* ---------- modals (replace native prompt/confirm/alert) ---------- */
+  function openModal(bodyHtml) {
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = '<div class="modal-box">' + bodyHtml + '</div>';
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+  function closeModal(overlay) { if (overlay && overlay.parentNode) overlay.remove(); }
+
+  function modalPin(title, message) {
+    return new Promise(function (resolve) {
+      var overlay = openModal(
+        '<h3>' + escapeHtml(title) + '</h3>' +
+        '<p class="modal-msg">' + escapeHtml(message) + '</p>' +
+        '<input type="text" inputmode="numeric" class="modal-input" id="modal-pin-input" placeholder="숫자 4~8자리" maxlength="12">' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
+          '<button type="button" class="card-btn primary" id="modal-ok">확인</button>' +
+        '</div>'
+      );
+      var input = overlay.querySelector('#modal-pin-input');
+      setTimeout(function () { input.focus(); }, 0);
+      function finish(val) { closeModal(overlay); resolve(val); }
+      overlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
+      overlay.querySelector('#modal-ok').addEventListener('click', function () { finish(input.value.trim()); });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') finish(input.value.trim());
+        if (e.key === 'Escape') finish(null);
+      });
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
+    });
+  }
+
+  function modalPinSetup() {
+    return new Promise(function (resolve) {
+      var overlay = openModal(
+        '<h3>관리자 PIN 설정</h3>' +
+        '<p class="modal-msg">숫자 4자리 이상으로 설정하세요. 이 PIN으로만 실명, 연락처, 소개자, 데이트 신청함을 볼 수 있어요.</p>' +
+        '<input type="text" inputmode="numeric" class="modal-input" id="modal-pin1" placeholder="PIN 입력">' +
+        '<input type="text" inputmode="numeric" class="modal-input" id="modal-pin2" placeholder="PIN 확인" style="margin-top:8px;">' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
+          '<button type="button" class="card-btn primary" id="modal-ok">설정</button>' +
+        '</div>'
+      );
+      function finish(val) { closeModal(overlay); resolve(val); }
+      overlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
+      overlay.querySelector('#modal-ok').addEventListener('click', function () {
+        finish({
+          p1: overlay.querySelector('#modal-pin1').value.trim(),
+          p2: overlay.querySelector('#modal-pin2').value.trim()
+        });
+      });
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
+    });
+  }
+
+  function modalConfirm(title, message) {
+    return new Promise(function (resolve) {
+      var overlay = openModal(
+        '<h3>' + escapeHtml(title) + '</h3>' +
+        '<p class="modal-msg">' + escapeHtml(message) + '</p>' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
+          '<button type="button" class="card-btn danger" id="modal-ok">삭제</button>' +
+        '</div>'
+      );
+      function finish(val) { closeModal(overlay); resolve(val); }
+      overlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(false); });
+      overlay.querySelector('#modal-ok').addEventListener('click', function () { finish(true); });
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(false); });
+    });
+  }
+
+  function modalNotice(title, message) {
+    return new Promise(function (resolve) {
+      var overlay = openModal(
+        '<h3>' + escapeHtml(title) + '</h3>' +
+        '<p class="modal-msg">' + escapeHtml(message) + '</p>' +
+        '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">확인</button></div>'
+      );
+      function finish() { closeModal(overlay); resolve(); }
+      overlay.querySelector('#modal-ok').addEventListener('click', finish);
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(); });
+    });
+  }
+
+  function modalVerifyIdentity() {
+    return new Promise(function (resolve) {
+      var overlay = openModal(
+        '<h3>본인 확인</h3>' +
+        '<p class="modal-msg">명단에 등록된 본인의 공개 이름과 삭제 PIN을 입력해주세요.</p>' +
+        '<input type="text" class="modal-input" id="modal-verify-nickname" placeholder="공개 이름 (닉네임)">' +
+        '<input type="text" inputmode="numeric" class="modal-input" id="modal-verify-pin" placeholder="삭제 PIN" style="margin-top:8px;">' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
+          '<button type="button" class="card-btn primary" id="modal-ok">확인</button>' +
+        '</div>'
+      );
+      var nickInput = overlay.querySelector('#modal-verify-nickname');
+      var pinInput = overlay.querySelector('#modal-verify-pin');
+      setTimeout(function () { nickInput.focus(); }, 0);
+      function finish(val) { closeModal(overlay); resolve(val); }
+      overlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
+      overlay.querySelector('#modal-ok').addEventListener('click', function () {
+        finish({ nickname: nickInput.value.trim(), pin: pinInput.value.trim() });
+      });
+      pinInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') finish({ nickname: nickInput.value.trim(), pin: pinInput.value.trim() });
+        if (e.key === 'Escape') finish(null);
+      });
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
+    });
+  }
+
+  /* ---------- rendering ---------- */
+  function cardHtml(entry, num, state) {
+    var displayName = entry.nickname || entry.name || '';
+    var photo = entry.photo
+      ? '<img class="pf-photo' + (entry.blurPhoto ? ' blurred' : '') + '" src="' + entry.photo + '" alt="' + escapeHtml(displayName) + ' 사진" loading="lazy"' + (entry.blurPhoto ? ' data-action="reveal-photo" data-id="' + escapeHtml(entry.id) + '"' : '') + '>'
+      : '<div class="pf-photo pf-photo--empty' + (entry.blurPhoto ? ' blurred' : '') + '" style="background:' + avatarColor(entry.id) + '"' + (entry.blurPhoto ? ' data-action="reveal-photo" data-id="' + escapeHtml(entry.id) + '"' : '') + '>' + escapeHtml(initials(displayName)) + '</div>';
+
+    var ageStr = entry.birthYear ? (String(entry.birthYear).slice(2) + '년생') : (entry.age ? (entry.age + '세') : '-');
+    var deg = degreeLabel(entry.degreeChoice || entry.degree);
+
+    var extras = '';
+    if (entry.height) extras += '<div class="pf-extra"><b>키</b> ' + escapeHtml(entry.height) + 'cm</div>';
+    if (entry.idealType) extras += '<div class="pf-extra"><b>선호</b> ' + escapeHtml(entry.idealType) + '</div>';
+    if (entry.dealbreaker) extras += '<div class="pf-extra"><b>비선호</b> ' + escapeHtml(entry.dealbreaker) + '</div>';
+
+    var refLine = entry.referrerName
+      ? ('<div class="pf-ref"><b>' + escapeHtml(entry.referrerName) + '</b>님의 소개</div>')
+      : '';
+
+    var contactHtml;
+    if (decryptedContacts[entry.id]) {
+      contactHtml = '<div class="pf-contact open">' + ICON_UNLOCK + '<span>' + escapeHtml(decryptedContacts[entry.id]) + '</span></div>';
+    } else {
+      contactHtml = '<div class="pf-contact locked">' + ICON_LOCK + '<span>연락처 비공개 (관리자만 확인 가능)</span></div>';
+    }
+
+    var adminBtn = isAdminUnlocked
+      ? '<button type="button" class="card-btn admin-detail-btn" data-action="detail" data-id="' + escapeHtml(entry.id) + '">🔍 상세</button>'
+      : '';
+
+    return (
+      '<article class="pf-card" data-id="' + escapeHtml(entry.id) + '">' +
+        '<div class="pf-num">No. ' + String(num).padStart(3, '0') + '</div>' +
+        photo +
+        '<div class="pf-body">' +
+          '<h3 class="pf-name">' + escapeHtml(displayName) + '</h3>' +
+          '<div class="pf-chips">' +
+            '<span class="chip chip--gender-' + escapeHtml(entry.gender) + '">' + genderLabel(entry.gender) + '</span>' +
+            '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
+            '<span class="chip chip--degree">' + escapeHtml(deg) + '</span>' +
+          '</div>' +
+          '<ul class="pf-meta">' +
+            '<li>' + ICON_PIN + '<span>' + escapeHtml(entry.region) + '</span></li>' +
+            '<li>' + ICON_BRIEF + '<span>' + escapeHtml(entry.workplace) + '</span></li>' +
+          '</ul>' +
+          extras +
+          refLine +
+          contactHtml +
+        '</div>' +
+        '<div class="pf-actions">' +
+          '<button type="button" class="card-btn primary" data-action="date" data-id="' + escapeHtml(entry.id) + '">💌 데이트 신청</button>' +
+          adminBtn +
+          '<button type="button" class="card-btn danger" data-action="delete" data-id="' + escapeHtml(entry.id) + '">삭제</button>' +
+        '</div>' +
+      '</article>'
+    );
+  }
+
+  function renderList(state) {
+    var entries = state.entries || [];
+    var maleCount = entries.filter(function (e) { return e.gender === 'male'; }).length;
+    var femaleCount = entries.filter(function (e) { return e.gender === 'female'; }).length;
+
+    var filtered = entries.filter(function (e) {
+      return listFilter === 'all' || e.gender === listFilter;
+    });
+    var ordered = filtered.slice().reverse();
+
+    var toolbar =
+      '<div class="list-toolbar">' +
+        '<div class="summary">현재 총 <strong>' + entries.length + '명</strong> 신청 · 남 ' + maleCount + ' · 여 ' + femaleCount + '</div>' +
+        '<div class="filter-group" role="group" aria-label="성별 필터">' +
+          '<button type="button" class="filter-btn" data-filter="all" aria-pressed="' + (listFilter === 'all') + '">전체</button>' +
+          '<button type="button" class="filter-btn" data-filter="male" aria-pressed="' + (listFilter === 'male') + '">남성</button>' +
+          '<button type="button" class="filter-btn" data-filter="female" aria-pressed="' + (listFilter === 'female') + '">여성</button>' +
+        '</div>' +
+      '</div>';
+
+    if (entries.length === 0) {
+      return toolbar + '<div class="empty-state"><div class="big">💌</div><p>아직 승인된 신청자가 없어요.<br>첫 번째로 이름을 올려보세요!</p></div>';
+    }
+    if (ordered.length === 0) {
+      return toolbar + '<div class="empty-state"><p>조건에 맞는 신청자가 아직 없어요.</p></div>';
+    }
+
+    var cards = ordered.map(function (e) {
+      var originalIndex = entries.indexOf(e);
+      return cardHtml(e, originalIndex + 1, state);
+    }).join('');
+
+    return toolbar + '<div class="roster-grid">' + cards + '</div>';
+  }
+
+  function renderForm(state) {
+    var writable = artifactCap !== null || !capChecked;
+    var readonlyNote = (capChecked && artifactCap === null)
+      ? '<div class="readonly-note">지금은 읽기 전용으로 열려 있어요. 이 페이지를 "편집 가능"으로 공유받았는지 확인한 뒤 다시 시도해주세요.</div>'
+      : '';
+    var setupNote = (!state.adminAuth)
+      ? '<div class="readonly-note">관리자 초기 설정이 아직 안 됐어요. 운영자라면 위의 "관리자" 버튼을 눌러 PIN을 먼저 설정해주세요.</div>'
+      : '';
+
+    return (
+      readonlyNote + setupNote +
+      '<div class="form-card">' +
+        '<div class="form-lede">' +
+          '<h2>좋은 사람, 소개해 주세요</h2>' +
+          '<p>아래 정보를 채워서 제출하면 관리자 승인 후 명단에 올라가요. 사진은 선택이지만 있으면 훨씬 도움이 됩니다.</p>' +
+        '</div>' +
+        '<form id="entry-form" novalidate>' +
+          '<div class="field-group">' +
+            '<div class="row-2">' +
+              '<div class="field"><label for="f-nickname">공개 이름 (닉네임) <span class="req">필수</span></label>' +
+                '<input type="text" id="f-nickname" name="nickname" maxlength="20" placeholder="예: 민지" required></div>' +
+              '<div class="field"><label for="f-realname">실명 <span class="req">필수</span></label>' +
+                '<input type="text" id="f-realname" name="realName" maxlength="20" placeholder="예: 김민지" required>' +
+                '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
+            '</div>' +
+            '<div class="field"><label for="f-contact">연락처 <span class="req">필수</span></label>' +
+              '<input type="text" id="f-contact" name="contact" maxlength="60" placeholder="카카오톡 ID 또는 전화번호" required>' +
+              '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
+            '<div class="field">' +
+              '<label>성별 <span class="req">필수</span></label>' +
+              '<div class="gender-toggle">' +
+                '<label><input type="radio" name="gender" value="male" required><span>남성</span></label>' +
+                '<label><input type="radio" name="gender" value="female"><span>여성</span></label>' +
+              '</div>' +
+            '</div>' +
+            '<div class="row-2">' +
+              '<div class="field"><label for="f-birthyear">생년 <span class="req">필수</span></label>' +
+                '<input type="number" id="f-birthyear" name="birthYear" min="1960" max="2010" placeholder="예: 1994" required></div>' +
+              '<div class="field"><label for="f-region">사는 곳 <span class="req">필수</span></label>' +
+                '<input type="text" id="f-region" name="region" maxlength="40" placeholder="예: 서울 마포구" required></div>' +
+            '</div>' +
+            '<div class="field"><label for="f-workplace">직장 위치 <span class="req">필수</span></label>' +
+              '<input type="text" id="f-workplace" name="workplace" maxlength="60" placeholder="예: 서울 강남구 (회사명 공개 자유)" required></div>' +
+            '<div class="field"><label for="f-referrer">누구의 소개인가요? <span class="req">필수</span></label>' +
+              '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 김민지" required>' +
+              '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
+            '<div class="field"><label>베니와의 관계 <span class="req">필수</span></label>' +
+              '<div class="degree-group">' +
+                '<label><input type="radio" name="degreeChoice" value="1" required><span>1촌 · 베니의 친구</span></label>' +
+                '<label><input type="radio" name="degreeChoice" value="2"><span>2촌 · 건너 친구</span></label>' +
+                '<label><input type="radio" name="degreeChoice" value="3"><span>3촌 · 건너건너 친구</span></label>' +
+                '<label><input type="radio" name="degreeChoice" value="other"><span>그 외</span></label>' +
+              '</div>' +
+            '</div>' +
+            '<div class="field"><label>사진 <span class="opt">(선택)</span></label>' +
+              '<div class="photo-field">' +
+                '<div class="photo-preview" id="photo-preview">사진 없음</div>' +
+                '<div>' +
+                  '<label class="photo-pick">사진 선택<input type="file" id="f-photo" accept="image/*"></label>' +
+                  '<label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:0.85rem;cursor:pointer">' +
+                    '<input type="checkbox" name="blurPhoto" id="f-blur" style="width:16px;height:16px;accent-color:var(--accent)"> 사진 흐리게 처리' +
+                  '</label>' +
+                '</div>' +
+              '</div>' +
+              '<span class="hint">이 페이지는 공개될 수 있어요. 원하시면 사진을 흐리게 처리할 수 있어요.</span></div>' +
+
+            '<div class="section-label">추가 정보</div>' +
+            '<div class="row-2">' +
+              '<div class="field"><label for="f-height">키 (cm) <span class="opt">(선택)</span></label>' +
+                '<input type="number" id="f-height" name="height" min="130" max="220" placeholder="예: 168"></div>' +
+              '<div class="field"><label for="f-pin">삭제용 PIN <span class="req">필수</span></label>' +
+                '<input type="text" id="f-pin" name="pin" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" placeholder="숫자 4~8자리" required>' +
+                '<span class="hint">나중에 본인이 신청을 취소하거나 데이트를 신청할 때 필요해요.</span></div>' +
+            '</div>' +
+            '<div class="field"><label for="f-idealtype">원하는 이성 조건 <span class="opt">(선택)</span></label>' +
+              '<textarea id="f-idealtype" name="idealType" rows="2" maxlength="200" placeholder="예: 유머러스하고 대화가 잘 통하는 사람"></textarea></div>' +
+            '<div class="field"><label for="f-dealbreaker">피하고 싶은 조건 <span class="opt">(선택)</span></label>' +
+              '<textarea id="f-dealbreaker" name="dealbreaker" rows="2" maxlength="200" placeholder="예: 흡연자"></textarea></div>' +
+          '</div>' +
+          '<hr class="perforation">' +
+          '<div class="submit-row">' +
+            '<button type="submit" class="submit-btn" id="submit-btn"' + (writable ? '' : ' disabled') + '>도장 찍고 제출하기</button>' +
+            '<span class="status-msg" id="status-msg"></span>' +
+          '</div>' +
+        '</form>' +
+      '</div>'
+    );
+  }
+
+  function renderAdmin(state) {
+    if (!isAdminUnlocked) {
+      return '<div class="admin-panel"><h2>관리자 모드</h2><p class="sub">위쪽 "관리자" 버튼으로 PIN을 입력하면 승인 대기 명단, 실명, 연락처, 소개자, 데이트 신청함을 볼 수 있어요.</p></div>';
+    }
+
+    var pending = state.pendingEntries || [];
+    var pendingItems = pending.map(function (e) {
+      var displayName = e.nickname || e.name || '(이름 없음)';
+      var ageStr = e.birthYear ? (String(e.birthYear).slice(2) + '년생') : (e.age ? (e.age + '세') : '-');
+      var deg = degreeLabel(e.degreeChoice || e.degree);
+      return (
+        '<div class="pending-item">' +
+          '<div class="p-name">' + escapeHtml(displayName) + '</div>' +
+          '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + ' · ' + escapeHtml(e.region || '') + ' · ' + escapeHtml(deg) + '</div>' +
+          '<div class="pending-actions">' +
+            '<button type="button" class="card-btn approve" data-action="approve" data-id="' + escapeHtml(e.id) + '">승인</button>' +
+            '<button type="button" class="card-btn danger" data-action="reject" data-id="' + escapeHtml(e.id) + '">거절</button>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+
+    var pendingSection =
+      '<div class="pending-section">' +
+        '<h2>승인 대기<span class="pending-count">' + pending.length + '</span></h2>' +
+        (pending.length ? pendingItems : '<p class="sub">대기 중인 신청이 없어요.</p>') +
+      '</div>';
+
+    var allEntries = state.entries;
+    var entryNum = function (eid) {
+      var idx = allEntries.findIndex(function (e) { return e.id === eid; });
+      return idx >= 0 ? String(allEntries.length - idx).padStart(3, '0') : '???';
+    };
+
+    var reqs = state.dateRequests || [];
+    var items = reqs.map(function (r) {
+      var d = decryptedRequests[r.id];
+      var body;
+      if (d) {
+        var fromNum = entryNum(d.fromId);
+        var toNum = entryNum(d.toId);
+        body =
+          '<div class="who">' +
+            '<button type="button" class="card-btn" data-action="detail" data-id="' + escapeHtml(d.fromId) + '" style="flex:none;display:inline-flex;padding:4px 10px;">No. ' + fromNum + ' ' + escapeHtml(d.fromName) + '</button>' +
+            ' → ' +
+            '<button type="button" class="card-btn" data-action="detail" data-id="' + escapeHtml(d.toId) + '" style="flex:none;display:inline-flex;padding:4px 10px;">No. ' + toNum + ' ' + escapeHtml(d.toName) + '</button>' +
+          '</div>' +
+          (d.note ? '<div class="note">"' + escapeHtml(d.note) + '"</div>' : '');
+      } else {
+        body = '<div class="who">복호화 중...</div>';
+      }
+      var actionBtns = r.approved
+        ? '<span class="chip chip--degree">승인됨</span>' +
+          '<button type="button" class="card-btn danger" data-action="delete-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">삭제</button>'
+        : '<button type="button" class="card-btn approve" data-action="approve-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">승인</button>' +
+          '<button type="button" class="card-btn danger" data-action="reject-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">거절</button>';
+      return (
+        '<div class="request-item">' +
+          '<div>' + body + '</div>' +
+          '<div style="display:flex;align-items:center;gap:10px;">' +
+            '<span class="when">' + new Date(r.submittedAt).toLocaleString('ko-KR') + '</span>' +
+            actionBtns +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+
+    return (
+      '<div class="admin-panel">' +
+        pendingSection +
+        '<hr class="perforation">' +
+        '<h2>💌 데이트 신청함</h2>' +
+        '<p class="sub">명단에서 들어온 데이트 신청이에요. 카드에 표시된 연락처도 이제 모두 보여요.</p>' +
+        (reqs.length ? items : '<p class="sub">아직 들어온 신청이 없어요.</p>') +
+      '</div>'
+    );
+  }
+
+  function renderApp(state) {
+    var entries = state.entries || [];
+    var pendingCount = (state.pendingEntries || []).length;
+    var reqCount = (state.dateRequests || []).length;
+    var tabs =
+      '<button type="button" class="tab-btn" data-tab="form" role="tab" aria-selected="' + (activeTab === 'form') + '">신청서 작성</button>' +
+      '<button type="button" class="tab-btn" data-tab="list" role="tab" aria-selected="' + (activeTab === 'list') + '">명단 보기<span class="count">' + entries.length + '</span></button>';
+    if (isAdminUnlocked) {
+      tabs += '<button type="button" class="tab-btn" data-tab="admin" role="tab" aria-selected="' + (activeTab === 'admin') + '">관리자' +
+        '<span class="count" title="승인 대기">대기 ' + pendingCount + '</span>' +
+        '<span class="count" title="데이트 신청" style="margin-left:4px;">신청 ' + reqCount + '</span></button>';
+    }
+    var panel = activeTab === 'form' ? renderForm(state) : activeTab === 'admin' ? renderAdmin(state) : renderList(state);
+
+    return (
+      '<div class="masthead"><div class="masthead-inner">' +
+        '<span class="masthead-icon">' + ICON_HEART + '</span>' +
+        '<div><h1>인연 접수처</h1><p>관리자 베니(<a href="https://instagram.com/benny3_song" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:underline">@benny3_song</a>)의 친구를 소개하는, 작은 신청 창구예요.</p></div>' +
+      '</div>' +
+      '<div class="admin-bar">' +
+        '<button type="button" class="admin-link' + (isAdminUnlocked ? ' unlocked' : '') + '" id="admin-toggle">' +
+          (isAdminUnlocked ? ICON_UNLOCK + ' 관리자 모드' : ICON_LOCK + ' 관리자') +
+        '</button>' +
+      '</div></div>' +
+      '<div class="page">' +
+        '<div class="tabs" role="tablist">' + tabs + '</div>' +
+        '<div id="tab-panel">' + panel + '</div>' +
+      '</div>'
+    );
+  }
+
+  function buildFullDocument(state) {
+    var styleText = document.getElementById('page-style').textContent;
+    var logicText = document.getElementById('app-logic').textContent;
+    var fontLink = document.querySelector('link[href*="fonts.googleapis.com"]');
+    var fontHref = fontLink ? fontLink.getAttribute('href') : '';
+    return (
+      '<!doctype html>\n' +
+      '<html lang="ko">\n' +
+      '<head>\n' +
+      '<meta charset="UTF-8">\n' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+      '<title>인연 접수처</title>\n' +
+      '<link rel="stylesheet" href="' + fontHref + '">\n' +
+      '<style id="page-style">' + styleText + '</style>\n' +
+      '</head>\n' +
+      '<body>\n' +
+      '<div id="app">' + renderApp(state) + '</div>\n' +
+      '<script id="state-json" type="application/json">{"entries":[{"id":"900ebce1-bc7b-4cb2-a377-c244c70fa59d","nickname":"베친구1","gender":"male","birthYear":1995,"region":"서울 마포구","workplace":"서울 강남구","photo":null,"height":"180","idealType":"유머러스하고 대화 잘 통하는 사람","dealbreaker":"흡연자","realNameEnc":{"iv":"hTXMJBS7TEutIbYy","ciphertext":"ZnKcdly2LV3kO6YH2E2h586FZW2cxCtffhd85ZhsVDWf7X1GLWzoww==","wrappedKey":"jrTAPatG1RBPlTdJYZho3Wm/JTjTvSS3qnsyqffAg+xGBXGQs2lfLkufve3sP7ZpPw324LvID/SShaF0WoVMpZI2HFO8FMCdAE9w3CcyK2p1oRByqcrCZRi881tRxIiOabG/lk99eFbmmxHGpvogDURjQTQSvMsmATiCT8bEAbceOq80OltzgVe97EOK6drali41O2w9lkOJj9sxcE4oQathjvXm2bBqJCrjSU33omBGYgUO57w/F/538HYoi87gSVPWQeNC0dX0b++mrZqdr54vuKXjE/6iPwwWtWEs7qSQdWQ/hfKTc7MzQKKZvly3NaBazAHs4MkoIpuM6Ub40Q=="},"referrerEnc":{"iv":"NechyKwT0qU4isrG","ciphertext":"A/IhJPN2w4YKbw96XMD//EiVc0RL/HmVi4hAwaRXYI4oMdf5NZLQHA==","wrappedKey":"IE+Emvd8XNS/7jLxmkggKGoqSPe7WFO7u4yUipH36vSLEJKf/xZmjr5Tdxlk5JC/VXmppJ3Oyvnirn7AAv3aVVknNxK54ekfC22PgRWDn2ZZF138si+j74FIcsxLP1iMbPyMS1FhAEUGkEXTO0Tzsvee4nI32HzCwoa5JGerAkvmNNahkMjiQIFtRs44XMWFqaqozJ7A7Cl8EtibEJMAT1lys7vILNhxEFicxDDzMpNvlbuBlPJfN+6dJ2zYUrgT6ReVx5UvPZ3fiKFtmVTftLnmCoGGyQbXK8ObDvAz1HP9BnI3BapjRrgv6T5dU5G7PSpPx4OJ9akbAi+CvaLf/A=="},"degreeChoice":"2","pinHash":"03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4","contactEnc":{"iv":"2i7Ao0MpU9+FaR5U","ciphertext":"t1Okcjhhqg9X69SBtfUDloInKX89aMCiKpqLg4QK6+7m","wrappedKey":"oTrcwQsirby0shcPfKdrvDhmDYsvP8PK47LdJcNBdltxWARpej7TLiv/IKOcBqp9OV2Kd1+e126CMptQFVKKhpMWpndkEv+zjTMCYv5NYLCTZudFkWQpp/U6eFrNw8fOnSQGPldormIsHAas1YUvrlSxDnXPk2m0h31CdNuKSaqrnj5I1PsuLIk08SBgGUF1H6hMKKJalaF3G84SS33ODDYHXfDVkXdonYbV8xfXtVtll/nQan+V8mYgGIGnYEO2cKH+9Wh5kOIYNmeNKreSqjBqBh/F9cKQX8GX1UnnCXrihi2XHXmWZStmAoChPn8xdIugncVfxLYusA8UpRMpfg=="},"submittedAt":"2026-09-02T22:04:55.679Z"},{"id":"42ca6006-0f0a-4774-859d-5faf60933037","nickname":"민지","gender":"female","birthYear":1998,"region":"서울","workplace":"동탄 (삼성전자)","photo":null,"height":"160","idealType":"남성적인","dealbreaker":"흡연자","realNameEnc":{"iv":"S8P2NoqIAU0TO9UQ","ciphertext":"pP4lVoUeNXv+8PoEtrmM+ZdmBwGfjP4pX+Mh1AN3/AY1RjQKrNFpVw==","wrappedKey":"CCGSmdb7kCJ5p/DrCKFu2cl804b8HjEErAdW0UG5lz872odkOxO1f0u+n7luT430ddM4AASeKofKG3+epQr8lUV55Z9kK1CRQ6HNeOnF88rwUs6qQ4qk2XzJm3lYoAovhk8Oz3Wzyd0lh1Fa1VEZz5oGCxJP+AKcfZsIF4ZpaUN8ONNEn4KkIo+fJlDOFCDnoK29+xHd5Uc39o0PV5KXeexc/9SwTVXOPjJj9L+3xlQ4RfwGW1knqn3rLnPFOcIty12ZdG8luOCblIFslUtQ+ZzA27F4t4RLlXRJEJ5wX7zrv8MVW2zwAXKk/N54z1fnGXH6reloj3AkL2I8Ntuxmg=="},"referrerEnc":{"iv":"mDdBh2Eic5dxJE3n","ciphertext":"Mb+gK6BLsY1+7JDIduc04S5LCfLFGmfAZhsHpMr6uTuPGEzUKUriBw==","wrappedKey":"FwraDzf73AiWZgfN/4JwMMXw4CJSzN56XgOrnzL+EGY3s8A3qCNxU721gPGTQpU9DmGmaf2QfBAYM4Zpny0tKEgT3HFM/mWNG1INgudGnYaq9BRL/NvOF8atGBllJtQVAwTjX5vCZYsr3ia3l68rkR1yVdfztjS3p+KF2TdP841L97oDuHM3H5Zsgpb3f42aaFJCxypw+m7uJT4TofwL9kU3PlzYUMKo2/TJ88pw+TExQZI/0iWOiewDHBWB0p/gjfpoWgga6Lw3wYqzKZd/pqpiBxXbbj4ZpmXAv1tkZFx+Fs1SI1BdUn+hL96JmI8bAwklX/m5dzTCKfp538qSJw=="},"degreeChoice":"1","pinHash":"03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4","contactEnc":{"iv":"Q329ZCScrTyhw3on","ciphertext":"NTBEi5XdVJgJMthGjgGWGtK1Kvu60mUYzt+mBW7rJtOE+Q==","wrappedKey":"pgW6srjF5ZXEzOIa0WwSaFR+d8yRxfIbp3BZDrt5QcNfo3ZKOgGqJcG0bY/QMvrVlysbEdvMefBicl57e6EoVYgAjp55TU5RylzhyYlxKnkIAKMy3gjf3X4Z4/hJc8p93c6vDPTStQaLReuYA8Prl/NvD/O9tx8N5lV58MUMbW6NwSsmzaJCcAJz7Cx8RuMpSS5NI0mJAx036iYlPJWaOrhP22mGW6eEa4XREnkMTUlyjovUK1ruZFhIBwhcCPJKieZd4cypqtB0LlTibEbKTM9zwXyRSZEbclCDaOj+OpjXpE5HY3AOqE8I6B/Xq4ryvj5eBsNORk/9oUFGTV2qlw=="},"submittedAt":"2026-09-02T22:05:52.391Z"}],"dateRequests":[{"id":"bcc2fb7a-993b-4465-93e5-d24751d12895","toId":"900ebce1-bc7b-4cb2-a377-c244c70fa59d","submittedAt":"2026-09-02T22:17:42.937Z","iv":"HRWNBe9wndvRqkfc","ciphertext":"gwdxbn56o6ss5I4bO6pb+ROSj+2SfevSi2LN/c+av2PIGv0PdPK4yKGGu/ntwSdOHPByEgQHCYtdD75oZkOKy3qkhtXCLHTIVPLrQEdi7zW39ZQz15fDtidm7PLCx3FlBjJPtgv9FbrY0e2S0Vq26jqvJ2jq+VK1col8Eamm5yRX2jn2ZJf9CcGrYlT1Qp8aGpcjaUSDVo/N","wrappedKey":"XVUv7yBOnXSNzGIsbxL4jvxSXXBSNp8TT9DqBtWDyHwPtPM33jnvTo/1mOGA2e8/y82+6j7qEr9pdTe/vvHvEp6tMOVVZRoNsl6411uhOmVNXTdl8lVb6dspMwJpoXUB8fFoq8X/UMDy7OAfF7f3y7cuc3UJC1wC7gnjXMaxgcV53r5Zmt6je1yaCYFb0zZicfi4Kule8AWUGbCvKcBcHETYmc4Ds/ue9bM4tcKiP2+z/Kz/Z6g69+8misqnO7+BvHlXzlFOPu7cLfJxREGZvZa7AV0/q4loYjnxZWo+oD19dRUVCsU3do6EUDmwAM6HUXTReWaY0jXmv51mlf9jPw=="}],"adminAuth":{"publicKeyJwk":{"alg":"RSA-OAEP-256","e":"AQAB","ext":true,"key_ops":["encrypt"],"kty":"RSA","n":"sMz9Q92UPBIOB3lgl88D9leI2sEwGYcEFeSTFczdaITVVdDHSYVnl5_SZeFI7WpCZb0ZllQ9lZLVtGI6H0apVrZC337WtDXy_byJAtjN_cG3wTI-gLf7djNeWBIeZ74FwM8tWc1iB3B6Cqa-45Av4ZxHh48-aNg_6n-dsrghgPgOgCJwvCNtY7SVoQ_s8bAr5MXbZl3-Lixc6xuytSI0dmblqbDthnQ7VvBG9GjkuTTMnhCD5ZCeEw091OEXgv8WZqfRoVjQ9gv8wC2IUg2eS5MtxpPLRV9C8am3qf41SFYDwp3ZeN96Ckhs5hudUN-ohZWcozDYtZLk1gkh3z-P6Q"},"salt":"VCBCG/55PZxEfs2DjkFTeQ==","iv":"uLnknmcJDjh5HH50","wrappedPrivateKey":"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"},"pendingEntries":[]}</script>
+</body>
+</html>
