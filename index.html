@@ -2990,24 +2990,29 @@
   function showAnnouncement(force) {
     if (!force) {
       try {
-        if (localStorage.getItem('announce-v1')) return;
+        if (localStorage.getItem('announce-v2')) return;
       } catch (e) {}
     }
     var overlay = openModal(
       '<h3 style="text-align:center;">안녕하세요! 인연 접수처입니다 &#128522;</h3>' +
       '<div class="modal-msg" style="text-align:left;line-height:1.8;font-size:0.88rem;">' +
         '<p>소중한 개인정보를 맡겨주신 만큼, 안전하게 관리하고 있어요.</p>' +
-        '<p><b>현재 적용된 보안:</b></p>' +
+        '<p><b>&#128274; 최근 강화된 보안 (NEW):</b></p>' +
+        '<ul style="padding-left:20px;margin:6px 0;">' +
+          '<li><b>데이터베이스 잠금</b> — 인증된 접속만 허용하고, 외부에서 데이터를 통째로 열람하거나 삭제할 수 없도록 규칙으로 차단했어요.</li>' +
+          '<li>개인 PIN 저장 방식을 <b>더 강력한 방식(PBKDF2)으로 업그레이드</b>했어요. 유출되더라도 원래 PIN을 알아내기가 매우 어려워요. (여러분이 하실 일은 없어요)</li>' +
+        '</ul>' +
+        '<p><b>이전부터 적용 중인 보안:</b></p>' +
         '<ul style="padding-left:20px;margin:6px 0;">' +
           '<li>실명, 연락처, 소개자 정보는 <b>암호화</b>되어 저장돼요. 관리자 외에는 아무도 볼 수 없어요.</li>' +
-          '<li>개인 PIN은 원본이 아닌 <b>해시값</b>으로만 저장되어 유출되더라도 복원이 불가능해요.</li>' +
+          '<li>개인 PIN은 원본이 아닌 <b>해시값</b>으로만 저장돼요.</li>' +
           '<li>사진/번호 보기는 <b>당사자 본인이 직접 승인</b>해야 열람할 수 있어요. 원치 않으면 거절하고 메시지도 남길 수 있어요.</li>' +
           '<li>번호는 <b>본인 PIN으로 한 번 더 암호화</b>되어, 본인이 승인할 때만 열려요.</li>' +
           '<li>개인정보 수집 시 <b>동의 절차</b>를 거치고 있어요.</li>' +
         '</ul>' +
         '<p><b>앞으로의 계획:</b></p>' +
         '<ul style="padding-left:20px;margin:6px 0;">' +
-          '<li>데이터베이스 접근 권한 강화</li>' +
+          '<li>회원별 접근 권한 세분화 (본인 정보는 본인만)</li>' +
           '<li>자동 알림 기능 도입 (카카오톡 연동)</li>' +
           '<li>서비스 종료 시 데이터 즉시 삭제 보장</li>' +
         '</ul>' +
@@ -3017,7 +3022,7 @@
     );
     function finish() {
       closeModal(overlay);
-      try { localStorage.setItem('announce-v1', '1'); } catch (e) {}
+      try { localStorage.setItem('announce-v2', '1'); } catch (e) {}
     }
     overlay.querySelector('#modal-ok').addEventListener('click', finish);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(); });
