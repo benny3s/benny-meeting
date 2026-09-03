@@ -720,7 +720,7 @@
   function modalVerifyIdentity() {
     var entries = (currentState && currentState.entries) || [];
     var options = entries.map(function (e, idx) {
-      var num = String(entries.length - idx).padStart(3, '0');
+      var num = String(idx + 1).padStart(3, '0');
       return '<option value="' + escapeHtml(e.nickname) + '">No.' + num + '  ' + escapeHtml(e.nickname) + '</option>';
     }).join('');
     return new Promise(function (resolve) {
@@ -831,7 +831,7 @@
     }
     var cards = ordered.map(function (e) {
       var idx = entries.indexOf(e);
-      return cardHtml(e, entries.length - idx, state);
+      return cardHtml(e, idx + 1, state);
     }).join('');
     return (
       '<div class="list-toolbar">' +
@@ -958,7 +958,7 @@
     var allEntries = state.entries;
     var entryNum = function (eid) {
       var idx = allEntries.findIndex(function (e) { return e.id === eid; });
-      return idx >= 0 ? String(allEntries.length - idx).padStart(3, '0') : '???';
+      return idx >= 0 ? String(idx + 1).padStart(3, '0') : '???';
     };
     var reqs = state.dateRequests || [];
     var items = reqs.map(function (r) {
@@ -1393,6 +1393,10 @@
       if (!myEntry) return modalNotice('오류', '해당 닉네임으로 등록된 사람이 없어요.');
       return sha256Hex(r.pin).then(function (hash) {
         if (hash !== myEntry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
+        if (myEntry.id === id) {
+          el.classList.remove('blurred'); el.setAttribute('data-action', 'gallery');
+          return;
+        }
         var approved = (state.dateRequests || []).some(function (req) {
           return req.approved && (
             (req.fromId === myEntry.id && req.toId === id) ||
