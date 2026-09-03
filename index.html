@@ -792,15 +792,56 @@
     });
   }
 
+  /* ---- 오버레이 히스토리 관리 (모바일 뒤로가기로 페이지가 닫히지 않고
+     모달만 닫히도록) ---- */
+  var overlayStack = [];
+  var handlingPop = false; /* popstate 처리 중 (뒤로가기로 닫는 중) */
+  var selfPop = false;     /* 우리가 정리용으로 부른 history.back() */
+  function pushOverlay(el, dismiss) {
+    overlayStack.push({ el: el, dismiss: dismiss });
+    try { history.pushState({ meetOverlay: overlayStack.length }, ''); } catch (e) {}
+  }
+  function popOverlay(el) {
+    var idx = -1;
+    for (var i = overlayStack.length - 1; i >= 0; i--) {
+      if (overlayStack[i].el === el) { idx = i; break; }
+    }
+    if (idx < 0) return;
+    overlayStack.splice(idx, 1);
+    if (!handlingPop) {
+      selfPop = true;
+      try { history.back(); } catch (e) { selfPop = false; }
+    }
+  }
+  window.addEventListener('popstate', function () {
+    if (selfPop) { selfPop = false; return; }
+    if (!overlayStack.length) return;
+    handlingPop = true;
+    var top = overlayStack[overlayStack.length - 1];
+    try { top.dismiss(); } catch (e) {}
+    handlingPop = false;
+  });
+
   /* ---- modals ---- */
   function openModal(bodyHtml) {
     var overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = '<div class="modal-box">' + bodyHtml + '</div>';
     document.body.appendChild(overlay);
+    pushOverlay(overlay, function () {
+      var c = overlay.querySelector('#modal-cancel');
+      if (c) { c.click(); return; }
+      var ok = overlay.querySelector('#modal-ok');
+      if (ok) { ok.click(); return; }
+      closeModal(overlay);
+    });
     return overlay;
   }
-  function closeModal(overlay) { if (overlay && overlay.parentNode) overlay.remove(); }
+  function closeModal(overlay) {
+    if (!overlay || !overlay.parentNode) return;
+    overlay.remove();
+    popOverlay(overlay);
+  }
 
   function modalPin(title, message, opts) {
     opts = opts || {};
@@ -2509,13 +2550,19 @@
     }
     render();
     document.body.appendChild(overlay);
+    function closeGallery() {
+      if (!overlay.parentNode) return;
+      overlay.remove();
+      popOverlay(overlay);
+    }
+    pushOverlay(overlay, closeGallery);
     overlay.addEventListener('click', function (e) {
       if (e.target.id === 'gal-prev') { idx = (idx - 1 + photos.length) % photos.length; render(); return; }
       if (e.target.id === 'gal-next') { idx = (idx + 1) % photos.length; render(); return; }
-      if (e.target.id === 'gal-close' || e.target === overlay) { overlay.remove(); return; }
+      if (e.target.id === 'gal-close' || e.target === overlay) { closeGallery(); return; }
     });
     overlay.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') overlay.remove();
+      if (e.key === 'Escape') closeGallery();
       if (e.key === 'ArrowLeft' && photos.length > 1) { idx = (idx - 1 + photos.length) % photos.length; render(); }
       if (e.key === 'ArrowRight' && photos.length > 1) { idx = (idx + 1) % photos.length; render(); }
     });
