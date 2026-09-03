@@ -196,14 +196,20 @@
     border-color: var(--gold); background: var(--gold-soft); color: var(--gold); font-weight: 700;
   }
 
-  .photo-field { display: flex; align-items: center; gap: 16px; }
-  .photo-preview {
-    width: 76px; height: 76px; border-radius: 14px;
-    border: 1px dashed var(--line); background: var(--paper);
-    display: flex; align-items: center; justify-content: center;
-    overflow: hidden; flex-shrink: 0; color: var(--muted); font-size: 0.75rem;
+  .photo-upload-area {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;
   }
-  .photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+  .photo-thumb {
+    width: 72px; height: 72px; border-radius: 10px; position: relative;
+    border: 1px solid var(--line); overflow: hidden; flex-shrink: 0;
+  }
+  .photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .photo-thumb-remove {
+    position: absolute; top: 2px; right: 2px; width: 20px; height: 20px;
+    border-radius: 50%; background: rgba(0,0,0,0.55); color: #fff;
+    border: none; cursor: pointer; font-size: 12px; line-height: 20px;
+    text-align: center; padding: 0;
+  }
   .photo-pick {
     display: inline-block; padding: 9px 16px; border-radius: 999px;
     background: var(--paper); border: 1px solid var(--line);
@@ -211,6 +217,40 @@
   }
   .photo-pick:hover { border-color: var(--accent); }
   .field input[type="file"] { display: none; }
+
+  .gallery-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; cursor: pointer;
+  }
+  .gallery-img {
+    max-width: 90vw; max-height: 80vh; object-fit: contain; border-radius: 8px;
+    cursor: default;
+  }
+  .gallery-counter {
+    color: #fff; font-size: 0.85rem; margin-top: 12px; opacity: 0.8;
+  }
+  .gallery-nav {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    background: rgba(255,255,255,0.15); border: none; color: #fff;
+    font-size: 2rem; width: 44px; height: 44px; border-radius: 50%;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .gallery-nav:hover { background: rgba(255,255,255,0.3); }
+  .gallery-nav--prev { left: 12px; }
+  .gallery-nav--next { right: 12px; }
+  .gallery-close {
+    position: absolute; top: 12px; right: 16px; background: none;
+    border: none; color: #fff; font-size: 2rem; cursor: pointer; opacity: 0.7;
+  }
+  .gallery-close:hover { opacity: 1; }
+
+  .pf-photos { position: relative; margin-top: 6px; }
+  .pf-photos img { width: 100%; height: 190px; object-fit: cover; display: block; cursor: pointer; }
+  .pf-photos-count {
+    position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.6);
+    color: #fff; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;
+  }
 
   .perforation {
     border: none; border-top: 2px dotted var(--line); margin: 28px 0;
@@ -287,13 +327,13 @@
     font-size: 0.72rem; color: var(--gold); font-weight: 700; letter-spacing: 0.04em;
     padding: 10px 14px 0;
   }
-  .pf-photo { width: 100%; height: 190px; object-fit: cover; display: block; margin-top: 6px; }
+  .pf-photo { width: 100%; height: 190px; object-fit: cover; display: block; margin-top: 6px; cursor: pointer; }
   .pf-photo--empty {
     width: calc(100% - 28px); height: 150px; margin: 6px 14px 0; border-radius: 12px;
     display: flex; align-items: center; justify-content: center;
     color: #fff; font-family: 'Gowun Batang', serif; font-size: 2.2rem;
   }
-  .pf-photo.blurred { filter: blur(12px); cursor: pointer; transition: filter 0.3s; }
+  .pf-photo.blurred, .pf-photos.blurred { filter: blur(12px); cursor: pointer; transition: filter 0.3s; }
   .pf-photo--empty.blurred { filter: blur(12px); cursor: pointer; }
   .pf-body { padding: 14px 16px 12px; flex: 1; }
   .pf-name { font-size: 1.08rem; margin-bottom: 8px; }
@@ -437,7 +477,7 @@
   var decryptedContacts = {};
   var decryptedRequests = {};
   var currentState = null;
-  var photoDataUrl = null;
+  var photoDataUrls = [];
 
   var ICON_PIN = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>';
   var ICON_BRIEF = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
@@ -686,12 +726,12 @@
     return new Promise(function (resolve) {
       var overlay = openModal(
         '<h3>본인 확인</h3>' +
-        '<p class="modal-msg">명단에서 본인을 선택하고 삭제 PIN을 입력해주세요.</p>' +
+        '<p class="modal-msg">명단에서 본인을 선택하고 개인 PIN을 입력해주세요.</p>' +
         '<select class="modal-input" id="modal-verify-nickname">' +
           '<option value="" disabled selected>선택해주세요</option>' +
           options +
         '</select>' +
-        '<input type="text" inputmode="numeric" class="modal-input" id="modal-verify-pin" data-numeric placeholder="삭제 PIN" style="margin-top:8px;">' +
+        '<input type="text" inputmode="numeric" class="modal-input" id="modal-verify-pin" data-numeric placeholder="개인 PIN" style="margin-top:8px;">' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
           '<button type="button" class="card-btn primary" id="modal-ok">확인</button>' +
@@ -714,11 +754,24 @@
   }
 
   /* ---- rendering ---- */
+  function getPhotos(entry) {
+    if (entry.photos && entry.photos.length) return entry.photos;
+    if (entry.photo) return [entry.photo];
+    return [];
+  }
+
   function cardHtml(entry, num, state) {
     var displayName = entry.nickname || entry.name || '';
-    var photo = entry.photo
-      ? '<img class="pf-photo' + (entry.blurPhoto ? ' blurred' : '') + '" src="' + entry.photo + '" alt="' + escapeHtml(displayName) + ' 사진" loading="lazy"' + (entry.blurPhoto ? ' data-action="reveal-photo" data-id="' + escapeHtml(entry.id) + '"' : '') + '>'
-      : '<div class="pf-photo pf-photo--empty' + (entry.blurPhoto ? ' blurred' : '') + '" style="background:' + avatarColor(entry.id) + '"' + (entry.blurPhoto ? ' data-action="reveal-photo" data-id="' + escapeHtml(entry.id) + '"' : '') + '>' + escapeHtml(initials(displayName)) + '</div>';
+    var photos = getPhotos(entry);
+    var photo;
+    if (photos.length > 0) {
+      var countBadge = photos.length > 1 ? '<span class="pf-photos-count">' + photos.length + '장</span>' : '';
+      photo = '<div class="pf-photos' + (entry.blurPhoto ? ' blurred' : '') + '"' + (entry.blurPhoto ? ' data-action="reveal-photo" data-id="' + escapeHtml(entry.id) + '"' : ' data-action="gallery" data-id="' + escapeHtml(entry.id) + '"') + '>' +
+        '<img src="' + photos[0] + '" alt="' + escapeHtml(displayName) + ' 사진" loading="lazy">' +
+        countBadge + '</div>';
+    } else {
+      photo = '<div class="pf-photo pf-photo--empty" style="background:' + avatarColor(entry.id) + '">' + escapeHtml(initials(displayName)) + '</div>';
+    }
     var ageStr = entry.birthYear ? (String(entry.birthYear).slice(2) + '년생') : '-';
     var deg = degreeLabel(entry.degreeChoice || entry.degree);
     var extras = '';
@@ -727,8 +780,13 @@
     if (entry.idealType) extras += '<div class="pf-extra"><b>선호</b> ' + escapeHtml(entry.idealType) + '</div>';
     if (entry.dealbreaker) extras += '<div class="pf-extra"><b>비선호</b> ' + escapeHtml(entry.dealbreaker) + '</div>';
     var contactHtml;
+    var hasApprovedMatch = (state.dateRequests || []).some(function (r) {
+      return r.approved && (r.fromId === entry.id || r.toId === entry.id) && r.revealedContact;
+    });
     if (decryptedContacts[entry.id]) {
       contactHtml = '<div class="pf-contact open">' + ICON_UNLOCK + '<span>' + escapeHtml(decryptedContacts[entry.id]) + '</span></div>';
+    } else if (hasApprovedMatch) {
+      contactHtml = '<div class="pf-contact" style="cursor:pointer;" data-action="reveal-contact" data-id="' + escapeHtml(entry.id) + '">' + ICON_LOCK + '<span>데이트 성사! PIN 입력하여 연락처 보기</span></div>';
     } else {
       contactHtml = '<div class="pf-contact locked">' + ICON_LOCK + '<span>연락처 비공개 (관리자만 확인 가능)</span></div>';
     }
@@ -803,7 +861,8 @@
           '<div class="field-group">' +
             '<div class="row-2">' +
               '<div class="field"><label for="f-nickname">공개 이름 (닉네임) <span class="req">필수</span></label>' +
-                '<input type="text" id="f-nickname" name="nickname" maxlength="20" placeholder="예: 민지" required></div>' +
+                '<input type="text" id="f-nickname" name="nickname" maxlength="20" placeholder="예: 민지" required>' +
+                '<span class="hint">닉네임 사용 추천 (전 소개팅녀/소개팅남 모르게)</span></div>' +
               '<div class="field"><label for="f-realname">실명 <span class="req">필수</span></label>' +
                 '<input type="text" id="f-realname" name="realName" maxlength="20" placeholder="예: 김민지" required>' +
                 '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
@@ -837,21 +896,20 @@
                 '<label><input type="radio" name="degreeChoice" value="other"><span>그 외</span></label>' +
               '</div>' +
             '</div>' +
-            '<div class="field"><label>사진 <span class="opt">(선택)</span></label>' +
-              '<div class="photo-field">' +
-                '<div class="photo-preview" id="photo-preview">사진 없음</div>' +
-                '<div>' +
-                  '<label class="photo-pick">사진 선택<input type="file" id="f-photo" accept="image/*"></label>' +
-                  '<label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:0.85rem;cursor:pointer">' +
-                    '<input type="checkbox" name="blurPhoto" id="f-blur" style="width:16px;height:16px;accent-color:var(--accent)"> 사진 흐리게 처리' +
-                  '</label>' +
-                '</div>' +
+            '<div class="field"><label>사진 <span class="opt">(선택, 최대 5장)</span></label>' +
+              '<span class="hint">사진은 전체 공개, 선택 공개 (흐리게 처리하여, 소개팅 성사될 경우에만 공개) 가능</span>' +
+              '<div class="photo-upload-area" id="photo-upload-area"></div>' +
+              '<div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap;">' +
+                '<label class="photo-pick">사진 추가<input type="file" id="f-photo" accept="image/*" multiple></label>' +
+                '<label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;cursor:pointer">' +
+                  '<input type="checkbox" name="blurPhoto" id="f-blur" style="width:16px;height:16px;accent-color:var(--accent)"> 사진 흐리게 처리' +
+                '</label>' +
               '</div></div>' +
             '<div class="section-label">추가 정보</div>' +
             '<div class="row-2">' +
               '<div class="field"><label for="f-height">키 (cm) <span class="opt">(선택)</span></label>' +
                 '<input type="number" id="f-height" name="height" min="130" max="220" placeholder="예: 168"></div>' +
-              '<div class="field"><label for="f-pin">삭제용 PIN <span class="req">필수</span></label>' +
+              '<div class="field"><label for="f-pin">개인 PIN <span class="req">필수</span></label>' +
                 '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8" placeholder="숫자 4~8자리" required>' +
                 '<span class="hint">나중에 본인이 신청을 취소하거나 데이트를 신청할 때 필요해요.</span></div>' +
             '</div>' +
@@ -1108,8 +1166,8 @@
         birthYear: birthYear,
         region: region,
         workplace: workplace,
-        photo: photoDataUrl || null,
-        blurPhoto: blurPhoto && !!photoDataUrl,
+        photos: photoDataUrls.length ? photoDataUrls.slice() : [],
+        blurPhoto: blurPhoto && photoDataUrls.length > 0,
         height: height,
         intro: intro,
         idealType: idealType,
@@ -1125,7 +1183,7 @@
         pendingEntries: firebase.firestore.FieldValue.arrayUnion(entry)
       });
     }).then(function () {
-      photoDataUrl = null;
+      photoDataUrls = [];
       showStamp();
     }).catch(function (err) {
       btn.disabled = false;
@@ -1178,7 +1236,7 @@
       });
       return;
     }
-    modalPin('본인 확인', '등록 시 설정한 삭제 PIN을 입력하세요.').then(function (pin) {
+    modalPin('본인 확인', '등록 시 설정한 개인 PIN을 입력하세요.').then(function (pin) {
       if (!pin) return;
       sha256Hex(pin).then(function (hash) {
         if (hash !== entry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
@@ -1200,6 +1258,10 @@
       if (!fromEntry) return modalNotice('오류', '해당 닉네임으로 등록된 사람이 없어요.');
       sha256Hex(r.pin).then(function (hash) {
         if (hash !== fromEntry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
+        var existingReq = (state.dateRequests || []).find(function (req) {
+          return req.fromId === fromEntry.id && req.toId === toId;
+        });
+        if (existingReq) return modalNotice('안내', '이미 ' + escapeHtml(target.nickname) + '님에게 데이트 신청을 보냈어요. 관리자 처리 후 다시 신청할 수 있어요.');
         var noteOverlay = openModal(
           '<h3>💌 ' + escapeHtml(target.nickname) + '님에게</h3>' +
           '<p class="modal-msg">한 마디 남기세요 (선택)</p>' +
@@ -1260,14 +1322,33 @@
   }
 
   function handleApproveRequest(id) {
-    db.runTransaction(function (tx) {
-      return tx.get(stateRef).then(function (doc) {
-        var state = doc.data();
-        var reqs = (state.dateRequests || []).map(function (r) {
-          if (r.id === id) { var copy = JSON.parse(JSON.stringify(r)); copy.approved = true; return copy; }
-          return r;
+    var state = currentState;
+    var req = (state.dateRequests || []).find(function (r) { return r.id === id; });
+    if (!req) return;
+    var fromEntry = (state.entries || []).find(function (e) { return e.id === req.fromId; });
+    var toEntry = (state.entries || []).find(function (e) { return e.id === req.toId; });
+    var decryptPromises = [];
+    if (fromEntry && fromEntry.contactEnc && adminPrivateKey) {
+      decryptPromises.push(decryptWithAdmin(adminPrivateKey, fromEntry.contactEnc).catch(function () { return ''; }));
+    } else { decryptPromises.push(Promise.resolve('')); }
+    if (toEntry && toEntry.contactEnc && adminPrivateKey) {
+      decryptPromises.push(decryptWithAdmin(adminPrivateKey, toEntry.contactEnc).catch(function () { return ''; }));
+    } else { decryptPromises.push(Promise.resolve('')); }
+    Promise.all(decryptPromises).then(function (contacts) {
+      return db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).map(function (r) {
+            if (r.id === id) {
+              var copy = JSON.parse(JSON.stringify(r));
+              copy.approved = true;
+              copy.revealedContact = { from: contacts[0], to: contacts[1] };
+              return copy;
+            }
+            return r;
+          });
+          tx.update(stateRef, { dateRequests: reqs });
         });
-        tx.update(stateRef, { dateRequests: reqs });
       });
     }).catch(function (err) {
       modalNotice('오류', '승인에 실패했어요: ' + (err.message || err));
@@ -1302,7 +1383,7 @@
     var el = document.querySelector('[data-action="reveal-photo"][data-id="' + id + '"]');
     if (!el) return;
     if (isAdminUnlocked) {
-      el.classList.remove('blurred'); el.removeAttribute('data-action');
+      el.classList.remove('blurred'); el.setAttribute('data-action', 'gallery');
       return;
     }
     var state = currentState;
@@ -1319,10 +1400,74 @@
           );
         });
         if (approved) {
-          el.classList.remove('blurred'); el.removeAttribute('data-action');
+          el.classList.remove('blurred'); el.setAttribute('data-action', 'gallery');
         } else {
           modalNotice('안내', '승인된 데이트 매칭이 있어야 사진을 볼 수 있어요.');
         }
+      });
+    });
+  }
+
+  function openGallery(photos, startIdx) {
+    var idx = startIdx || 0;
+    var overlay = document.createElement('div');
+    overlay.className = 'gallery-overlay';
+    function render() {
+      var html = '<img class="gallery-img" src="' + photos[idx] + '" alt="사진 ' + (idx + 1) + '">';
+      if (photos.length > 1) {
+        html += '<div class="gallery-counter">' + (idx + 1) + ' / ' + photos.length + '</div>';
+        html += '<button class="gallery-nav gallery-nav--prev" id="gal-prev">&#8249;</button>';
+        html += '<button class="gallery-nav gallery-nav--next" id="gal-next">&#8250;</button>';
+      }
+      html += '<button class="gallery-close" id="gal-close">&times;</button>';
+      overlay.innerHTML = html;
+    }
+    render();
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function (e) {
+      if (e.target.id === 'gal-prev') { idx = (idx - 1 + photos.length) % photos.length; render(); return; }
+      if (e.target.id === 'gal-next') { idx = (idx + 1) % photos.length; render(); return; }
+      if (e.target.id === 'gal-close' || e.target === overlay) { overlay.remove(); return; }
+    });
+    overlay.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') overlay.remove();
+      if (e.key === 'ArrowLeft' && photos.length > 1) { idx = (idx - 1 + photos.length) % photos.length; render(); }
+      if (e.key === 'ArrowRight' && photos.length > 1) { idx = (idx + 1) % photos.length; render(); }
+    });
+    overlay.setAttribute('tabindex', '0');
+    overlay.focus();
+  }
+
+  function handleGallery(id) {
+    var state = currentState;
+    var entry = state.entries.find(function (e) { return e.id === id; });
+    if (!entry) return;
+    var photos = getPhotos(entry);
+    if (!photos.length) return;
+    openGallery(photos, 0);
+  }
+
+  function handleRevealContact(id) {
+    var state = currentState;
+    var entry = state.entries.find(function (e) { return e.id === id; });
+    if (!entry) return;
+    var matchReqs = (state.dateRequests || []).filter(function (r) {
+      return r.approved && r.revealedContact && (r.fromId === id || r.toId === id);
+    });
+    if (!matchReqs.length) return modalNotice('안내', '성사된 데이트가 없어요.');
+    modalVerifyIdentity().then(function (r) {
+      if (!r) return;
+      var myEntry = state.entries.find(function (e) { return e.nickname === r.nickname; });
+      if (!myEntry) return modalNotice('오류', '해당 닉네임으로 등록된 사람이 없어요.');
+      sha256Hex(r.pin).then(function (hash) {
+        if (hash !== myEntry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
+        var match = matchReqs.find(function (r) {
+          return (r.fromId === myEntry.id && r.toId === id) || (r.toId === myEntry.id && r.fromId === id);
+        });
+        if (!match) return modalNotice('안내', '본인과 매칭된 건이 아니에요.');
+        var contact = match.fromId === id ? match.revealedContact.from : match.revealedContact.to;
+        if (!contact) return modalNotice('안내', '연락처 정보가 아직 없어요.');
+        modalNotice('연락처', escapeHtml(entry.nickname) + '님의 연락처: ' + escapeHtml(contact));
       });
     });
   }
@@ -1394,6 +1539,8 @@
       else if (action === 'reject-request') handleRejectRequest(id);
       else if (action === 'delete-request') handleDeleteRequest(id);
       else if (action === 'reveal-photo') handleRevealPhoto(id);
+      else if (action === 'gallery') handleGallery(id);
+      else if (action === 'reveal-contact') handleRevealContact(id);
       else if (action === 'detail') handleDetail(id);
       return;
     }
@@ -1414,17 +1561,44 @@
     }
   });
 
+  function renderPhotoThumbs() {
+    var area = document.getElementById('photo-upload-area');
+    if (!area) return;
+    area.innerHTML = photoDataUrls.map(function (url, i) {
+      return '<div class="photo-thumb"><img src="' + url + '" alt="photo ' + (i + 1) + '"><button type="button" class="photo-thumb-remove" data-remove-photo="' + i + '">&times;</button></div>';
+    }).join('') || '<span style="color:var(--muted);font-size:0.82rem;">사진 없음</span>';
+  }
+
   document.body.addEventListener('change', function (e) {
     if (e.target.id === 'f-photo') {
-      var file = e.target.files && e.target.files[0];
-      if (!file) return;
-      var reader = new FileReader();
-      reader.onload = function (ev) {
-        photoDataUrl = ev.target.result;
-        var preview = document.getElementById('photo-preview');
-        if (preview) preview.innerHTML = '<img src="' + photoDataUrl + '" alt="preview">';
-      };
-      reader.readAsDataURL(file);
+      var files = e.target.files;
+      if (!files || !files.length) return;
+      var remaining = 5 - photoDataUrls.length;
+      if (remaining <= 0) { modalNotice('안내', '사진은 최대 5장까지 추가할 수 있어요.'); e.target.value = ''; return; }
+      var toRead = Math.min(files.length, remaining);
+      for (var i = 0; i < toRead; i++) {
+        (function (file) {
+          var reader = new FileReader();
+          reader.onload = function (ev) {
+            photoDataUrls.push(ev.target.result);
+            renderPhotoThumbs();
+          };
+          reader.readAsDataURL(file);
+        })(files[i]);
+      }
+      if (files.length > remaining) {
+        modalNotice('안내', '최대 5장까지만 추가됩니다. ' + (files.length - remaining) + '장은 무시되었어요.');
+      }
+      e.target.value = '';
+    }
+  });
+
+  document.body.addEventListener('click', function (e) {
+    var removeBtn = e.target.closest('[data-remove-photo]');
+    if (removeBtn) {
+      var idx = parseInt(removeBtn.getAttribute('data-remove-photo'), 10);
+      photoDataUrls.splice(idx, 1);
+      renderPhotoThumbs();
     }
   });
 
