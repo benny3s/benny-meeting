@@ -493,6 +493,17 @@
   var ICON_LOCK = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/></svg>';
   var ICON_UNLOCK = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 9-3"/></svg>';
 
+  var NTFY_TOPIC = 'benny3s-meeting-admin-93034';
+  function notifyAdmin(title, body) {
+    try {
+      fetch('https://ntfy.sh/' + NTFY_TOPIC, {
+        method: 'POST',
+        headers: { 'Title': title, 'Priority': '4', 'Tags': 'heart' },
+        body: body
+      });
+    } catch (e) {}
+  }
+
   /* ---- Firebase ---- */
   var firebaseConfig = {
     apiKey: "AIzaSyCSueePQfiHaRxUSZxoropiFjiq9arAaTs",
@@ -1240,11 +1251,13 @@
       photoDataUrls = [];
       if (isEdit) {
         editingEntryId = null;
+        notifyAdmin('프로필 수정', nickname + '님이 프로필을 수정했어요.');
         modalNotice('완료', '프로필이 수정되었어요.');
         activeTab = 'list';
         paint(currentState);
       } else {
         editingEntryId = null;
+        notifyAdmin('새 신청서 접수', nickname + '님이 신청서를 제출했어요! 승인 대기 중.');
         showStamp();
       }
     }).catch(function (err) {
@@ -1425,6 +1438,7 @@
             dateRequests: firebase.firestore.FieldValue.arrayUnion(req)
           });
         }).then(function () {
+          notifyAdmin('데이트 신청', fromEntry.nickname + '님이 ' + target.nickname + '님에게 데이트 신청을 보냈어요!');
           modalNotice('신청 완료', escapeHtml(target.nickname) + '님에게 데이트 신청을 보냈어요!');
         });
       });
