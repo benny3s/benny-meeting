@@ -86,7 +86,7 @@
   .masthead-icon { color: var(--accent); flex-shrink: 0; }
   .masthead h1 { font-size: clamp(1.5rem, 4vw, 2.1rem); letter-spacing: 0.01em; }
   .masthead p { margin: 6px 0 0; color: var(--paper); opacity: 0.72; font-size: 0.92rem; }
-  .admin-bar { max-width: 880px; margin: 14px auto 0; display: flex; justify-content: flex-end; }
+  .admin-bar { max-width: 880px; margin: 14px auto 0; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
   .notice-bar {
     max-width: 880px; margin: 12px auto 0; padding: 10px 16px; border-radius: 10px;
     background: var(--gold-soft); color: var(--ink); font-size: 0.85rem;
@@ -433,6 +433,46 @@
     color: #fff; background: #3F8C6E; border-color: #3F8C6E;
   }
 
+  /* ---------- 신청 현황 (my status) ---------- */
+  .mine-section { margin-bottom: 22px; }
+  .mine-section h3 {
+    font-size: 0.95rem; margin-bottom: 10px; display: flex;
+    align-items: center; gap: 6px;
+  }
+  .mine-item {
+    border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+    margin-bottom: 8px; background: var(--bg);
+  }
+  .mine-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.9rem; }
+  .mine-date { color: var(--muted); font-size: 0.78rem; margin-left: auto; }
+  .mine-note {
+    margin-top: 8px; font-size: 0.85rem; color: var(--muted);
+    padding: 8px 10px; background: var(--card); border-radius: 8px;
+  }
+  .mine-note.reject { color: #c5221f; background: #fce8e6; }
+  .mine-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .mine-status-box { text-align: center; padding: 32px 20px; }
+  .mine-status-icon { font-size: 2.6rem; margin-bottom: 10px; }
+  .mine-status-box h3 { font-size: 1.05rem; margin-bottom: 8px; }
+  .mine-status-box .sub { margin-bottom: 0; }
+
+  /* ---------- 관리자 활동 로그 ---------- */
+  .log-list { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; }
+  .log-row {
+    display: flex; gap: 8px; align-items: baseline; padding: 8px 12px;
+    font-size: 0.82rem; border-bottom: 1px solid var(--line);
+  }
+  .log-row:last-child { border-bottom: none; }
+  .log-time { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .log-actor { font-weight: 600; }
+  .log-detail { color: var(--muted); }
+  .seen-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .seen-table th, .seen-table td {
+    text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line);
+  }
+  .seen-table th { color: var(--muted); font-weight: 600; font-size: 0.8rem; }
+  .seen-table td.seen-date { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
   /* ---------- Generic modal (replaces native prompt/confirm/alert, which
      browsers commonly block inside a sandboxed artifact iframe) ---------- */
   .modal-overlay {
@@ -490,6 +530,7 @@
   var currentState = null;
   var photoDataUrls = [];
   var editingEntryId = null;
+  var currentUser = null;
 
   var ICON_PIN = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>';
   var ICON_BRIEF = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
@@ -538,10 +579,11 @@
       if (!Array.isArray(parsed.pendingEntries)) parsed.pendingEntries = [];
       if (!Array.isArray(parsed.dateRequests)) parsed.dateRequests = [];
       if (!Array.isArray(parsed.approvedPairs)) parsed.approvedPairs = [];
+      if (!Array.isArray(parsed.logs)) parsed.logs = [];
       if (parsed.adminAuth === undefined) parsed.adminAuth = null;
       return parsed;
     } catch (e) {
-      return { entries: [], pendingEntries: [], dateRequests: [], approvedPairs: [], adminAuth: null };
+      return { entries: [], pendingEntries: [], dateRequests: [], approvedPairs: [], logs: [], adminAuth: null };
     }
   }
   function genderLabel(g) { return g === 'male' ? '남성' : g === 'female' ? '여성' : '-'; }
@@ -554,8 +596,8 @@
   }
   function degreeLabel(d) {
     if (d === '1' || d === 1) return '1촌 · ' + ROOT_NAME + '의 친구';
-    if (d === '2' || d === 2) return '2촌 · 건너 친구';
-    if (d === '3' || d === 3) return '3촌 · 건너건너 친구';
+    if (d === '2' || d === 2) return '2촌 · ' + ROOT_NAME + '의 두 다리 건너';
+    if (d === '3' || d === 3) return '3촌 · ' + ROOT_NAME + '의 세 다리 건너';
     if (d === 'other') return '그 외';
     var n = parseInt(d, 10) || 1;
     if (n <= 1) return '1촌 · ' + ROOT_NAME + '의 친구';
@@ -739,40 +781,151 @@
     });
   }
 
-  function modalVerifyIdentity() {
-    var entries = (currentState && currentState.entries) || [];
-    var options = entries.map(function (e, idx) {
-      var num = String(idx + 1).padStart(3, '0');
-      return '<option value="' + escapeHtml(e.nickname) + '">No.' + num + '  ' + escapeHtml(e.nickname) + '</option>';
+  /* ---- login / session ---- */
+  function findMyEntry(state) {
+    if (!currentUser) return null;
+    return (state.entries || []).find(function (e) { return e.id === currentUser.id; }) || null;
+  }
+  function findMyPending(state) {
+    if (!currentUser) return null;
+    return (state.pendingEntries || []).find(function (e) { return e.id === currentUser.id; }) || null;
+  }
+  function saveSession() {
+    try {
+      if (currentUser) sessionStorage.setItem('meetUser', JSON.stringify(currentUser));
+      else sessionStorage.removeItem('meetUser');
+    } catch (e) {}
+  }
+  function restoreSession(state) {
+    try {
+      var raw = sessionStorage.getItem('meetUser');
+      if (!raw) return;
+      var u = JSON.parse(raw);
+      if (!u || !u.id) return;
+      var exists = (state.entries || []).some(function (e) { return e.id === u.id; }) ||
+        (state.pendingEntries || []).some(function (e) { return e.id === u.id; });
+      if (exists) currentUser = u;
+      else { try { sessionStorage.removeItem('meetUser'); } catch (e2) {} }
+    } catch (e) {}
+  }
+  function logoutUser() {
+    currentUser = null;
+    saveSession();
+    if (activeTab === 'mine') activeTab = 'form';
+    paint(currentState);
+  }
+
+  function modalLogin() {
+    var state = currentState || {};
+    var all = (state.entries || []).concat(state.pendingEntries || []);
+    var options = all.map(function (e) {
+      return '<option value="' + escapeHtml(e.id) + '">' + escapeHtml(e.nickname) + '</option>';
     }).join('');
     return new Promise(function (resolve) {
       var overlay = openModal(
-        '<h3>본인 확인</h3>' +
-        '<p class="modal-msg">명단에서 본인을 선택하고 개인 PIN을 입력해주세요.</p>' +
-        '<select class="modal-input" id="modal-verify-nickname">' +
-          '<option value="" disabled selected>선택해주세요</option>' +
-          options +
+        '<h3>로그인</h3>' +
+        '<p class="modal-msg">본인 닉네임을 선택하고 등록 시 설정한 개인 PIN을 입력해주세요.</p>' +
+        '<select class="modal-input" id="modal-login-id">' +
+          '<option value="" disabled selected>닉네임 선택</option>' + options +
         '</select>' +
-        '<input type="text" inputmode="numeric" class="modal-input" id="modal-verify-pin" data-numeric placeholder="개인 PIN" style="margin-top:8px;">' +
+        '<input type="text" inputmode="numeric" class="modal-input" id="modal-login-pin" data-numeric placeholder="개인 PIN" style="margin-top:8px;">' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
-          '<button type="button" class="card-btn primary" id="modal-ok">확인</button>' +
+          '<button type="button" class="card-btn primary" id="modal-ok">로그인</button>' +
         '</div>'
       );
-      var nickSelect = overlay.querySelector('#modal-verify-nickname');
-      var pinInput = overlay.querySelector('#modal-verify-pin');
-      setTimeout(function () { nickSelect.focus(); }, 0);
+      var idSel = overlay.querySelector('#modal-login-id');
+      var pinInput = overlay.querySelector('#modal-login-pin');
+      setTimeout(function () { idSel.focus(); }, 0);
       function finish(val) { closeModal(overlay); resolve(val); }
       overlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
       overlay.querySelector('#modal-ok').addEventListener('click', function () {
-        finish({ nickname: nickSelect.value, pin: pinInput.value.trim() });
+        finish({ id: idSel.value, pin: pinInput.value.trim() });
       });
       pinInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') finish({ nickname: nickSelect.value, pin: pinInput.value.trim() });
+        if (e.key === 'Enter') finish({ id: idSel.value, pin: pinInput.value.trim() });
         if (e.key === 'Escape') finish(null);
       });
       overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
     });
+  }
+
+  function handleLogin() {
+    var state = currentState;
+    modalLogin().then(function (r) {
+      if (!r || !r.id) return;
+      var all = (state.entries || []).concat(state.pendingEntries || []);
+      var entry = all.find(function (e) { return e.id === r.id; });
+      if (!entry) return modalNotice('오류', '해당 닉네임을 찾을 수 없어요.');
+      sha256Hex(r.pin).then(function (hash) {
+        if (hash !== entry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
+        currentUser = { id: entry.id, nickname: entry.nickname };
+        saveSession();
+        activeTab = 'mine';
+        touchLastSeen(entry.id);
+        appendLog('login', entry.nickname, '로그인');
+        paint(currentState);
+      });
+    });
+  }
+
+  /* returns Promise resolving to my entry (approved) or null */
+  function requireLogin() {
+    if (currentUser) {
+      var me = findMyEntry(currentState);
+      if (me) return Promise.resolve(me);
+      if (findMyPending(currentState)) {
+        modalNotice('안내', '아직 관리자 승인 대기 중이에요. 승인 후 이용할 수 있어요.');
+        return Promise.resolve(null);
+      }
+    }
+    modalNotice('로그인 필요', '먼저 로그인해주세요. 상단의 로그인 버튼을 눌러주세요.');
+    return Promise.resolve(null);
+  }
+
+  /* ---- activity log ---- */
+  var LOG_LIMIT = 300;
+  function appendLog(type, actor, detail) {
+    var entry = { id: genId(), at: new Date().toISOString(), type: type, actor: actor || '', detail: detail || '' };
+    stateRef.get().then(function (doc) {
+      var s = doc.exists ? doc.data() : {};
+      var logs = (s.logs || []).concat([entry]);
+      if (logs.length > LOG_LIMIT) logs = logs.slice(logs.length - LOG_LIMIT);
+      return stateRef.update({ logs: logs });
+    }).catch(function () {});
+  }
+  function touchLastSeen(entryId) {
+    var now = new Date().toISOString();
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var changed = false;
+        var entries = (s.entries || []).map(function (e) {
+          if (e.id === entryId) { changed = true; var c = JSON.parse(JSON.stringify(e)); c.lastSeenAt = now; return c; }
+          return e;
+        });
+        if (changed) tx.update(stateRef, { entries: entries });
+      });
+    }).catch(function () {});
+  }
+
+  /* ---- request status helpers ---- */
+  function reqStatus(r) {
+    if (r.approved) return 'approved';
+    if (r.rejected) return 'rejected';
+    if (r.userApproved) return 'user_approved';
+    return 'pending';
+  }
+  function statusChip(st) {
+    if (st === 'approved') return '<span class="chip" style="background:#e6f4ea;color:#137333;">승인됨</span>';
+    if (st === 'rejected') return '<span class="chip" style="background:#fce8e6;color:#c5221f;">거절됨</span>';
+    if (st === 'user_approved') return '<span class="chip" style="background:#fef7e0;color:#b06000;">본인 승인 · 관리자 확인 중</span>';
+    return '<span class="chip" style="background:#f1f3f4;color:#5f6368;">대기중</span>';
+  }
+  function reqNote(r) {
+    if (typeof r.note === 'string') return r.note;
+    var d = decryptedRequests[r.id];
+    return (d && d.note) || '';
   }
 
   /* ---- rendering ---- */
@@ -890,8 +1043,8 @@
                 '<input type="text" id="f-realname" name="realName" maxlength="20" placeholder="예: 김민지"' + (isEdit ? '' : ' required') + '>' +
                 '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
             '</div>' +
-            '<div class="field"><label for="f-contact">연락처 ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
-              '<input type="text" id="f-contact" name="contact" maxlength="60" placeholder="카카오톡 ID 또는 전화번호"' + (isEdit ? '' : ' required') + '>' +
+            '<div class="field"><label for="f-contact">전화번호 ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
+              '<input type="tel" id="f-contact" name="contact" maxlength="11" inputmode="numeric" data-numeric placeholder="예: 01012345678"' + (isEdit ? '' : ' required') + '>' +
               '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
             '<div class="field">' +
               '<label>성별 <span class="req">필수</span></label>' +
@@ -914,8 +1067,8 @@
             '<div class="field"><label>베니와의 관계 <span class="req">필수</span></label>' +
               '<div class="degree-group">' +
                 '<label><input type="radio" name="degreeChoice" value="1" required><span>1촌 · 베니의 친구</span></label>' +
-                '<label><input type="radio" name="degreeChoice" value="2"><span>2촌 · 건너 친구</span></label>' +
-                '<label><input type="radio" name="degreeChoice" value="3"><span>3촌 · 건너건너 친구</span></label>' +
+                '<label><input type="radio" name="degreeChoice" value="2"><span>2촌 · 베니의 두 다리 건너</span></label>' +
+                '<label><input type="radio" name="degreeChoice" value="3"><span>3촌 · 베니의 세 다리 건너</span></label>' +
                 '<label><input type="radio" name="degreeChoice" value="other"><span>그 외</span></label>' +
               '</div>' +
             '</div>' +
@@ -963,6 +1116,101 @@
     );
   }
 
+  function fmtDate(iso) {
+    if (!iso) return '-';
+    try {
+      var d = new Date(iso);
+      var p = function (n) { return String(n).padStart(2, '0'); };
+      return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+    } catch (e) { return '-'; }
+  }
+
+  function reqRowHtml(r, state, incoming) {
+    var otherId = incoming ? r.fromId : r.toId;
+    var other = (state.entries || []).find(function (e) { return e.id === otherId; });
+    var otherName = other ? other.nickname : '(알 수 없음)';
+    var st = reqStatus(r);
+    var note = reqNote(r);
+    var isPhoto = (r.type || 'contact') === 'photo';
+    var typeBadge = isPhoto
+      ? '<span class="chip" style="background:#fdf0e3;color:#b06000;">📷 사진</span>'
+      : '<span class="chip" style="background:#fce8e6;color:#d93025;">📱 번호</span>';
+    var actions = '';
+    if (incoming && st === 'pending') {
+      actions =
+        '<div class="mine-actions">' +
+          '<button type="button" class="card-btn primary" data-action="user-approve" data-id="' + escapeHtml(r.id) + '">승인</button>' +
+          '<button type="button" class="card-btn danger" data-action="user-reject" data-id="' + escapeHtml(r.id) + '">거절</button>' +
+        '</div>';
+    } else if (!incoming && st === 'pending') {
+      actions =
+        '<div class="mine-actions">' +
+          '<button type="button" class="card-btn" data-action="cancel-sent" data-id="' + escapeHtml(r.id) + '">요청 취소</button>' +
+        '</div>';
+    }
+    var rejectMsg = (st === 'rejected' && r.rejectMessage)
+      ? '<div class="mine-note reject">거절 메시지: ' + escapeHtml(r.rejectMessage) + '</div>' : '';
+    return (
+      '<div class="mine-item">' +
+        '<div class="mine-head">' + typeBadge + '<b>' + escapeHtml(otherName) + '</b>' + statusChip(st) +
+          '<span class="mine-date">' + fmtDate(r.submittedAt) + '</span></div>' +
+        (note ? '<div class="mine-note">"' + escapeHtml(note) + '"</div>' : '') +
+        rejectMsg +
+        actions +
+      '</div>'
+    );
+  }
+
+  function renderMine(state) {
+    var me = findMyEntry(state);
+    var myPending = findMyPending(state);
+    if (!me && myPending) {
+      return (
+        '<div class="admin-panel">' +
+          '<h2>신청 현황</h2>' +
+          '<div class="mine-status-box">' +
+            '<div class="mine-status-icon">⏳</div>' +
+            '<h3>승인 대기 중이에요</h3>' +
+            '<p class="sub">관리자(베니)가 신청서를 확인하고 있어요. 승인되면 명단에 등록되고, 사진/번호 요청을 주고받을 수 있어요.</p>' +
+            '<p class="sub" style="margin-top:8px;">신청일: ' + fmtDate(myPending.submittedAt) + '</p>' +
+          '</div>' +
+        '</div>'
+      );
+    }
+    if (!me) {
+      return '<div class="admin-panel"><h2>신청 현황</h2><p class="sub">신청 정보를 찾을 수 없어요. 다시 로그인해주세요.</p></div>';
+    }
+    var reqs = state.dateRequests || [];
+    var groups = [
+      { key: 'in-photo', title: '📷 받은 사진 요청', incoming: true, type: 'photo' },
+      { key: 'in-contact', title: '📱 받은 번호 요청', incoming: true, type: 'contact' },
+      { key: 'out-photo', title: '📷 보낸 사진 요청', incoming: false, type: 'photo' },
+      { key: 'out-contact', title: '📱 보낸 번호 요청', incoming: false, type: 'contact' }
+    ];
+    var sections = groups.map(function (g) {
+      var items = reqs.filter(function (r) {
+        if ((r.type || 'contact') !== g.type) return false;
+        return g.incoming ? r.toId === me.id : r.fromId === me.id;
+      }).sort(function (a, b) { return (b.submittedAt || '').localeCompare(a.submittedAt || ''); });
+      var body = items.length
+        ? items.map(function (r) { return reqRowHtml(r, state, g.incoming); }).join('')
+        : '<p class="sub" style="margin:0;">아직 없어요.</p>';
+      return (
+        '<div class="mine-section">' +
+          '<h3>' + g.title + '<span class="count">' + items.length + '</span></h3>' +
+          body +
+        '</div>'
+      );
+    }).join('');
+    return (
+      '<div class="admin-panel">' +
+        '<h2>신청 현황</h2>' +
+        '<p class="sub">' + escapeHtml(me.nickname) + '님, 반가워요! 받은 요청은 직접 승인하거나 거절할 수 있어요.</p>' +
+        sections +
+      '</div>'
+    );
+  }
+
   function renderAdmin(state) {
     if (!isAdminUnlocked) {
       return '<div class="admin-panel"><h2>관리자 모드</h2><p class="sub">위쪽 "관리자" 버튼으로 PIN을 입력하면 승인 대기 명단, 실명, 연락처, 소개자, 데이트 신청함을 볼 수 있어요.</p></div>';
@@ -995,42 +1243,84 @@
       return idx >= 0 ? String(idx + 1).padStart(3, '0') : '???';
     };
     var reqs = state.dateRequests || [];
+    var nameOf = function (eid) {
+      var e = allEntries.find(function (x) { return x.id === eid; });
+      return e ? e.nickname : '(알 수 없음)';
+    };
     var items = reqs.map(function (r) {
       var d = decryptedRequests[r.id];
       var reqType = r.type || 'contact';
       var typeBadge = reqType === 'photo'
         ? '<span class="chip" style="background:#e8f0fe;color:#1a73e8;">📷 사진</span>'
         : '<span class="chip" style="background:#fce8e6;color:#d93025;">📱 번호</span>';
-      var body;
-      if (d) {
-        var fromNum = entryNum(d.fromId);
-        var toNum = entryNum(d.toId);
-        body =
-          '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + typeBadge +
-          '<div class="who" style="display:inline;">' +
-            '<button type="button" class="card-btn" data-action="detail" data-id="' + escapeHtml(d.fromId) + '" style="flex:none;display:inline-flex;padding:4px 10px;">No. ' + fromNum + ' ' + escapeHtml(d.fromName) + '</button>' +
-            ' → ' +
-            '<button type="button" class="card-btn" data-action="detail" data-id="' + escapeHtml(d.toId) + '" style="flex:none;display:inline-flex;padding:4px 10px;">No. ' + toNum + ' ' + escapeHtml(d.toName) + '</button>' +
-          '</div></div>' +
-          (d.note ? '<div class="note">"' + escapeHtml(d.note) + '"</div>' : '');
+      var fromId = r.fromId || (d && d.fromId);
+      var toId = r.toId || (d && d.toId);
+      var fromName = (d && d.fromName) || nameOf(fromId);
+      var toName = (d && d.toName) || nameOf(toId);
+      var note = reqNote(r);
+      var needsDecrypt = (typeof r.note !== 'string') && !d && r.ciphertext;
+      var body =
+        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + typeBadge +
+        '<div class="who" style="display:inline;">' +
+          '<button type="button" class="card-btn" data-action="detail" data-id="' + escapeHtml(fromId || '') + '" style="flex:none;display:inline-flex;padding:4px 10px;">No. ' + entryNum(fromId) + ' ' + escapeHtml(fromName) + '</button>' +
+          ' → ' +
+          '<button type="button" class="card-btn" data-action="detail" data-id="' + escapeHtml(toId || '') + '" style="flex:none;display:inline-flex;padding:4px 10px;">No. ' + entryNum(toId) + ' ' + escapeHtml(toName) + '</button>' +
+        '</div></div>' +
+        (needsDecrypt ? '<div class="note">복호화 중...</div>' : (note ? '<div class="note">"' + escapeHtml(note) + '"</div>' : '')) +
+        (r.rejected && r.rejectMessage ? '<div class="note" style="color:#c5221f;">거절 메시지: ' + escapeHtml(r.rejectMessage) + '</div>' : '');
+      var st = reqStatus(r);
+      var actionBtns;
+      if (st === 'approved') {
+        actionBtns = statusChip(st) +
+          '<button type="button" class="card-btn danger" data-action="delete-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">삭제</button>';
+      } else if (st === 'rejected') {
+        actionBtns = statusChip(st) +
+          '<span class="chip" style="background:#f1f3f4;color:#5f6368;">' + (r.rejectedBy === 'user' ? '본인 거절' : '관리자 거절') + '</span>' +
+          '<button type="button" class="card-btn danger" data-action="delete-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">삭제</button>';
       } else {
-        body = '<div class="who">' + typeBadge + ' 복호화 중...</div>';
-      }
-      var actionBtns = r.approved
-        ? '<span class="chip chip--degree">승인됨</span>' +
-          '<button type="button" class="card-btn danger" data-action="delete-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">삭제</button>'
-        : '<button type="button" class="card-btn approve" data-action="approve-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">승인</button>' +
+        actionBtns = statusChip(st) +
+          '<button type="button" class="card-btn approve" data-action="approve-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">승인</button>' +
           '<button type="button" class="card-btn danger" data-action="reject-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">거절</button>';
+      }
       return (
         '<div class="request-item">' +
           '<div>' + body + '</div>' +
-          '<div style="display:flex;align-items:center;gap:10px;">' +
+          '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
             '<span class="when">' + new Date(r.submittedAt).toLocaleString('ko-KR') + '</span>' +
             actionBtns +
           '</div>' +
         '</div>'
       );
     }).join('');
+
+    /* 접속 기록 */
+    var seenRows = allEntries.slice().sort(function (a, b) {
+      return (b.lastSeenAt || '').localeCompare(a.lastSeenAt || '');
+    }).map(function (e) {
+      return '<tr><td>' + escapeHtml(e.nickname) + '</td>' +
+        '<td class="seen-date">' + (e.lastSeenAt ? new Date(e.lastSeenAt).toLocaleString('ko-KR') : '기록 없음') + '</td></tr>';
+    }).join('');
+    var seenSection =
+      '<h2>👣 최근 접속</h2>' +
+      '<p class="sub">닉네임별 마지막 로그인 시각이에요.</p>' +
+      (allEntries.length
+        ? '<div class="log-list"><table class="seen-table"><thead><tr><th>닉네임</th><th>마지막 접속</th></tr></thead><tbody>' + seenRows + '</tbody></table></div>'
+        : '<p class="sub">등록된 사람이 없어요.</p>');
+
+    /* 활동 로그 */
+    var logs = (state.logs || []).slice().reverse();
+    var logRows = logs.map(function (l) {
+      return '<div class="log-row">' +
+        '<span class="log-time">' + fmtDate(l.at) + '</span>' +
+        '<span class="log-actor">' + escapeHtml(l.actor || '-') + '</span>' +
+        '<span class="log-detail">' + escapeHtml(l.detail || '') + '</span>' +
+      '</div>';
+    }).join('');
+    var logSection =
+      '<h2>📜 활동 기록</h2>' +
+      '<p class="sub">최근 ' + LOG_LIMIT + '건까지 보관돼요. (관리자만 볼 수 있어요)</p>' +
+      (logs.length ? '<div class="log-list">' + logRows + '</div>' : '<p class="sub">아직 기록이 없어요.</p>');
+
     return (
       '<div class="admin-panel">' +
         pendingSection +
@@ -1038,6 +1328,10 @@
         '<h2>📬 요청함</h2>' +
         '<p class="sub">명단에서 들어온 사진/번호 요청이에요.</p>' +
         (reqs.length ? items : '<p class="sub">아직 들어온 요청이 없어요.</p>') +
+        '<hr class="perforation">' +
+        seenSection +
+        '<hr class="perforation">' +
+        logSection +
       '</div>'
     );
   }
@@ -1049,6 +1343,17 @@
     var tabs =
       '<button type="button" class="tab-btn" data-tab="form" role="tab" aria-selected="' + (activeTab === 'form') + '">신청서 작성</button>' +
       '<button type="button" class="tab-btn" data-tab="list" role="tab" aria-selected="' + (activeTab === 'list') + '">명단 보기<span class="count">' + entries.length + '</span></button>';
+    if (currentUser) {
+      var myEntry = findMyEntry(state);
+      var pendingBadge = '';
+      if (myEntry) {
+        var incoming = (state.dateRequests || []).filter(function (r) {
+          return r.toId === myEntry.id && reqStatus(r) === 'pending';
+        }).length;
+        if (incoming) pendingBadge = '<span class="count" title="새 요청">' + incoming + '</span>';
+      }
+      tabs += '<button type="button" class="tab-btn" data-tab="mine" role="tab" aria-selected="' + (activeTab === 'mine') + '">신청 현황' + pendingBadge + '</button>';
+    }
     if (isAdminUnlocked) {
       tabs += '<button type="button" class="tab-btn" data-tab="admin" role="tab" aria-selected="' + (activeTab === 'admin') + '">관리자' +
         '<span class="count" title="승인 대기">대기 ' + pendingCount + '</span>' +
@@ -1056,6 +1361,7 @@
     }
     var panel;
     if (activeTab === 'list') panel = renderList(state);
+    else if (activeTab === 'mine' && currentUser) panel = renderMine(state);
     else if (activeTab === 'admin' && isAdminUnlocked) panel = renderAdmin(state);
     else panel = renderForm(state);
     return (
@@ -1064,6 +1370,9 @@
         '<div><h1>인연 접수처</h1><p>관리자 베니(<a href="https://instagram.com/benny3_song" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:underline">@benny3_song</a>)의 친구를 소개하는, 작은 신청 창구에요.</p></div>' +
       '</div>' +
       '<div class="admin-bar">' +
+        (currentUser
+          ? '<button type="button" class="admin-link unlocked" id="user-logout">' + ICON_UNLOCK + ' ' + escapeHtml(currentUser.nickname) + ' · 로그아웃</button>'
+          : '<button type="button" class="admin-link" id="user-login">' + ICON_LOCK + ' 로그인</button>') +
         '<button type="button" class="admin-link' + (isAdminUnlocked ? ' unlocked' : '') + '" id="admin-toggle">' +
           (isAdminUnlocked ? ICON_UNLOCK + ' 관리자 모드' : ICON_LOCK + ' 관리자') +
         '</button>' +
@@ -1191,7 +1500,7 @@
     if (!degreeChoice) missing.push('베니와의 관계');
     if (!isEdit) {
       if (!realName) missing.push('실명');
-      if (!contact) missing.push('연락처');
+      if (!contact) missing.push('전화번호');
       if (!referrerText) missing.push('소개자');
       if (!pin) missing.push('개인 PIN');
     }
@@ -1208,6 +1517,10 @@
     }
     if (pin && pin.length < 4) {
       modalNotice('입력 오류', 'PIN은 4자리 이상이어야 해요.');
+      return;
+    }
+    if (contact && !/^01[0-9]{8,9}$/.test(contact)) {
+      modalNotice('입력 오류', '전화번호는 01012345678 형식으로 입력해주세요.');
       return;
     }
 
@@ -1285,12 +1598,16 @@
       photoDataUrls = [];
       if (isEdit) {
         editingEntryId = null;
+        appendLog('edit', nickname, '프로필 수정');
         notifyAdmin('프로필 수정', nickname + '님이 프로필을 수정했어요.');
         modalNotice('완료', '프로필이 수정되었어요.');
         activeTab = 'list';
         paint(currentState);
       } else {
         editingEntryId = null;
+        currentUser = { id: entryId, nickname: nickname };
+        saveSession();
+        appendLog('signup', nickname, '신청서 제출');
         notifyAdmin('새 신청서 접수', nickname + '님이 신청서를 제출했어요! 승인 대기 중.');
         showStamp();
       }
@@ -1325,6 +1642,10 @@
     var entry = state.entries.find(function (e) { return e.id === id; });
     if (!entry) return;
     if (isAdminUnlocked) {
+      startEditing(entry);
+      return;
+    }
+    if (currentUser && currentUser.id === id) {
       startEditing(entry);
       return;
     }
@@ -1370,27 +1691,22 @@
 
   function handleCancelRequest(toId) {
     var state = currentState;
-    modalVerifyIdentity().then(function (r) {
-      if (!r) return;
-      var myEntry = state.entries.find(function (e) { return e.nickname === r.nickname; });
-      if (!myEntry) return modalNotice('오류', '해당 닉네임으로 등록된 사람이 없어요.');
-      sha256Hex(r.pin).then(function (hash) {
-        if (hash !== myEntry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
-        var req = (state.dateRequests || []).find(function (rq) {
-          return rq.fromId === myEntry.id && rq.toId === toId && !rq.approved;
+    requireLogin().then(function (myEntry) {
+      if (!myEntry) return;
+      var req = (state.dateRequests || []).find(function (rq) {
+        return rq.fromId === myEntry.id && rq.toId === toId && reqStatus(rq) === 'pending';
+      });
+      if (!req) return modalNotice('안내', '취소할 수 있는 요청이 없어요.');
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var newRequests = (s.dateRequests || []).filter(function (rq) { return rq.id !== req.id; });
+          tx.update(stateRef, { dateRequests: newRequests });
         });
-        if (!req) return modalNotice('안내', '취소할 수 있는 신청이 없어요.');
-        db.runTransaction(function (tx) {
-          return tx.get(stateRef).then(function (doc) {
-            var s = doc.data();
-            var newRequests = (s.dateRequests || []).filter(function (rq) { return rq.id !== req.id; });
-            tx.update(stateRef, { dateRequests: newRequests });
-          });
-        }).then(function () {
-          modalNotice('완료', '데이트 신청이 취소되었어요.');
-        }).catch(function (err) {
-          modalNotice('오류', '취소에 실패했어요: ' + (err.message || err));
-        });
+      }).then(function () {
+        modalNotice('완료', '요청이 취소되었어요.');
+      }).catch(function (err) {
+        modalNotice('오류', '취소에 실패했어요: ' + (err.message || err));
       });
     });
   }
@@ -1438,52 +1754,56 @@
     if (!target) return;
     var isPhoto = type === 'photo';
     var typeLabel = isPhoto ? '사진 보기' : '번호 보기';
-    modalVerifyIdentity().then(function (r) {
-      if (!r) return;
-      var fromEntry = state.entries.find(function (e) { return e.nickname === r.nickname; });
-      if (!fromEntry) return modalNotice('오류', '해당 닉네임으로 등록된 사람이 없어요.');
-      sha256Hex(r.pin).then(function (hash) {
-        if (hash !== fromEntry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
-        if (fromEntry.id === toId) return modalNotice('안내', '본인에게는 요청할 수 없어요.');
-        var existingReq = (state.dateRequests || []).find(function (req) {
-          return req.fromId === fromEntry.id && req.toId === toId && (req.type || 'contact') === type;
+    requireLogin().then(function (fromEntry) {
+      if (!fromEntry) return;
+      if (fromEntry.id === toId) return modalNotice('안내', '본인에게는 요청할 수 없어요.');
+      var existingReq = (state.dateRequests || []).find(function (req) {
+        return req.fromId === fromEntry.id && req.toId === toId && (req.type || 'contact') === type;
+      });
+      if (existingReq) {
+        var st = reqStatus(existingReq);
+        if (st === 'rejected') return modalNotice('안내', escapeHtml(target.nickname) + '님이 이 요청을 거절했어요.');
+        return modalNotice('안내', '이미 ' + escapeHtml(target.nickname) + '님에게 ' + typeLabel + ' 요청을 보냈어요. "신청 현황" 탭에서 확인할 수 있어요.');
+      }
+      var icon = isPhoto ? '📷' : '📱';
+      var noteOverlay = openModal(
+        '<h3>' + icon + ' ' + escapeHtml(target.nickname) + '님 ' + typeLabel + ' 요청</h3>' +
+        '<p class="modal-msg">상대방이 승인하면 확인할 수 있어요.</p>' +
+        '<textarea class="modal-input" id="modal-note" rows="3" maxlength="200" placeholder="한 마디 남기기 (선택)"></textarea>' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
+          '<button type="button" class="card-btn primary" id="modal-ok">요청하기</button>' +
+        '</div>'
+      );
+      new Promise(function (resolve) {
+        function finish(val) { closeModal(noteOverlay); resolve(val); }
+        noteOverlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
+        noteOverlay.querySelector('#modal-ok').addEventListener('click', function () {
+          finish(noteOverlay.querySelector('#modal-note').value.trim());
         });
-        if (existingReq) return modalNotice('안내', '이미 ' + escapeHtml(target.nickname) + '님에게 ' + typeLabel + ' 요청을 보냈어요.');
-        var icon = isPhoto ? '📷' : '📱';
-        var noteOverlay = openModal(
-          '<h3>' + icon + ' ' + escapeHtml(target.nickname) + '님 ' + typeLabel + ' 요청</h3>' +
-          '<p class="modal-msg">관리자 승인 후 확인할 수 있어요.</p>' +
-          '<textarea class="modal-input" id="modal-note" rows="3" maxlength="200" placeholder="한 마디 남기기 (선택)"></textarea>' +
-          '<div class="modal-actions">' +
-            '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
-            '<button type="button" class="card-btn primary" id="modal-ok">요청하기</button>' +
-          '</div>'
-        );
-        return new Promise(function (resolve) {
-          function finish(val) { closeModal(noteOverlay); resolve(val); }
-          noteOverlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
-          noteOverlay.querySelector('#modal-ok').addEventListener('click', function () {
-            finish(noteOverlay.querySelector('#modal-note').value.trim());
-          });
-          noteOverlay.addEventListener('click', function (e) { if (e.target === noteOverlay) finish(null); });
-        });
+        noteOverlay.addEventListener('click', function (e) { if (e.target === noteOverlay) finish(null); });
       }).then(function (note) {
         if (note === null || note === undefined) return;
-        var reqData = { fromId: fromEntry.id, fromName: fromEntry.nickname, toId: toId, toName: target.nickname, note: note || '' };
-        encryptForAdmin(state.adminAuth.publicKeyJwk, reqData).then(function (enc) {
-          var req = { id: genId(), type: type, fromId: fromEntry.id, toId: toId, submittedAt: new Date().toISOString(), iv: enc.iv, ciphertext: enc.ciphertext, wrappedKey: enc.wrappedKey };
-          return stateRef.update({
-            dateRequests: firebase.firestore.FieldValue.arrayUnion(req)
-          });
+        var req = {
+          id: genId(), type: type, fromId: fromEntry.id, toId: toId,
+          note: note || '', submittedAt: new Date().toISOString()
+        };
+        return stateRef.update({
+          dateRequests: firebase.firestore.FieldValue.arrayUnion(req)
         }).then(function () {
+          appendLog('request', fromEntry.nickname, typeLabel + ' 요청 → ' + target.nickname);
           notifyAdmin(typeLabel + ' 요청', fromEntry.nickname + '님이 ' + target.nickname + '님의 ' + typeLabel + '를 요청했어요!');
           modalNotice('요청 완료', escapeHtml(target.nickname) + '님에게 ' + typeLabel + ' 요청을 보냈어요!');
         });
+      }).catch(function (err) {
+        modalNotice('오류', '요청에 실패했어요: ' + (err.message || err));
       });
     });
   }
 
   function handleApprove(id) {
+    var pend = ((currentState && currentState.pendingEntries) || []).find(function (e) { return e.id === id; });
+    var nick = pend ? pend.nickname : '';
     db.runTransaction(function (tx) {
       return tx.get(stateRef).then(function (doc) {
         var state = doc.data();
@@ -1493,18 +1813,24 @@
         var newEntries = (state.entries || []).concat([entry]);
         tx.update(stateRef, { pendingEntries: state.pendingEntries, entries: newEntries });
       });
+    }).then(function () {
+      appendLog('admin', '관리자', '신청 승인 · ' + nick);
     }).catch(function (err) {
       modalNotice('오류', '승인에 실패했어요: ' + (err.message || err));
     });
   }
 
   function handleReject(id) {
+    var pend = ((currentState && currentState.pendingEntries) || []).find(function (e) { return e.id === id; });
+    var nick = pend ? pend.nickname : '';
     db.runTransaction(function (tx) {
       return tx.get(stateRef).then(function (doc) {
         var state = doc.data();
         var newPending = (state.pendingEntries || []).filter(function (e) { return e.id !== id; });
         tx.update(stateRef, { pendingEntries: newPending });
       });
+    }).then(function () {
+      appendLog('admin', '관리자', '신청 거절 · ' + nick);
     }).catch(function (err) {
       modalNotice('오류', '거절에 실패했어요: ' + (err.message || err));
     });
@@ -1567,14 +1893,155 @@
   }
 
   function handleRejectRequest(id) {
-    db.runTransaction(function (tx) {
-      return tx.get(stateRef).then(function (doc) {
-        var state = doc.data();
-        var newRequests = (state.dateRequests || []).filter(function (r) { return r.id !== id; });
-        tx.update(stateRef, { dateRequests: newRequests });
+    var overlay = openModal(
+      '<h3>요청 거절 (관리자)</h3>' +
+      '<p class="modal-msg">신청자에게 전달할 메시지를 남길 수 있어요.</p>' +
+      '<textarea class="modal-input" id="modal-reject-msg" rows="3" maxlength="200" placeholder="거절 메시지 (선택)"></textarea>' +
+      '<div class="modal-actions">' +
+        '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
+        '<button type="button" class="card-btn danger" id="modal-ok">거절하기</button>' +
+      '</div>'
+    );
+    new Promise(function (resolve) {
+      function finish(val) { closeModal(overlay); resolve(val); }
+      overlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
+      overlay.querySelector('#modal-ok').addEventListener('click', function () {
+        finish(overlay.querySelector('#modal-reject-msg').value.trim());
+      });
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
+    }).then(function (rejectMsg) {
+      if (rejectMsg === null || rejectMsg === undefined) return;
+      return db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).map(function (r) {
+            if (r.id !== id) return r;
+            var c = JSON.parse(JSON.stringify(r));
+            c.rejected = true;
+            c.rejectMessage = rejectMsg || '';
+            c.rejectedBy = 'admin';
+            c.decidedAt = new Date().toISOString();
+            return c;
+          });
+          tx.update(stateRef, { dateRequests: reqs });
+        });
+      }).then(function () {
+        appendLog('admin', '관리자', '요청 거절');
       });
     }).catch(function (err) {
       modalNotice('오류', '거절에 실패했어요: ' + (err.message || err));
+    });
+  }
+
+  /* ---- user (recipient) decisions on incoming requests ---- */
+  function handleUserApproveRequest(id) {
+    var state = currentState;
+    var me = findMyEntry(state);
+    if (!me) return modalNotice('로그인 필요', '먼저 로그인해주세요.');
+    var req = (state.dateRequests || []).find(function (r) { return r.id === id; });
+    if (!req || req.toId !== me.id) return;
+    if (reqStatus(req) !== 'pending') return;
+    var isPhoto = (req.type || 'contact') === 'photo';
+    var from = (state.entries || []).find(function (e) { return e.id === req.fromId; });
+    var fromName = from ? from.nickname : '상대방';
+    var msg = isPhoto
+      ? escapeHtml(fromName) + '님에게 사진을 공개할까요? 승인하면 바로 볼 수 있게 돼요.'
+      : escapeHtml(fromName) + '님에게 번호를 공개할까요? 승인하면 관리자가 최종 확인 후 서로의 번호가 공개돼요.';
+    modalConfirm('요청 승인', msg).then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).map(function (r) {
+            if (r.id !== id) return r;
+            var c = JSON.parse(JSON.stringify(r));
+            if (isPhoto) c.approved = true;
+            else c.userApproved = true;
+            c.decidedAt = new Date().toISOString();
+            return c;
+          });
+          tx.update(stateRef, { dateRequests: reqs });
+        });
+      }).then(function () {
+        appendLog('request', me.nickname, (isPhoto ? '사진' : '번호') + ' 요청 승인 → ' + fromName);
+        notifyAdmin('요청 승인', me.nickname + '님이 ' + fromName + '님의 ' + (isPhoto ? '사진' : '번호') + ' 요청을 승인했어요.');
+        modalNotice('승인 완료', isPhoto
+          ? escapeHtml(fromName) + '님이 사진을 볼 수 있게 됐어요.'
+          : '승인했어요! 관리자 최종 확인 후 번호가 공개돼요.');
+      }).catch(function (err) {
+        modalNotice('오류', '승인에 실패했어요: ' + (err.message || err));
+      });
+    });
+  }
+
+  function handleUserRejectRequest(id) {
+    var state = currentState;
+    var me = findMyEntry(state);
+    if (!me) return modalNotice('로그인 필요', '먼저 로그인해주세요.');
+    var req = (state.dateRequests || []).find(function (r) { return r.id === id; });
+    if (!req || req.toId !== me.id) return;
+    if (reqStatus(req) !== 'pending') return;
+    var isPhoto = (req.type || 'contact') === 'photo';
+    var from = (state.entries || []).find(function (e) { return e.id === req.fromId; });
+    var fromName = from ? from.nickname : '상대방';
+    var overlay = openModal(
+      '<h3>요청 거절</h3>' +
+      '<p class="modal-msg">' + escapeHtml(fromName) + '님의 ' + (isPhoto ? '사진' : '번호') + ' 요청을 거절할까요?<br>남기고 싶은 말이 있다면 적어주세요.</p>' +
+      '<textarea class="modal-input" id="modal-reject-msg" rows="3" maxlength="200" placeholder="거절 메시지 (선택)"></textarea>' +
+      '<div class="modal-actions">' +
+        '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
+        '<button type="button" class="card-btn danger" id="modal-ok">거절하기</button>' +
+      '</div>'
+    );
+    new Promise(function (resolve) {
+      function finish(val) { closeModal(overlay); resolve(val); }
+      overlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
+      overlay.querySelector('#modal-ok').addEventListener('click', function () {
+        finish(overlay.querySelector('#modal-reject-msg').value.trim());
+      });
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
+    }).then(function (rejectMsg) {
+      if (rejectMsg === null || rejectMsg === undefined) return;
+      return db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).map(function (r) {
+            if (r.id !== id) return r;
+            var c = JSON.parse(JSON.stringify(r));
+            c.rejected = true;
+            c.rejectMessage = rejectMsg || '';
+            c.rejectedBy = 'user';
+            c.decidedAt = new Date().toISOString();
+            return c;
+          });
+          tx.update(stateRef, { dateRequests: reqs });
+        });
+      }).then(function () {
+        appendLog('request', me.nickname, (isPhoto ? '사진' : '번호') + ' 요청 거절 → ' + fromName);
+        modalNotice('거절 완료', '요청을 거절했어요.');
+      });
+    }).catch(function (err) {
+      modalNotice('오류', '거절에 실패했어요: ' + (err.message || err));
+    });
+  }
+
+  function handleCancelSent(id) {
+    var state = currentState;
+    var me = findMyEntry(state);
+    if (!me) return;
+    var req = (state.dateRequests || []).find(function (r) { return r.id === id; });
+    if (!req || req.fromId !== me.id) return;
+    modalConfirm('요청 취소', '보낸 요청을 취소할까요?').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).filter(function (r) { return r.id !== id; });
+          tx.update(stateRef, { dateRequests: reqs });
+        });
+      }).catch(function (err) {
+        modalNotice('오류', '취소에 실패했어요: ' + (err.message || err));
+      });
     });
   }
 
@@ -1598,25 +2065,20 @@
       return;
     }
     var state = currentState;
-    modalVerifyIdentity().then(function (r) {
-      if (!r) return;
-      var myEntry = state.entries.find(function (e) { return e.nickname === r.nickname; });
-      if (!myEntry) return modalNotice('오류', '해당 닉네임으로 등록된 사람이 없어요.');
-      return sha256Hex(r.pin).then(function (hash) {
-        if (hash !== myEntry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
-        if (myEntry.id === id) {
-          el.classList.remove('blurred'); el.setAttribute('data-action', 'gallery');
-          return;
-        }
-        var photoApproved = (state.dateRequests || []).some(function (req) {
-          return req.approved && (req.type === 'photo') && req.fromId === myEntry.id && req.toId === id;
-        });
-        if (photoApproved) {
-          el.classList.remove('blurred'); el.setAttribute('data-action', 'gallery');
-        } else {
-          modalNotice('안내', '사진 보기 요청을 보내고 관리자 승인을 받아야 해요.');
-        }
+    requireLogin().then(function (myEntry) {
+      if (!myEntry) return;
+      if (myEntry.id === id) {
+        el.classList.remove('blurred'); el.setAttribute('data-action', 'gallery');
+        return;
+      }
+      var photoApproved = (state.dateRequests || []).some(function (req) {
+        return req.approved && (req.type === 'photo') && req.fromId === myEntry.id && req.toId === id;
       });
+      if (photoApproved) {
+        el.classList.remove('blurred'); el.setAttribute('data-action', 'gallery');
+      } else {
+        modalNotice('안내', '사진 보기 요청을 보내고 상대방의 승인을 받아야 해요.');
+      }
     });
   }
 
@@ -1663,23 +2125,18 @@
     var state = currentState;
     var entry = state.entries.find(function (e) { return e.id === id; });
     if (!entry) return;
-    modalVerifyIdentity().then(function (r) {
-      if (!r) return;
-      var myEntry = state.entries.find(function (e) { return e.nickname === r.nickname; });
-      if (!myEntry) return modalNotice('오류', '해당 닉네임으로 등록된 사람이 없어요.');
-      sha256Hex(r.pin).then(function (hash) {
-        if (hash !== myEntry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
-        var matchReqs = (state.dateRequests || []).filter(function (req) {
-          return req.approved && (req.type || 'contact') === 'contact' && req.revealedContact && (req.fromId === id || req.toId === id);
-        });
-        var match = matchReqs.find(function (req) {
-          return (req.fromId === myEntry.id && req.toId === id) || (req.toId === myEntry.id && req.fromId === id);
-        });
-        if (!match) return modalNotice('안내', '승인된 번호 요청이 없어요.');
-        var contact = match.fromId === id ? match.revealedContact.from : match.revealedContact.to;
-        if (!contact) return modalNotice('안내', '연락처 정보가 아직 없어요.');
-        modalNotice('연락처', escapeHtml(entry.nickname) + '님의 연락처: ' + escapeHtml(contact));
+    requireLogin().then(function (myEntry) {
+      if (!myEntry) return;
+      var matchReqs = (state.dateRequests || []).filter(function (req) {
+        return req.approved && (req.type || 'contact') === 'contact' && req.revealedContact && (req.fromId === id || req.toId === id);
       });
+      var match = matchReqs.find(function (req) {
+        return (req.fromId === myEntry.id && req.toId === id) || (req.toId === myEntry.id && req.fromId === id);
+      });
+      if (!match) return modalNotice('안내', '승인된 번호 요청이 없어요. "신청 현황" 탭에서 상태를 확인해보세요.');
+      var contact = match.fromId === id ? match.revealedContact.from : match.revealedContact.to;
+      if (!contact) return modalNotice('안내', '연락처 정보가 아직 없어요.');
+      modalNotice('연락처', escapeHtml(entry.nickname) + '님의 연락처: ' + escapeHtml(contact));
     });
   }
 
@@ -1803,6 +2260,14 @@
       handleAdminToggle();
       return;
     }
+    if (e.target.closest('#user-login')) {
+      handleLogin();
+      return;
+    }
+    if (e.target.closest('#user-logout')) {
+      logoutUser();
+      return;
+    }
     if (e.target.id === 'cancel-edit') {
       editingEntryId = null;
       photoDataUrls = [];
@@ -1828,6 +2293,9 @@
       else if (action === 'detail-pending') handleDetailPending(id);
       else if (action === 'edit') handleEdit(id);
       else if (action === 'cancel-request') handleCancelRequest(id);
+      else if (action === 'user-approve') handleUserApproveRequest(id);
+      else if (action === 'user-reject') handleUserRejectRequest(id);
+      else if (action === 'cancel-sent') handleCancelSent(id);
       return;
     }
   });
@@ -1921,6 +2389,8 @@
       if (!Array.isArray(state.pendingEntries)) state.pendingEntries = [];
       if (!Array.isArray(state.dateRequests)) state.dateRequests = [];
       if (!Array.isArray(state.approvedPairs)) state.approvedPairs = [];
+      if (!Array.isArray(state.logs)) state.logs = [];
+      restoreSession(state);
 
       var adminPromise = Promise.resolve();
       try {
@@ -1971,6 +2441,8 @@
       if (!Array.isArray(state.pendingEntries)) state.pendingEntries = [];
       if (!Array.isArray(state.dateRequests)) state.dateRequests = [];
       if (!Array.isArray(state.approvedPairs)) state.approvedPairs = [];
+      if (!Array.isArray(state.logs)) state.logs = [];
+      if (!currentUser) restoreSession(state);
 
       if (prevPendingCount >= 0 && state.pendingEntries.length > prevPendingCount) {
         showNotification('새 접수!', '새로운 인연 신청서가 도착했어요. (' + state.pendingEntries.length + '건 대기중)');
