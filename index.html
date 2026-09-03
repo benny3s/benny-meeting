@@ -908,9 +908,9 @@
             '</div>' +
             '<div class="field"><label for="f-workplace">직장 위치 <span class="req">필수</span></label>' +
               '<input type="text" id="f-workplace" name="workplace" maxlength="60" placeholder="예: 서울 강남구 (회사명 공개 자유)" required></div>' +
-            '<div class="field"><label for="f-referrer">누구의 소개인가요? ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
-              '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 김민지"' + (isEdit ? '' : ' required') + '>' +
-              '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
+            '<div class="field"><label for="f-referrer">누구를 통해 알게 되셨나요? ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
+              '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 베니, (베니 친구) 김삼성, 김삼성의 친구 (두 다리 이상 건넌 경우)"' + (isEdit ? '' : ' required') + '>' +
+              '<span class="hint">' + ICON_LOCK + ' 관리자(베니)가 추후 연락드리기 위해서입니다. 암호화되어 관리자만 볼 수 있어요.</span></div>' +
             '<div class="field"><label>베니와의 관계 <span class="req">필수</span></label>' +
               '<div class="degree-group">' +
                 '<label><input type="radio" name="degreeChoice" value="1" required><span>1촌 · 베니의 친구</span></label>' +
