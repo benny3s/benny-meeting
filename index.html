@@ -510,6 +510,24 @@
   .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
   .modal-actions .card-btn { flex: 1; padding: 10px; font-size: 0.86rem; }
 
+  /* 검색형 콤보박스 (로그인) */
+  .combo { position: relative; }
+  .combo-list {
+    display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+    z-index: 5; background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; max-height: 210px; overflow-y: auto;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.18);
+  }
+  .combo-list.open { display: block; }
+  .combo-item {
+    padding: 10px 13px; font-size: 0.9rem; cursor: pointer;
+    border-bottom: 1px solid var(--line);
+  }
+  .combo-item:last-child { border-bottom: none; }
+  .combo-item:hover { background: var(--gold-soft); }
+  .combo-item b { font-variant-numeric: tabular-nums; color: var(--accent); }
+  .combo-empty { padding: 12px 13px; font-size: 0.85rem; color: var(--muted); }
+
   /* Detail modal */
   .detail-grid { display: grid; gap: 10px; margin-top: 12px; }
   .detail-row { display: flex; gap: 8px; }
@@ -604,6 +622,40 @@
     for (var i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
     return palette[h % palette.length];
   }
+  /* ---- 고유번호 (YYMM-NNN) ---- */
+  function serialYM(iso) {
+    try {
+      var d = new Date(iso);
+      var yy = String(d.getFullYear()).slice(2);
+      var mm = String(d.getMonth() + 1).padStart(2, '0');
+      return yy + mm;
+    } catch (e) { return '0000'; }
+  }
+  function formatUid(entry) {
+    if (!entry || !entry.serial) return '';
+    return serialYM(entry.submittedAt) + '-' + String(entry.serial).padStart(3, '0');
+  }
+  function nextSerial(state) {
+    var max = 0;
+    (state.entries || []).forEach(function (e) { if (e.serial && e.serial > max) max = e.serial; });
+    return max + 1;
+  }
+  /* 시리얼 없는 승인 회원에게 배열 순서대로 시리얼 부여 (모든 클라이언트 동일 결과) */
+  function ensureSerials(state) {
+    var max = 0;
+    (state.entries || []).forEach(function (e) { if (e.serial && e.serial > max) max = e.serial; });
+    var next = max + 1, changed = false;
+    (state.entries || []).forEach(function (e) {
+      if (!e.serial) { e.serial = next++; changed = true; }
+    });
+    return changed;
+  }
+  /* 고유번호 + 닉네임 표시용 */
+  function uidNick(entry) {
+    var uid = formatUid(entry);
+    return (uid ? uid + ' ' : '') + (entry.nickname || '');
+  }
+
   function degreeLabel(d) {
     if (d === '1' || d === 1) return '1촌 · ' + ROOT_NAME + '의 친구';
     if (d === '2' || d === 2) return '2촌 · ' + ROOT_NAME + '의 두 다리 건너';
@@ -678,6 +730,23 @@
       return crypto.subtle.importKey('jwk', privJwk, { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['decrypt']);
     });
   }
+  /* 기존 키쌍은 유지하고 새 비밀번호로 개인키만 다시 감싼다 (데이터 복호화 유지) */
+  function rewrapAdminKey(newPin, adminAuth, privateKey) {
+    return crypto.subtle.exportKey('jwk', privateKey).then(function (privJwk) {
+      var salt = crypto.getRandomValues(new Uint8Array(16));
+      var iv = crypto.getRandomValues(new Uint8Array(12));
+      return pbkdf2Key(newPin, salt).then(function (wrapKey) {
+        return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, wrapKey, textEnc.encode(JSON.stringify(privJwk)));
+      }).then(function (wrapped) {
+        return {
+          publicKeyJwk: adminAuth.publicKeyJwk,
+          salt: b64encode(salt.buffer),
+          iv: b64encode(iv.buffer),
+          wrappedPrivateKey: b64encode(wrapped)
+        };
+      });
+    });
+  }
   function encryptForAdmin(publicKeyJwk, obj) {
     return crypto.subtle.importKey('jwk', publicKeyJwk, { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['encrypt']).then(function (pubKey) {
       return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']).then(function (aesKey) {
@@ -733,12 +802,17 @@
   }
   function closeModal(overlay) { if (overlay && overlay.parentNode) overlay.remove(); }
 
-  function modalPin(title, message) {
+  function modalPin(title, message, opts) {
+    opts = opts || {};
+    var isPw = !!opts.password;
+    var inputHtml = isPw
+      ? '<input type="password" class="modal-input" id="modal-pin-input" placeholder="비밀번호" maxlength="64" autocomplete="off">'
+      : '<input type="text" inputmode="numeric" class="modal-input" id="modal-pin-input" data-numeric placeholder="숫자 4~8자리" maxlength="12">';
     return new Promise(function (resolve) {
       var overlay = openModal(
         '<h3>' + escapeHtml(title) + '</h3>' +
         '<p class="modal-msg">' + escapeHtml(message) + '</p>' +
-        '<input type="text" inputmode="numeric" class="modal-input" id="modal-pin-input" data-numeric placeholder="숫자 4~8자리" maxlength="12">' +
+        inputHtml +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
           '<button type="button" class="card-btn primary" id="modal-ok">확인</button>' +
@@ -746,24 +820,34 @@
       );
       var input = overlay.querySelector('#modal-pin-input');
       setTimeout(function () { input.focus(); }, 0);
-      function finish(val) { closeModal(overlay); resolve(val); }
+      function val() { return isPw ? input.value : input.value.trim(); }
+      function finish(v) { closeModal(overlay); resolve(v); }
       overlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
-      overlay.querySelector('#modal-ok').addEventListener('click', function () { finish(input.value.trim()); });
+      overlay.querySelector('#modal-ok').addEventListener('click', function () { finish(val()); });
       input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') finish(input.value.trim());
+        if (e.key === 'Enter') finish(val());
         if (e.key === 'Escape') finish(null);
       });
       overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
     });
   }
 
+  /* 관리자 비밀번호 복잡도: 8자 이상, 대문자/소문자/숫자/특수문자 각 1개 이상 */
+  function adminPwError(pw) {
+    if (!pw || pw.length < 8) return '비밀번호는 8자 이상이어야 해요.';
+    if (!/[A-Z]/.test(pw)) return '대문자를 1개 이상 포함해주세요.';
+    if (!/[a-z]/.test(pw)) return '소문자를 1개 이상 포함해주세요.';
+    if (!/[0-9]/.test(pw)) return '숫자를 1개 이상 포함해주세요.';
+    if (!/[^A-Za-z0-9]/.test(pw)) return '특수문자(!@#$ 등)를 1개 이상 포함해주세요.';
+    return '';
+  }
   function modalPinSetup() {
     return new Promise(function (resolve) {
       var overlay = openModal(
-        '<h3>관리자 PIN 설정</h3>' +
-        '<p class="modal-msg">숫자 4자리 이상으로 설정하세요. 이 PIN으로만 실명, 연락처, 소개자, 데이트 신청함을 볼 수 있어요.</p>' +
-        '<input type="text" inputmode="numeric" class="modal-input" id="modal-pin1" data-numeric placeholder="PIN 입력">' +
-        '<input type="text" inputmode="numeric" class="modal-input" id="modal-pin2" data-numeric placeholder="PIN 확인" style="margin-top:8px;">' +
+        '<h3>관리자 비밀번호 설정</h3>' +
+        '<p class="modal-msg">대문자·소문자·숫자·특수문자를 포함해 8자 이상으로 설정하세요. 이 비밀번호로만 실명, 연락처, 소개자, 신청함을 볼 수 있어요.</p>' +
+        '<input type="password" class="modal-input" id="modal-pin1" placeholder="비밀번호 입력" maxlength="64" autocomplete="new-password">' +
+        '<input type="password" class="modal-input" id="modal-pin2" placeholder="비밀번호 확인" maxlength="64" autocomplete="new-password" style="margin-top:8px;">' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
           '<button type="button" class="card-btn primary" id="modal-ok">설정</button>' +
@@ -772,7 +856,7 @@
       function finish(val) { closeModal(overlay); resolve(val); }
       overlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
       overlay.querySelector('#modal-ok').addEventListener('click', function () {
-        finish({ p1: overlay.querySelector('#modal-pin1').value.trim(), p2: overlay.querySelector('#modal-pin2').value.trim() });
+        finish({ p1: overlay.querySelector('#modal-pin1').value, p2: overlay.querySelector('#modal-pin2').value });
       });
       overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
     });
@@ -844,33 +928,78 @@
 
   function modalLogin() {
     var state = currentState || {};
-    var all = (state.entries || []).concat(state.pendingEntries || []);
-    var options = all.map(function (e) {
-      return '<option value="' + escapeHtml(e.id) + '">' + escapeHtml(e.nickname) + '</option>';
-    }).join('');
+    var all = (state.entries || []).concat(state.pendingEntries || []).map(function (e) {
+      var uid = formatUid(e);
+      return {
+        id: e.id,
+        nickname: e.nickname || '',
+        uid: uid,
+        label: (uid || '승인대기') + ' · ' + (e.nickname || ''),
+        search: ((uid || '') + ' ' + (e.nickname || '')).toLowerCase()
+      };
+    });
     return new Promise(function (resolve) {
       var overlay = openModal(
         '<h3>로그인</h3>' +
-        '<p class="modal-msg">본인 닉네임을 선택하고 등록 시 설정한 개인 PIN을 입력해주세요.</p>' +
-        '<select class="modal-input" id="modal-login-id">' +
-          '<option value="" disabled selected>닉네임 선택</option>' + options +
-        '</select>' +
+        '<p class="modal-msg">고유번호 또는 닉네임을 입력해 본인을 찾고, 개인 PIN을 입력해주세요.</p>' +
+        '<div class="combo" id="login-combo">' +
+          '<input type="text" class="modal-input" id="modal-login-search" placeholder="고유번호 또는 닉네임 검색" autocomplete="off">' +
+          '<div class="combo-list" id="modal-login-list"></div>' +
+        '</div>' +
         '<input type="text" inputmode="numeric" class="modal-input" id="modal-login-pin" data-numeric placeholder="개인 PIN" style="margin-top:8px;">' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
           '<button type="button" class="card-btn primary" id="modal-ok">로그인</button>' +
         '</div>'
       );
-      var idSel = overlay.querySelector('#modal-login-id');
+      var searchInput = overlay.querySelector('#modal-login-search');
+      var listEl = overlay.querySelector('#modal-login-list');
       var pinInput = overlay.querySelector('#modal-login-pin');
-      setTimeout(function () { idSel.focus(); }, 0);
+      var selectedId = '';
+
+      function renderList() {
+        var q = searchInput.value.trim().toLowerCase();
+        var matches = all.filter(function (o) { return !q || o.search.indexOf(q) >= 0; }).slice(0, 30);
+        if (!matches.length) {
+          listEl.innerHTML = '<div class="combo-empty">검색 결과가 없어요</div>';
+        } else {
+          listEl.innerHTML = matches.map(function (o) {
+            return '<div class="combo-item" data-cid="' + escapeHtml(o.id) + '">' +
+              '<b>' + escapeHtml(o.uid || '승인대기') + '</b> ' + escapeHtml(o.nickname) + '</div>';
+          }).join('');
+        }
+        listEl.classList.add('open');
+      }
+      function pick(o) {
+        selectedId = o.id;
+        searchInput.value = o.label;
+        listEl.classList.remove('open');
+        pinInput.focus();
+      }
+      searchInput.addEventListener('focus', renderList);
+      searchInput.addEventListener('input', function () { selectedId = ''; renderList(); });
+      listEl.addEventListener('click', function (e) {
+        var item = e.target.closest('[data-cid]');
+        if (!item) return;
+        var o = all.find(function (x) { return x.id === item.getAttribute('data-cid'); });
+        if (o) pick(o);
+      });
+
+      setTimeout(function () { searchInput.focus(); }, 0);
+      function currentId() {
+        if (selectedId) return selectedId;
+        /* 정확히 하나만 매칭되면 그것으로 간주 */
+        var q = searchInput.value.trim().toLowerCase();
+        var matches = all.filter(function (o) { return o.search.indexOf(q) >= 0; });
+        return matches.length === 1 ? matches[0].id : '';
+      }
       function finish(val) { closeModal(overlay); resolve(val); }
       overlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
       overlay.querySelector('#modal-ok').addEventListener('click', function () {
-        finish({ id: idSel.value, pin: pinInput.value.trim() });
+        finish({ id: currentId(), pin: pinInput.value.trim() });
       });
       pinInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') finish({ id: idSel.value, pin: pinInput.value.trim() });
+        if (e.key === 'Enter') finish({ id: currentId(), pin: pinInput.value.trim() });
         if (e.key === 'Escape') finish(null);
       });
       overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
@@ -880,7 +1009,8 @@
   function handleLogin() {
     var state = currentState;
     modalLogin().then(function (r) {
-      if (!r || !r.id) return;
+      if (!r) return;
+      if (!r.id) return modalNotice('안내', '목록에서 본인을 선택해주세요.');
       var all = (state.entries || []).concat(state.pendingEntries || []);
       var entry = all.find(function (e) { return e.id === r.id; });
       if (!entry) return modalNotice('오류', '해당 닉네임을 찾을 수 없어요.');
@@ -1074,7 +1204,7 @@
       : '';
     return (
       '<article class="pf-card" data-id="' + escapeHtml(entry.id) + '">' +
-        '<div class="pf-num">No. ' + String(num).padStart(3, '0') + '</div>' +
+        '<div class="pf-num">' + escapeHtml(formatUid(entry) || ('No. ' + String(num).padStart(3, '0'))) + '</div>' +
         photo +
         '<div class="pf-body">' +
           '<h3 class="pf-name">' + escapeHtml(displayName) + '</h3>' +
@@ -1237,7 +1367,7 @@
   function reqRowHtml(r, state, incoming) {
     var otherId = incoming ? r.fromId : r.toId;
     var other = (state.entries || []).find(function (e) { return e.id === otherId; });
-    var otherName = other ? other.nickname : '(알 수 없음)';
+    var otherLabel = other ? uidNick(other) : '(알 수 없음)';
     var st = reqStatus(r);
     var note = reqNote(r);
     var isPhoto = (r.type || 'contact') === 'photo';
@@ -1256,12 +1386,18 @@
         '<div class="mine-actions">' +
           '<button type="button" class="card-btn" data-action="cancel-sent" data-id="' + escapeHtml(r.id) + '">요청 취소</button>' +
         '</div>';
+    } else if (st === 'approved' || st === 'rejected') {
+      /* 승인/거절 이후 개인이 자기 목록에서 내역 삭제 가능 */
+      actions =
+        '<div class="mine-actions">' +
+          '<button type="button" class="card-btn" data-action="hide-request" data-id="' + escapeHtml(r.id) + '">내역 삭제</button>' +
+        '</div>';
     }
     var rejectMsg = (st === 'rejected' && r.rejectMessage)
       ? '<div class="mine-note reject">거절 메시지: ' + escapeHtml(r.rejectMessage) + '</div>' : '';
     return (
       '<div class="mine-item">' +
-        '<div class="mine-head">' + typeBadge + '<b>' + escapeHtml(otherName) + '</b>' + statusChip(st) +
+        '<div class="mine-head">' + typeBadge + '<b>' + escapeHtml(otherLabel) + '</b>' + statusChip(st) +
           '<span class="mine-date">' + fmtDate(r.submittedAt) + '</span></div>' +
         (note ? '<div class="mine-note">"' + escapeHtml(note) + '"</div>' : '') +
         rejectMsg +
@@ -1299,6 +1435,7 @@
     var sections = groups.map(function (g) {
       var items = reqs.filter(function (r) {
         if ((r.type || 'contact') !== g.type) return false;
+        if ((r.hiddenBy || []).indexOf(me.id) >= 0) return false;
         return g.incoming ? r.toId === me.id : r.fromId === me.id;
       }).sort(function (a, b) { return (b.submittedAt || '').localeCompare(a.submittedAt || ''); });
       var body = items.length
@@ -1314,7 +1451,7 @@
     return (
       '<div class="admin-panel">' +
         '<h2>신청 현황</h2>' +
-        '<p class="sub">' + escapeHtml(me.nickname) + '님, 반가워요! 받은 요청은 직접 승인하거나 거절할 수 있어요.</p>' +
+        '<p class="sub">' + escapeHtml(me.nickname) + '님 (고유번호 ' + escapeHtml(formatUid(me) || '—') + '), 반가워요! 받은 요청은 직접 승인하거나 거절할 수 있어요.</p>' +
         sections +
       '</div>'
     );
@@ -1347,9 +1484,9 @@
         (pending.length ? pendingItems : '<p class="sub">대기 중인 신청이 없어요.</p>') +
       '</div>';
     var allEntries = state.entries;
-    var entryNum = function (eid) {
-      var idx = allEntries.findIndex(function (e) { return e.id === eid; });
-      return idx >= 0 ? String(idx + 1).padStart(3, '0') : '???';
+    var uidOf = function (eid) {
+      var e = allEntries.find(function (x) { return x.id === eid; });
+      return e ? (formatUid(e) || 'No.—') : '???';
     };
     var reqs = state.dateRequests || [];
     var nameOf = function (eid) {
@@ -1371,9 +1508,9 @@
       var body =
         '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + typeBadge +
         '<div class="who" style="display:inline;">' +
-          '<button type="button" class="card-btn" data-action="detail" data-id="' + escapeHtml(fromId || '') + '" style="flex:none;display:inline-flex;padding:4px 10px;">No. ' + entryNum(fromId) + ' ' + escapeHtml(fromName) + '</button>' +
+          '<button type="button" class="card-btn" data-action="detail" data-id="' + escapeHtml(fromId || '') + '" style="flex:none;display:inline-flex;padding:4px 10px;">' + escapeHtml(uidOf(fromId)) + ' ' + escapeHtml(fromName) + '</button>' +
           ' → ' +
-          '<button type="button" class="card-btn" data-action="detail" data-id="' + escapeHtml(toId || '') + '" style="flex:none;display:inline-flex;padding:4px 10px;">No. ' + entryNum(toId) + ' ' + escapeHtml(toName) + '</button>' +
+          '<button type="button" class="card-btn" data-action="detail" data-id="' + escapeHtml(toId || '') + '" style="flex:none;display:inline-flex;padding:4px 10px;">' + escapeHtml(uidOf(toId)) + ' ' + escapeHtml(toName) + '</button>' +
         '</div></div>' +
         (needsDecrypt ? '<div class="note">복호화 중...</div>' : (note ? '<div class="note">"' + escapeHtml(note) + '"</div>' : '')) +
         (r.rejected && r.rejectMessage ? '<div class="note" style="color:#c5221f;">거절 메시지: ' + escapeHtml(r.rejectMessage) + '</div>' : '');
@@ -1406,14 +1543,14 @@
     var seenRows = allEntries.slice().sort(function (a, b) {
       return (b.lastSeenAt || '').localeCompare(a.lastSeenAt || '');
     }).map(function (e) {
-      return '<tr><td>' + escapeHtml(e.nickname) + '</td>' +
+      return '<tr><td><b style="font-variant-numeric:tabular-nums;">' + escapeHtml(formatUid(e) || '—') + '</b> ' + escapeHtml(e.nickname) + '</td>' +
         '<td class="seen-date">' + (e.lastSeenAt ? new Date(e.lastSeenAt).toLocaleString('ko-KR') : '기록 없음') + '</td></tr>';
     }).join('');
     var seenSection =
       '<h2>👣 최근 접속</h2>' +
-      '<p class="sub">닉네임별 마지막 로그인 시각이에요.</p>' +
+      '<p class="sub">회원별 마지막 로그인 시각이에요.</p>' +
       (allEntries.length
-        ? '<div class="log-list"><table class="seen-table"><thead><tr><th>닉네임</th><th>마지막 접속</th></tr></thead><tbody>' + seenRows + '</tbody></table></div>'
+        ? '<div class="log-list"><table class="seen-table"><thead><tr><th>고유번호 · 닉네임</th><th>마지막 접속</th></tr></thead><tbody>' + seenRows + '</tbody></table></div>'
         : '<p class="sub">등록된 사람이 없어요.</p>');
 
     /* 서버 용량 */
@@ -1435,6 +1572,9 @@
 
     return (
       '<div class="admin-panel">' +
+        '<div style="display:flex;justify-content:flex-end;margin-bottom:12px;">' +
+          '<button type="button" class="card-btn" id="admin-change-pw" style="flex:none;">🔑 비밀번호 변경</button>' +
+        '</div>' +
         pendingSection +
         '<hr class="perforation">' +
         '<h2>📬 요청함</h2>' +
@@ -1592,8 +1732,9 @@
     if (!state.adminAuth) {
       modalPinSetup().then(function (r) {
         if (!r) return;
-        if (r.p1.length < 4) return modalNotice('오류', 'PIN은 4자리 이상이어야 해요.');
-        if (r.p1 !== r.p2) return modalNotice('오류', 'PIN이 일치하지 않아요.');
+        var pwErr = adminPwError(r.p1);
+        if (pwErr) return modalNotice('오류', pwErr);
+        if (r.p1 !== r.p2) return modalNotice('오류', '비밀번호가 일치하지 않아요.');
         setupAdminPin(r.p1).then(function (auth) {
           state.adminAuth = auth;
           return saveState(state).then(function () {
@@ -1610,7 +1751,7 @@
       });
       return;
     }
-    modalPin('관리자 인증', 'PIN을 입력하세요.').then(function (pin) {
+    modalPin('관리자 인증', '비밀번호를 입력하세요.', { password: true }).then(function (pin) {
       if (!pin) return;
       unlockAdminKey(pin, state.adminAuth).then(function (key) {
         adminPrivateKey = key;
@@ -1620,7 +1761,30 @@
       }).then(function () {
         paint(state);
       }).catch(function () {
-        modalNotice('오류', 'PIN이 올바르지 않아요.');
+        modalNotice('오류', '비밀번호가 올바르지 않아요.');
+      });
+    });
+  }
+
+  function handleChangeAdminPw() {
+    var state = currentState;
+    if (!isAdminUnlocked || !adminPrivateKey || !state.adminAuth) {
+      return modalNotice('안내', '관리자 모드에서만 변경할 수 있어요.');
+    }
+    modalPinSetup().then(function (r) {
+      if (!r) return;
+      var pwErr = adminPwError(r.p1);
+      if (pwErr) return modalNotice('오류', pwErr);
+      if (r.p1 !== r.p2) return modalNotice('오류', '비밀번호가 일치하지 않아요.');
+      rewrapAdminKey(r.p1, state.adminAuth, adminPrivateKey).then(function (auth) {
+        return stateRef.update({ adminAuth: auth }).then(function () {
+          state.adminAuth = auth;
+          try { sessionStorage.setItem('adminPin', r.p1); } catch (e) {}
+          appendLog('admin', '관리자', '비밀번호 변경');
+          modalNotice('완료', '관리자 비밀번호가 변경되었어요.');
+        });
+      }).catch(function (err) {
+        modalNotice('오류', '변경에 실패했어요: ' + (err.message || err));
       });
     });
   }
@@ -1683,6 +1847,15 @@
     }
     if (contact && !/^01[0-9]{8,9}$/.test(contact)) {
       modalNotice('입력 오류', '전화번호는 01012345678 형식으로 입력해주세요.');
+      return;
+    }
+    /* 닉네임 중복 확인 (본인 제외) */
+    var nickLower = nickname.toLowerCase();
+    var dup = (state.entries || []).concat(state.pendingEntries || []).some(function (e) {
+      return e.id !== editingEntryId && (e.nickname || '').trim().toLowerCase() === nickLower;
+    });
+    if (dup) {
+      modalNotice('닉네임 중복', '이미 사용 중인 닉네임이에요. 다른 닉네임을 사용해주세요.');
       return;
     }
 
@@ -1925,7 +2098,8 @@
       if (!fromEntry) return;
       if (fromEntry.id === toId) return modalNotice('안내', '본인에게는 요청할 수 없어요.');
       var existingReq = (state.dateRequests || []).find(function (req) {
-        return req.fromId === fromEntry.id && req.toId === toId && (req.type || 'contact') === type;
+        return req.fromId === fromEntry.id && req.toId === toId && (req.type || 'contact') === type &&
+          (req.hiddenBy || []).indexOf(fromEntry.id) < 0;
       });
       if (existingReq) {
         var st = reqStatus(existingReq);
@@ -1985,6 +2159,7 @@
         var idx = (state.pendingEntries || []).findIndex(function (e) { return e.id === id; });
         if (idx < 0) return;
         var entry = state.pendingEntries.splice(idx, 1)[0];
+        if (!entry.serial) entry.serial = nextSerial(state);
         var newEntries = (state.entries || []).concat([entry]);
         tx.update(stateRef, { pendingEntries: state.pendingEntries, entries: newEntries });
       });
@@ -2247,6 +2422,40 @@
     });
   }
 
+  /* 개인이 자기 목록에서 승인/거절된 내역 삭제 (내 화면에서만 숨김,
+     양쪽 다 숨기면 완전 삭제) */
+  function handleHideRequest(id) {
+    var state = currentState;
+    var me = findMyEntry(state);
+    if (!me) return modalNotice('로그인 필요', '먼저 로그인해주세요.');
+    var req = (state.dateRequests || []).find(function (r) { return r.id === id; });
+    if (!req || (req.fromId !== me.id && req.toId !== me.id)) return;
+    modalConfirm('내역 삭제', '이 내역을 목록에서 삭제할까요?').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = [];
+          (s.dateRequests || []).forEach(function (r) {
+            if (r.id !== id) { reqs.push(r); return; }
+            var c = JSON.parse(JSON.stringify(r));
+            var hidden = c.hiddenBy || [];
+            if (hidden.indexOf(me.id) < 0) hidden.push(me.id);
+            c.hiddenBy = hidden;
+            /* 양쪽(요청자+수신자) 모두 숨겼으면 레코드 완전 삭제 */
+            var bothHid = hidden.indexOf(c.fromId) >= 0 && hidden.indexOf(c.toId) >= 0;
+            if (!bothHid) reqs.push(c);
+          });
+          tx.update(stateRef, { dateRequests: reqs });
+        });
+      }).then(function () {
+        return refreshNow();
+      }).catch(function (err) {
+        modalNotice('오류', '삭제에 실패했어요: ' + (err.message || err));
+      });
+    });
+  }
+
   function handleDeleteRequest(id) {
     db.runTransaction(function (tx) {
       return tx.get(stateRef).then(function (doc) {
@@ -2359,6 +2568,7 @@
       photoHtml += '</div>';
     }
     var rows = '<div class="detail-grid">';
+    rows += '<div class="detail-row"><div class="detail-label">고유번호</div><div class="detail-value">' + escapeHtml(formatUid(entry) || '—') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">닉네임</div><div class="detail-value">' + escapeHtml(entry.nickname) + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">실명</div><div class="detail-value" id="detail-realname">복호화 중...</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">연락처</div><div class="detail-value" id="detail-contact">복호화 중...</div></div>';
@@ -2473,6 +2683,10 @@
       logoutUser();
       return;
     }
+    if (e.target.closest('#admin-change-pw')) {
+      handleChangeAdminPw();
+      return;
+    }
     if (e.target.id === 'cancel-edit') {
       editingEntryId = null;
       photoDataUrls = [];
@@ -2501,6 +2715,7 @@
       else if (action === 'user-approve') handleUserApproveRequest(id);
       else if (action === 'user-reject') handleUserRejectRequest(id);
       else if (action === 'cancel-sent') handleCancelSent(id);
+      else if (action === 'hide-request') handleHideRequest(id);
       return;
     }
   });
@@ -2591,10 +2806,15 @@
       return stateRef.set(localState).then(function () { return localState; });
     }).then(function (state) {
       currentState = state;
+      if (!Array.isArray(state.entries)) state.entries = [];
       if (!Array.isArray(state.pendingEntries)) state.pendingEntries = [];
       if (!Array.isArray(state.dateRequests)) state.dateRequests = [];
       if (!Array.isArray(state.approvedPairs)) state.approvedPairs = [];
       if (!Array.isArray(state.logs)) state.logs = [];
+      /* 기존 회원 고유번호 백필 (한 번만, 결정적이라 클라이언트 간 동일) */
+      if (ensureSerials(state)) {
+        stateRef.update({ entries: state.entries }).catch(function () {});
+      }
       restoreSession(state);
 
       var adminPromise = Promise.resolve();
