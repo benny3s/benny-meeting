@@ -262,6 +262,10 @@
     border: none; border-top: 2px dotted var(--line); margin: 28px 0;
   }
 
+  .consent-box { margin: 16px 0; padding: 14px 16px; border-radius: 10px; background: var(--gold-soft); border: 1px solid var(--border); }
+  .consent-label { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 0.92rem; font-weight: 600; color: var(--ink); }
+  .consent-label input[type="checkbox"] { margin-top: 3px; accent-color: var(--gold); }
+  .consent-detail { margin: 8px 0 0 24px; font-size: 0.78rem; color: var(--muted); line-height: 1.6; }
   .submit-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   .submit-btn {
     background: var(--accent); color: #fff; border: none;
@@ -944,6 +948,15 @@
               '<textarea id="f-dealbreaker" name="dealbreaker" rows="3" maxlength="300" placeholder="예: 흡연자, 종교 강요, 연락 안 되는 사람"></textarea></div>' +
           '</div>' +
           '<hr class="perforation">' +
+          (isEdit ? '' :
+            '<div class="consent-box">' +
+              '<label class="consent-label"><input type="checkbox" id="f-consent">' +
+                ' <span>개인정보 수집 및 이용에 동의합니다.</span></label>' +
+              '<p class="consent-detail">수집 항목: 닉네임, 실명, 연락처, 소개자, 성별, 생년, 지역, 직장, 사진, 자기소개 등<br>' +
+                '수집 목적: 소개팅 매칭 및 관리자 연락<br>' +
+                '보유 기간: 서비스 이용 종료 시 즉시 삭제<br>' +
+                '동의를 거부할 권리가 있으며, 거부 시 신청이 불가합니다.</p>' +
+            '</div>') +
           '<div class="submit-row">' +
             '<button type="submit" class="submit-btn" id="submit-btn">' + (isEdit ? '수정 저장하기' : '도장 찍고 제출하기') + '</button>' +
             '<span class="status-msg" id="status-msg"></span>' +
@@ -967,6 +980,7 @@
           '<div class="p-name">' + escapeHtml(displayName) + '</div>' +
           '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + ' · ' + escapeHtml(e.region || '') + ' · ' + escapeHtml(deg) + '</div>' +
           '<div class="pending-actions">' +
+            '<button type="button" class="card-btn" data-action="detail-pending" data-id="' + escapeHtml(e.id) + '">상세 보기</button>' +
             '<button type="button" class="card-btn approve" data-action="approve" data-id="' + escapeHtml(e.id) + '">승인</button>' +
             '<button type="button" class="card-btn danger" data-action="reject" data-id="' + escapeHtml(e.id) + '">거절</button>' +
           '</div>' +
@@ -1182,6 +1196,13 @@
     if (missing.length > 0) {
       modalNotice('입력 오류', '다음 항목을 채워주세요: ' + missing.join(', '));
       return;
+    }
+    if (!isEdit) {
+      var consent = document.getElementById('f-consent');
+      if (!consent || !consent.checked) {
+        modalNotice('동의 필요', '개인정보 수집 및 이용에 동의해 주세요.');
+        return;
+      }
     }
     if (pin && pin.length < 4) {
       modalNotice('입력 오류', 'PIN은 4자리 이상이어야 해요.');
@@ -1638,6 +1659,71 @@
     });
   }
 
+  function handleDetailPending(id) {
+    var state = currentState;
+    var entry = (state.pendingEntries || []).find(function (e) { return e.id === id; });
+    if (!entry) return;
+    var photos = getPhotos(entry);
+    var photoHtml = '';
+    if (photos.length) {
+      photoHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;">';
+      photos.forEach(function (p) {
+        photoHtml += '<img src="' + p + '" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">';
+      });
+      photoHtml += '</div>';
+    }
+    var rows = '<div class="detail-grid">';
+    rows += '<div class="detail-row"><div class="detail-label">닉네임</div><div class="detail-value">' + escapeHtml(entry.nickname) + '</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">실명</div><div class="detail-value" id="detail-realname">복호화 중...</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">연락처</div><div class="detail-value" id="detail-contact">복호화 중...</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">소개자</div><div class="detail-value" id="detail-referrer">복호화 중...</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">성별</div><div class="detail-value">' + genderLabel(entry.gender) + '</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">생년</div><div class="detail-value">' + (entry.birthYear || '-') + '</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">지역</div><div class="detail-value">' + escapeHtml(entry.region || '-') + '</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">직장</div><div class="detail-value">' + escapeHtml(entry.workplace || '-') + '</div></div>';
+    if (entry.height) rows += '<div class="detail-row"><div class="detail-label">키</div><div class="detail-value">' + escapeHtml(entry.height) + 'cm</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">관계</div><div class="detail-value">' + escapeHtml(degreeLabel(entry.degreeChoice || entry.degree)) + '</div></div>';
+    if (entry.intro) rows += '<div class="detail-row"><div class="detail-label">자기소개</div><div class="detail-value" style="white-space:pre-wrap;">' + escapeHtml(entry.intro) + '</div></div>';
+    if (entry.idealType) rows += '<div class="detail-row"><div class="detail-label">선호 조건</div><div class="detail-value" style="white-space:pre-wrap;">' + escapeHtml(entry.idealType) + '</div></div>';
+    if (entry.dealbreaker) rows += '<div class="detail-row"><div class="detail-label">비선호</div><div class="detail-value" style="white-space:pre-wrap;">' + escapeHtml(entry.dealbreaker) + '</div></div>';
+    rows += '</div>';
+    if (photoHtml) rows = photoHtml + rows;
+    rows += '<div style="text-align:right;font-size:0.78rem;color:var(--muted);margin-top:8px;">' + new Date(entry.submittedAt).toLocaleString('ko-KR') + ' 접수</div>';
+    modalNotice(escapeHtml(entry.nickname) + ' 상세 정보', '').then(function () {});
+    var box = document.querySelector('.modal-box');
+    if (box) {
+      var msgEl = box.querySelector('.modal-msg');
+      if (msgEl) msgEl.innerHTML = rows;
+    }
+    if (adminPrivateKey && entry.realNameEnc) {
+      decryptWithAdmin(adminPrivateKey, entry.realNameEnc).then(function (name) {
+        var el = document.getElementById('detail-realname');
+        if (el) el.textContent = name;
+      }).catch(function () {
+        var el = document.getElementById('detail-realname');
+        if (el) el.textContent = '(복호화 실패)';
+      });
+    }
+    if (adminPrivateKey && entry.contactEnc) {
+      decryptWithAdmin(adminPrivateKey, entry.contactEnc).then(function (c) {
+        var el = document.getElementById('detail-contact');
+        if (el) el.textContent = c;
+      }).catch(function () {
+        var el = document.getElementById('detail-contact');
+        if (el) el.textContent = '(복호화 실패)';
+      });
+    }
+    if (adminPrivateKey && entry.referrerEnc) {
+      decryptWithAdmin(adminPrivateKey, entry.referrerEnc).then(function (ref) {
+        var el = document.getElementById('detail-referrer');
+        if (el) el.textContent = ref;
+      }).catch(function () {
+        var el = document.getElementById('detail-referrer');
+        if (el) el.textContent = '(복호화 실패)';
+      });
+    }
+  }
+
   function handleDetail(id) {
     var state = currentState;
     var entry = state.entries.find(function (e) { return e.id === id; });
@@ -1714,6 +1800,7 @@
       else if (action === 'gallery') handleGallery(id);
       else if (action === 'reveal-contact') handleRevealContact(id);
       else if (action === 'detail') handleDetail(id);
+      else if (action === 'detail-pending') handleDetailPending(id);
       else if (action === 'edit') handleEdit(id);
       else if (action === 'cancel-request') handleCancelRequest(id);
       return;
