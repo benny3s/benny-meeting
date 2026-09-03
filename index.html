@@ -1197,7 +1197,7 @@
         if (note === null || note === undefined) return;
         var reqData = { fromId: fromEntry.id, fromName: fromEntry.nickname, toId: toId, toName: target.nickname, note: note || '' };
         encryptForAdmin(state.adminAuth.publicKeyJwk, reqData).then(function (enc) {
-          var req = { id: genId(), toId: toId, submittedAt: new Date().toISOString(), iv: enc.iv, ciphertext: enc.ciphertext, wrappedKey: enc.wrappedKey };
+          var req = { id: genId(), fromId: fromEntry.id, toId: toId, submittedAt: new Date().toISOString(), iv: enc.iv, ciphertext: enc.ciphertext, wrappedKey: enc.wrappedKey };
           state.dateRequests.push(req);
           return saveState(state);
         }).then(function () {
@@ -1242,7 +1242,31 @@
 
   function handleRevealPhoto(id) {
     var el = document.querySelector('[data-action="reveal-photo"][data-id="' + id + '"]');
-    if (el) { el.classList.remove('blurred'); el.removeAttribute('data-action'); }
+    if (!el) return;
+    if (isAdminUnlocked) {
+      el.classList.remove('blurred'); el.removeAttribute('data-action');
+      return;
+    }
+    var state = currentState;
+    modalVerifyIdentity().then(function (r) {
+      if (!r) return;
+      var myEntry = state.entries.find(function (e) { return e.nickname === r.nickname; });
+      if (!myEntry) return modalNotice('오류', '해당 닉네임으로 등록된 사람이 없어요.');
+      return sha256Hex(r.pin).then(function (hash) {
+        if (hash !== myEntry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
+        var approved = (state.dateRequests || []).some(function (req) {
+          return req.approved && (
+            (req.fromId === myEntry.id && req.toId === id) ||
+            (req.toId === myEntry.id && req.fromId === id)
+          );
+        });
+        if (approved) {
+          el.classList.remove('blurred'); el.removeAttribute('data-action');
+        } else {
+          modalNotice('안내', '승인된 데이트 매칭이 있어야 사진을 볼 수 있어요.');
+        }
+      });
+    });
   }
 
   function handleDetail(id) {
