@@ -1663,20 +1663,19 @@
     var state = currentState;
     var entry = state.entries.find(function (e) { return e.id === id; });
     if (!entry) return;
-    var matchReqs = (state.dateRequests || []).filter(function (r) {
-      return r.approved && (r.type || 'contact') === 'contact' && r.revealedContact && (r.fromId === id || r.toId === id);
-    });
-    if (!matchReqs.length) return modalNotice('안내', '승인된 번호 요청이 없어요.');
     modalVerifyIdentity().then(function (r) {
       if (!r) return;
       var myEntry = state.entries.find(function (e) { return e.nickname === r.nickname; });
       if (!myEntry) return modalNotice('오류', '해당 닉네임으로 등록된 사람이 없어요.');
       sha256Hex(r.pin).then(function (hash) {
         if (hash !== myEntry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
-        var match = matchReqs.find(function (r) {
-          return (r.fromId === myEntry.id && r.toId === id) || (r.toId === myEntry.id && r.fromId === id);
+        var matchReqs = (state.dateRequests || []).filter(function (req) {
+          return req.approved && (req.type || 'contact') === 'contact' && req.revealedContact && (req.fromId === id || req.toId === id);
         });
-        if (!match) return modalNotice('안내', '본인과 매칭된 건이 아니에요.');
+        var match = matchReqs.find(function (req) {
+          return (req.fromId === myEntry.id && req.toId === id) || (req.toId === myEntry.id && req.fromId === id);
+        });
+        if (!match) return modalNotice('안내', '승인된 번호 요청이 없어요.');
         var contact = match.fromId === id ? match.revealedContact.from : match.revealedContact.to;
         if (!contact) return modalNotice('안내', '연락처 정보가 아직 없어요.');
         modalNotice('연락처', escapeHtml(entry.nickname) + '님의 연락처: ' + escapeHtml(contact));
