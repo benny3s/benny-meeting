@@ -153,6 +153,7 @@
   .field .opt { color: var(--muted); font-size: 0.78rem; font-weight: 400; }
   .field input[type="text"],
   .field input[type="number"],
+  .field input[type="tel"],
   .field select,
   .field textarea {
     font-family: inherit;
@@ -472,6 +473,15 @@
   }
   .seen-table th { color: var(--muted); font-weight: 600; font-size: 0.8rem; }
   .seen-table td.seen-date { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cap-bar {
+    height: 12px; border-radius: 999px; background: var(--line);
+    overflow: hidden; margin-top: 4px;
+  }
+  .cap-fill { height: 100%; border-radius: 999px; transition: width 0.3s ease; }
+  .cap-total {
+    margin-top: 8px; font-size: 0.85rem; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
 
   /* ---------- Generic modal (replaces native prompt/confirm/alert, which
      browsers commonly block inside a sandboxed artifact iframe) ---------- */
@@ -685,6 +695,23 @@
       });
     });
   }
+  /* 본인 PIN으로 자기 연락처를 암호화 — 관리자 없이도 당사자끼리 공개 가능 */
+  function encryptForSelf(pin, text) {
+    var salt = crypto.getRandomValues(new Uint8Array(16));
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    return pbkdf2Key(pin, salt).then(function (key) {
+      return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, textEnc.encode(text));
+    }).then(function (ct) {
+      return { salt: b64encode(salt.buffer), iv: b64encode(iv.buffer), ciphertext: b64encode(ct) };
+    });
+  }
+  function decryptForSelf(pin, encObj) {
+    return pbkdf2Key(pin, b64decode(encObj.salt)).then(function (key) {
+      var iv = new Uint8Array(b64decode(encObj.iv));
+      return crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, b64decode(encObj.ciphertext));
+    }).then(function (buf) { return textDec.decode(buf); });
+  }
+
   function decryptWithAdmin(privateKey, encObj) {
     return crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, b64decode(encObj.wrappedKey)).then(function (rawAesKey) {
       return crypto.subtle.importKey('raw', rawAesKey, { name: 'AES-GCM' }, false, ['decrypt']).then(function (aesKey) {
@@ -859,7 +886,7 @@
       if (!entry) return modalNotice('오류', '해당 닉네임을 찾을 수 없어요.');
       sha256Hex(r.pin).then(function (hash) {
         if (hash !== entry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
-        currentUser = { id: entry.id, nickname: entry.nickname };
+        currentUser = { id: entry.id, nickname: entry.nickname, pin: r.pin };
         saveSession();
         activeTab = 'mine';
         touchLastSeen(entry.id);
@@ -881,6 +908,88 @@
     }
     modalNotice('로그인 필요', '먼저 로그인해주세요. 상단의 로그인 버튼을 눌러주세요.');
     return Promise.resolve(null);
+  }
+
+  /* ---- 내 연락처 (본인 PIN으로만 열림) ---- */
+  function myContact() {
+    var me = findMyEntry(currentState);
+    if (!me || !me.contactSelfEnc || !currentUser || !currentUser.pin) return Promise.resolve(null);
+    return decryptForSelf(currentUser.pin, me.contactSelfEnc).catch(function () { return null; });
+  }
+  function modalPhonePrompt() {
+    return new Promise(function (resolve) {
+      var overlay = openModal(
+        '<h3>전화번호 확인</h3>' +
+        '<p class="modal-msg">번호 공개를 위해 본인 전화번호를 한 번만 다시 입력해주세요.<br>입력한 번호는 본인 PIN으로 암호화되어 저장돼요.</p>' +
+        '<input type="text" inputmode="numeric" class="modal-input" id="modal-phone" data-numeric maxlength="11" placeholder="예: 01012345678">' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
+          '<button type="button" class="card-btn primary" id="modal-ok">확인</button>' +
+        '</div>'
+      );
+      var input = overlay.querySelector('#modal-phone');
+      setTimeout(function () { input.focus(); }, 0);
+      function finish(v) { closeModal(overlay); resolve(v); }
+      overlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
+      overlay.querySelector('#modal-ok').addEventListener('click', function () { finish(input.value.trim()); });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') finish(input.value.trim());
+        if (e.key === 'Escape') finish(null);
+      });
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
+    });
+  }
+  /* 내 번호를 확보한다. 없으면 한 번 입력받아 저장(자기 PIN + 관리자 키 양쪽). */
+  function ensureMyContact() {
+    return myContact().then(function (c) {
+      if (c) return c;
+      if (!currentUser || !currentUser.pin) {
+        modalNotice('다시 로그인 필요', '번호 공개를 위해 로그아웃 후 다시 로그인해주세요.');
+        return null;
+      }
+      return modalPhonePrompt().then(function (phone) {
+        if (!phone) return null;
+        if (!/^01[0-9]{8,9}$/.test(phone)) {
+          modalNotice('입력 오류', '전화번호는 01012345678 형식으로 입력해주세요.');
+          return null;
+        }
+        var me = findMyEntry(currentState);
+        if (!me) return null;
+        var pubJwk = currentState.adminAuth && currentState.adminAuth.publicKeyJwk;
+        return Promise.all([
+          encryptForSelf(currentUser.pin, phone),
+          pubJwk ? encryptForAdmin(pubJwk, phone) : Promise.resolve(null)
+        ]).then(function (r) {
+          return db.runTransaction(function (tx) {
+            return tx.get(stateRef).then(function (doc) {
+              var s = doc.data();
+              var entries = (s.entries || []).map(function (e) {
+                if (e.id !== me.id) return e;
+                var c2 = JSON.parse(JSON.stringify(e));
+                c2.contactSelfEnc = r[0];
+                if (r[1]) c2.contactEnc = r[1];
+                return c2;
+              });
+              tx.update(stateRef, { entries: entries });
+            });
+          }).then(function () { return phone; });
+        });
+      });
+    });
+  }
+
+  /* ---- 즉시 새로고침 (쓰기 직후 화면 반영) ---- */
+  function refreshNow() {
+    return stateRef.get({ source: 'server' }).then(function (doc) {
+      if (!doc.exists) return;
+      var s = doc.data();
+      if (!Array.isArray(s.entries)) s.entries = [];
+      if (!Array.isArray(s.pendingEntries)) s.pendingEntries = [];
+      if (!Array.isArray(s.dateRequests)) s.dateRequests = [];
+      if (!Array.isArray(s.approvedPairs)) s.approvedPairs = [];
+      if (!Array.isArray(s.logs)) s.logs = [];
+      paint(s);
+    }).catch(function () {});
   }
 
   /* ---- activity log ---- */
@@ -1307,6 +1416,9 @@
         ? '<div class="log-list"><table class="seen-table"><thead><tr><th>닉네임</th><th>마지막 접속</th></tr></thead><tbody>' + seenRows + '</tbody></table></div>'
         : '<p class="sub">등록된 사람이 없어요.</p>');
 
+    /* 서버 용량 */
+    var capSection = capacityHtml(state);
+
     /* 활동 로그 */
     var logs = (state.logs || []).slice().reverse();
     var logRows = logs.map(function (l) {
@@ -1329,10 +1441,60 @@
         '<p class="sub">명단에서 들어온 사진/번호 요청이에요.</p>' +
         (reqs.length ? items : '<p class="sub">아직 들어온 요청이 없어요.</p>') +
         '<hr class="perforation">' +
+        capSection +
+        '<hr class="perforation">' +
         seenSection +
         '<hr class="perforation">' +
         logSection +
       '</div>'
+    );
+  }
+
+  /* ---- 서버 용량 ---- */
+  var DOC_LIMIT = 1048576; /* Firestore 문서 1개 최대 1MiB */
+  function byteLen(obj) {
+    try { return textEnc.encode(typeof obj === 'string' ? obj : JSON.stringify(obj)).length; }
+    catch (e) { return 0; }
+  }
+  function fmtBytes(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1024 / 1024).toFixed(2) + ' MB';
+  }
+  function capacityHtml(state) {
+    var total = byteLen(state);
+    var photoBytes = 0, photoCount = 0;
+    (state.entries || []).concat(state.pendingEntries || []).forEach(function (e) {
+      getPhotos(e).forEach(function (p) { photoBytes += byteLen(p); photoCount++; });
+    });
+    var logBytes = byteLen(state.logs || []);
+    var reqBytes = byteLen(state.dateRequests || []);
+    var otherBytes = Math.max(0, total - photoBytes - logBytes - reqBytes);
+    var pct = Math.min(100, (total / DOC_LIMIT) * 100);
+    var barColor = pct > 85 ? '#c5221f' : pct > 60 ? '#E08A2E' : '#3F8C6E';
+    var people = (state.entries || []).length + (state.pendingEntries || []).length;
+    var avgPerPerson = people ? Math.round(total / people) : 0;
+    var roomLeft = DOC_LIMIT - total;
+    var morePeople = avgPerPerson ? Math.floor(roomLeft / avgPerPerson) : '-';
+    var warn = '';
+    if (pct > 85) warn = '<p class="sub" style="color:#c5221f;margin-top:10px;">⚠️ 용량이 거의 찼어요. 오래된 사진이나 활동 기록을 정리해주세요.</p>';
+    else if (pct > 60) warn = '<p class="sub" style="color:#b06000;margin-top:10px;">사용량이 절반을 넘었어요. 사진 장수를 줄이면 여유가 생겨요.</p>';
+    return (
+      '<h2>💾 서버 용량</h2>' +
+      '<p class="sub">모든 데이터가 Firestore 문서 1개에 저장돼요. 한 문서의 최대 크기는 1MB예요.</p>' +
+      '<div class="cap-bar"><div class="cap-fill" style="width:' + pct.toFixed(1) + '%;background:' + barColor + ';"></div></div>' +
+      '<div class="cap-total">' + fmtBytes(total) + ' / 1 MB 사용 중 <b>(' + pct.toFixed(1) + '%)</b> · 남은 용량 ' + fmtBytes(roomLeft) + '</div>' +
+      '<table class="seen-table" style="margin-top:12px;">' +
+        '<tbody>' +
+          '<tr><td>📷 사진 ' + photoCount + '장</td><td class="seen-date">' + fmtBytes(photoBytes) + '</td></tr>' +
+          '<tr><td>📬 요청 ' + (state.dateRequests || []).length + '건</td><td class="seen-date">' + fmtBytes(reqBytes) + '</td></tr>' +
+          '<tr><td>📜 활동 기록 ' + (state.logs || []).length + '건</td><td class="seen-date">' + fmtBytes(logBytes) + '</td></tr>' +
+          '<tr><td>그 외 (프로필 정보 등)</td><td class="seen-date">' + fmtBytes(otherBytes) + '</td></tr>' +
+          '<tr><td><b>1인당 평균</b></td><td class="seen-date"><b>' + fmtBytes(avgPerPerson) + '</b></td></tr>' +
+          '<tr><td><b>더 받을 수 있는 인원 (추정)</b></td><td class="seen-date"><b>약 ' + morePeople + '명</b></td></tr>' +
+        '</tbody>' +
+      '</table>' +
+      warn
     );
   }
 
@@ -1534,11 +1696,13 @@
     var entryId = (isEdit && origEntry) ? origEntry.id : genId();
     var finalPhotos = photoDataUrls.length ? photoDataUrls.slice() : (isEdit ? getPhotos(origEntry) : []);
 
+    var selfPin = pin || (currentUser && currentUser.id === entryId ? currentUser.pin : null);
     var encPromises = [
       realName ? encryptForAdmin(pubJwk, realName) : Promise.resolve(null),
       contact ? encryptForAdmin(pubJwk, contact) : Promise.resolve(null),
       referrerText ? encryptForAdmin(pubJwk, referrerText) : Promise.resolve(null),
-      pin ? sha256Hex(pin) : Promise.resolve(null)
+      pin ? sha256Hex(pin) : Promise.resolve(null),
+      (contact && selfPin) ? encryptForSelf(selfPin, contact) : Promise.resolve(null)
     ];
     Promise.all(encPromises).then(function (results) {
       if (isEdit && origEntry) {
@@ -1560,6 +1724,8 @@
           referrerEnc: results[2] || origEntry.referrerEnc,
           degreeChoice: degreeChoice,
           pinHash: results[3] || origEntry.pinHash,
+          contactSelfEnc: results[4] || origEntry.contactSelfEnc,
+          lastSeenAt: origEntry.lastSeenAt,
           submittedAt: origEntry.submittedAt
         };
         return db.runTransaction(function (tx) {
@@ -1588,6 +1754,7 @@
           referrerEnc: results[2],
           degreeChoice: degreeChoice,
           pinHash: results[3],
+          contactSelfEnc: results[4],
           submittedAt: new Date().toISOString()
         };
         return stateRef.update({
@@ -1605,7 +1772,7 @@
         paint(currentState);
       } else {
         editingEntryId = null;
-        currentUser = { id: entryId, nickname: nickname };
+        currentUser = { id: entryId, nickname: nickname, pin: pin };
         saveSession();
         appendLog('signup', nickname, '신청서 제출');
         notifyAdmin('새 신청서 접수', nickname + '님이 신청서를 제출했어요! 승인 대기 중.');
@@ -1784,16 +1951,24 @@
         noteOverlay.addEventListener('click', function (e) { if (e.target === noteOverlay) finish(null); });
       }).then(function (note) {
         if (note === null || note === undefined) return;
-        var req = {
-          id: genId(), type: type, fromId: fromEntry.id, toId: toId,
-          note: note || '', submittedAt: new Date().toISOString()
-        };
-        return stateRef.update({
-          dateRequests: firebase.firestore.FieldValue.arrayUnion(req)
-        }).then(function () {
-          appendLog('request', fromEntry.nickname, typeLabel + ' 요청 → ' + target.nickname);
-          notifyAdmin(typeLabel + ' 요청', fromEntry.nickname + '님이 ' + target.nickname + '님의 ' + typeLabel + '를 요청했어요!');
-          modalNotice('요청 완료', escapeHtml(target.nickname) + '님에게 ' + typeLabel + ' 요청을 보냈어요!');
+        /* 번호 요청이면 내 번호를 함께 담아둔다 (상대가 승인하면 서로 공개) */
+        var contactPromise = isPhoto ? Promise.resolve(null) : ensureMyContact();
+        return contactPromise.then(function (myNum) {
+          if (!isPhoto && !myNum) return;
+          var req = {
+            id: genId(), type: type, fromId: fromEntry.id, toId: toId,
+            note: note || '', submittedAt: new Date().toISOString()
+          };
+          if (myNum) req.fromContact = myNum;
+          return stateRef.update({
+            dateRequests: firebase.firestore.FieldValue.arrayUnion(req)
+          }).then(function () {
+            appendLog('request', fromEntry.nickname, typeLabel + ' 요청 → ' + target.nickname);
+            notifyAdmin(typeLabel + ' 요청', fromEntry.nickname + '님이 ' + target.nickname + '님의 ' + typeLabel + '를 요청했어요!');
+            return refreshNow();
+          }).then(function () {
+            modalNotice('요청 완료', escapeHtml(target.nickname) + '님에게 ' + typeLabel + ' 요청을 보냈어요!<br>"신청 현황" 탭에서 상태를 볼 수 있어요.');
+          });
         });
       }).catch(function (err) {
         modalNotice('오류', '요청에 실패했어요: ' + (err.message || err));
@@ -1815,6 +1990,7 @@
       });
     }).then(function () {
       appendLog('admin', '관리자', '신청 승인 · ' + nick);
+      return refreshNow();
     }).catch(function (err) {
       modalNotice('오류', '승인에 실패했어요: ' + (err.message || err));
     });
@@ -1831,6 +2007,7 @@
       });
     }).then(function () {
       appendLog('admin', '관리자', '신청 거절 · ' + nick);
+      return refreshNow();
     }).catch(function (err) {
       modalNotice('오류', '거절에 실패했어요: ' + (err.message || err));
     });
@@ -1856,6 +2033,9 @@
           });
           tx.update(stateRef, { dateRequests: reqs });
         });
+      }).then(function () {
+        appendLog('admin', '관리자', '사진 요청 승인');
+        return refreshNow();
       }).catch(function (err) {
         modalNotice('오류', '승인에 실패했어요: ' + (err.message || err));
       });
@@ -1887,6 +2067,9 @@
           tx.update(stateRef, { dateRequests: reqs });
         });
       });
+    }).then(function () {
+      appendLog('admin', '관리자', '번호 요청 승인');
+      return refreshNow();
     }).catch(function (err) {
       modalNotice('오류', '승인에 실패했어요: ' + (err.message || err));
     });
@@ -1927,6 +2110,7 @@
         });
       }).then(function () {
         appendLog('admin', '관리자', '요청 거절');
+        return refreshNow();
       });
     }).catch(function (err) {
       modalNotice('오류', '거절에 실패했어요: ' + (err.message || err));
@@ -1946,28 +2130,42 @@
     var fromName = from ? from.nickname : '상대방';
     var msg = isPhoto
       ? escapeHtml(fromName) + '님에게 사진을 공개할까요? 승인하면 바로 볼 수 있게 돼요.'
-      : escapeHtml(fromName) + '님에게 번호를 공개할까요? 승인하면 관리자가 최종 확인 후 서로의 번호가 공개돼요.';
+      : escapeHtml(fromName) + '님과 서로 번호를 공개할까요? 승인하면 바로 서로의 번호를 볼 수 있어요.';
     modalConfirm('요청 승인', msg).then(function (ok) {
       if (!ok) return;
-      db.runTransaction(function (tx) {
-        return tx.get(stateRef).then(function (doc) {
-          var s = doc.data();
-          var reqs = (s.dateRequests || []).map(function (r) {
-            if (r.id !== id) return r;
-            var c = JSON.parse(JSON.stringify(r));
-            if (isPhoto) c.approved = true;
-            else c.userApproved = true;
-            c.decidedAt = new Date().toISOString();
-            return c;
+      /* 번호 요청이면 내 번호를 담아 바로 확정 (관리자 개입 없음) */
+      var contactPromise = isPhoto ? Promise.resolve(null) : ensureMyContact();
+      return contactPromise.then(function (myNum) {
+        if (!isPhoto && !myNum) return;
+        return db.runTransaction(function (tx) {
+          return tx.get(stateRef).then(function (doc) {
+            var s = doc.data();
+            var reqs = (s.dateRequests || []).map(function (r) {
+              if (r.id !== id) return r;
+              var c = JSON.parse(JSON.stringify(r));
+              c.decidedAt = new Date().toISOString();
+              if (isPhoto) { c.approved = true; return c; }
+              c.toContact = myNum;
+              /* 요청자 번호까지 있으면 바로 승인 완료, 없으면 관리자 확정 대기 */
+              if (c.fromContact) c.approved = true;
+              else c.userApproved = true;
+              return c;
+            });
+            tx.update(stateRef, { dateRequests: reqs });
           });
-          tx.update(stateRef, { dateRequests: reqs });
+        }).then(function () {
+          appendLog('request', me.nickname, (isPhoto ? '사진' : '번호') + ' 요청 승인 → ' + fromName);
+          notifyAdmin('요청 승인', me.nickname + '님이 ' + fromName + '님의 ' + (isPhoto ? '사진' : '번호') + ' 요청을 승인했어요.');
+          return refreshNow();
+        }).then(function () {
+          var req2 = ((currentState && currentState.dateRequests) || []).find(function (r) { return r.id === id; });
+          var done = req2 && req2.approved;
+          modalNotice('승인 완료', isPhoto
+            ? escapeHtml(fromName) + '님이 사진을 볼 수 있게 됐어요.'
+            : (done
+              ? '승인했어요! 이제 서로의 번호를 볼 수 있어요.'
+              : '승인했어요! 상대방 번호 정보가 없어서 관리자 확인이 필요해요.'));
         });
-      }).then(function () {
-        appendLog('request', me.nickname, (isPhoto ? '사진' : '번호') + ' 요청 승인 → ' + fromName);
-        notifyAdmin('요청 승인', me.nickname + '님이 ' + fromName + '님의 ' + (isPhoto ? '사진' : '번호') + ' 요청을 승인했어요.');
-        modalNotice('승인 완료', isPhoto
-          ? escapeHtml(fromName) + '님이 사진을 볼 수 있게 됐어요.'
-          : '승인했어요! 관리자 최종 확인 후 번호가 공개돼요.');
       }).catch(function (err) {
         modalNotice('오류', '승인에 실패했어요: ' + (err.message || err));
       });
@@ -2018,6 +2216,8 @@
         });
       }).then(function () {
         appendLog('request', me.nickname, (isPhoto ? '사진' : '번호') + ' 요청 거절 → ' + fromName);
+        return refreshNow();
+      }).then(function () {
         modalNotice('거절 완료', '요청을 거절했어요.');
       });
     }).catch(function (err) {
@@ -2039,6 +2239,8 @@
           var reqs = (s.dateRequests || []).filter(function (r) { return r.id !== id; });
           tx.update(stateRef, { dateRequests: reqs });
         });
+      }).then(function () {
+        return refreshNow();
       }).catch(function (err) {
         modalNotice('오류', '취소에 실패했어요: ' + (err.message || err));
       });
@@ -2128,13 +2330,16 @@
     requireLogin().then(function (myEntry) {
       if (!myEntry) return;
       var matchReqs = (state.dateRequests || []).filter(function (req) {
-        return req.approved && (req.type || 'contact') === 'contact' && req.revealedContact && (req.fromId === id || req.toId === id);
+        return req.approved && (req.type || 'contact') === 'contact' && (req.fromId === id || req.toId === id);
       });
       var match = matchReqs.find(function (req) {
         return (req.fromId === myEntry.id && req.toId === id) || (req.toId === myEntry.id && req.fromId === id);
       });
       if (!match) return modalNotice('안내', '승인된 번호 요청이 없어요. "신청 현황" 탭에서 상태를 확인해보세요.');
-      var contact = match.fromId === id ? match.revealedContact.from : match.revealedContact.to;
+      var otherIsRequester = match.fromId === id;
+      var contact = match.revealedContact
+        ? (otherIsRequester ? match.revealedContact.from : match.revealedContact.to)
+        : (otherIsRequester ? match.fromContact : match.toContact);
       if (!contact) return modalNotice('안내', '연락처 정보가 아직 없어요.');
       modalNotice('연락처', escapeHtml(entry.nickname) + '님의 연락처: ' + escapeHtml(contact));
     });
@@ -2472,7 +2677,8 @@
         '<ul style="padding-left:20px;margin:6px 0;">' +
           '<li>실명, 연락처, 소개자 정보는 <b>암호화</b>되어 저장돼요. 관리자 외에는 아무도 볼 수 없어요.</li>' +
           '<li>개인 PIN은 원본이 아닌 <b>해시값</b>으로만 저장되어 유출되더라도 복원이 불가능해요.</li>' +
-          '<li>사진/번호 보기는 <b>관리자 승인</b>을 받아야만 열람할 수 있어요.</li>' +
+          '<li>사진/번호 보기는 <b>당사자 본인이 직접 승인</b>해야 열람할 수 있어요. 원치 않으면 거절하고 메시지도 남길 수 있어요.</li>' +
+          '<li>번호는 <b>본인 PIN으로 한 번 더 암호화</b>되어, 본인이 승인할 때만 열려요.</li>' +
           '<li>개인정보 수집 시 <b>동의 절차</b>를 거치고 있어요.</li>' +
         '</ul>' +
         '<p><b>앞으로의 계획:</b></p>' +
