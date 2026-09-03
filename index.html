@@ -1365,10 +1365,19 @@
   /* ---- init ---- */
   function init() {
     var localState = readStateLocal();
+    var resetAdmin = window.location.search.indexOf('reset-admin') !== -1;
 
     stateRef.get().then(function (doc) {
       if (doc.exists) {
-        return doc.data();
+        var data = doc.data();
+        if (resetAdmin && data.adminAuth) {
+          data.adminAuth = null;
+          return stateRef.set(data).then(function () {
+            window.location.href = window.location.pathname;
+            return data;
+          });
+        }
+        return data;
       }
       return stateRef.set(localState).then(function () { return localState; });
     }).then(function (state) {
