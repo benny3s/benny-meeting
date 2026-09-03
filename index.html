@@ -379,6 +379,7 @@
   }
   .card-btn.danger { color: var(--accent); border-color: var(--accent); }
   .card-btn.primary { color: #fff; background: var(--accent); border-color: var(--accent); }
+  .card-btn.orange { color: #fff; background: #E08A2E; border-color: #E08A2E; }
   .card-btn.approve { color: #fff; background: #3F8C6E; border-color: #3F8C6E; }
 
   /* Admin detail button on roster card */
@@ -833,7 +834,7 @@
           contactHtml +
         '</div>' +
         '<div class="pf-actions">' +
-          '<button type="button" class="card-btn" data-action="request-photo" data-id="' + escapeHtml(entry.id) + '">📷 사진 요청</button>' +
+          '<button type="button" class="card-btn orange" data-action="request-photo" data-id="' + escapeHtml(entry.id) + '">📷 사진 요청</button>' +
           '<button type="button" class="card-btn primary" data-action="request-contact" data-id="' + escapeHtml(entry.id) + '">📱 번호 요청</button>' +
           adminBtn +
           '<button type="button" class="card-btn" data-action="edit" data-id="' + escapeHtml(entry.id) + '">수정</button>' +
@@ -1993,7 +1994,41 @@
     });
   }
 
+  function showAnnouncement() {
+    try {
+      if (localStorage.getItem('announce-v1')) return;
+    } catch (e) {}
+    var overlay = openModal(
+      '<h3 style="text-align:center;">안녕하세요! 인연 접수처입니다 &#128522;</h3>' +
+      '<div class="modal-msg" style="text-align:left;line-height:1.8;font-size:0.88rem;">' +
+        '<p>소중한 개인정보를 맡겨주신 만큼, 안전하게 관리하고 있어요.</p>' +
+        '<p><b>현재 적용된 보안:</b></p>' +
+        '<ul style="padding-left:20px;margin:6px 0;">' +
+          '<li>실명, 연락처, 소개자 정보는 <b>암호화</b>되어 저장돼요. 관리자 외에는 아무도 볼 수 없어요.</li>' +
+          '<li>개인 PIN은 원본이 아닌 <b>해시값</b>으로만 저장되어 유출되더라도 복원이 불가능해요.</li>' +
+          '<li>사진/번호 보기는 <b>관리자 승인</b>을 받아야만 열람할 수 있어요.</li>' +
+          '<li>개인정보 수집 시 <b>동의 절차</b>를 거치고 있어요.</li>' +
+        '</ul>' +
+        '<p><b>앞으로의 계획:</b></p>' +
+        '<ul style="padding-left:20px;margin:6px 0;">' +
+          '<li>데이터베이스 접근 권한 강화</li>' +
+          '<li>자동 알림 기능 도입 (카카오톡 연동)</li>' +
+          '<li>서비스 종료 시 데이터 즉시 삭제 보장</li>' +
+        '</ul>' +
+        '<p style="color:var(--muted);font-size:0.82rem;">궁금하거나 불안한 점이 있으면 언제든 관리자에게 물어봐주세요!</p>' +
+      '</div>' +
+      '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">확인했어요</button></div>'
+    );
+    function finish() {
+      closeModal(overlay);
+      try { localStorage.setItem('announce-v1', '1'); } catch (e) {}
+    }
+    overlay.querySelector('#modal-ok').addEventListener('click', finish);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(); });
+  }
+
   init();
+  setTimeout(showAnnouncement, 800);
 })();
 </script>
 </body>
