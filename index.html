@@ -543,6 +543,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 
 <script id="app-logic">
 (function () {
@@ -693,6 +694,48 @@
         base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
       );
     });
+  }
+  /* ---- PIN 해시 (PBKDF2 + 솔트). 값은 그대로, 저장 방식만 강화 ---- */
+  function pbkdf2HashHex(pin, saltBuf) {
+    return crypto.subtle.importKey('raw', textEnc.encode(pin), 'PBKDF2', false, ['deriveBits']).then(function (base) {
+      return crypto.subtle.deriveBits({ name: 'PBKDF2', salt: saltBuf, iterations: 150000, hash: 'SHA-256' }, base, 256);
+    }).then(function (bits) { return b64encode(bits); });
+  }
+  function makePinAuth(pin) {
+    var salt = crypto.getRandomValues(new Uint8Array(16));
+    return pbkdf2HashHex(pin, salt).then(function (hash) {
+      return { v: 2, salt: b64encode(salt.buffer), hash: hash };
+    });
+  }
+  /* 신·구 형식 모두 검증. 신규(pinAuth) 우선, 없으면 기존 sha256(pinHash) */
+  function verifyPin(pin, entry) {
+    if (entry && entry.pinAuth && entry.pinAuth.salt) {
+      return pbkdf2HashHex(pin, new Uint8Array(b64decode(entry.pinAuth.salt))).then(function (h) {
+        return h === entry.pinAuth.hash;
+      });
+    }
+    return sha256Hex(pin).then(function (h) { return h === entry.pinHash; });
+  }
+  /* 로그인 성공 시 구형 해시를 조용히 신형으로 승격 (best-effort, 실패해도 무해) */
+  function maybeUpgradePin(entry, pin) {
+    if (!entry || entry.pinAuth || !entry.pinHash) return;
+    makePinAuth(pin).then(function (auth) {
+      return db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var changed = false;
+          var entries = (s.entries || []).map(function (e) {
+            if (e.id !== entry.id || e.pinAuth) return e;
+            var c = JSON.parse(JSON.stringify(e));
+            c.pinAuth = auth;
+            delete c.pinHash;
+            changed = true;
+            return c;
+          });
+          if (changed) tx.update(stateRef, { entries: entries });
+        });
+      });
+    }).catch(function () {});
   }
   function setupAdminPin(pin) {
     return crypto.subtle.generateKey(
@@ -1055,8 +1098,9 @@
       var all = (state.entries || []).concat(state.pendingEntries || []);
       var entry = all.find(function (e) { return e.id === r.id; });
       if (!entry) return modalNotice('오류', '해당 닉네임을 찾을 수 없어요.');
-      sha256Hex(r.pin).then(function (hash) {
-        if (hash !== entry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
+      verifyPin(r.pin, entry).then(function (ok) {
+        if (!ok) return modalNotice('오류', 'PIN이 올바르지 않아요.');
+        maybeUpgradePin(entry, r.pin);
         currentUser = { id: entry.id, nickname: entry.nickname, pin: r.pin };
         saveSession();
         activeTab = 'mine';
@@ -1915,7 +1959,7 @@
       realName ? encryptForAdmin(pubJwk, realName) : Promise.resolve(null),
       contact ? encryptForAdmin(pubJwk, contact) : Promise.resolve(null),
       referrerText ? encryptForAdmin(pubJwk, referrerText) : Promise.resolve(null),
-      pin ? sha256Hex(pin) : Promise.resolve(null),
+      pin ? makePinAuth(pin) : Promise.resolve(null),
       (contact && selfPin) ? encryptForSelf(selfPin, contact) : Promise.resolve(null)
     ];
     Promise.all(encPromises).then(function (results) {
@@ -1933,15 +1977,19 @@
           intro: intro,
           idealType: idealType,
           dealbreaker: dealbreaker,
-          realNameEnc: results[0] || origEntry.realNameEnc,
-          contactEnc: results[1] || origEntry.contactEnc,
-          referrerEnc: results[2] || origEntry.referrerEnc,
+          realNameEnc: results[0] || origEntry.realNameEnc || null,
+          contactEnc: results[1] || origEntry.contactEnc || null,
+          referrerEnc: results[2] || origEntry.referrerEnc || null,
           degreeChoice: degreeChoice,
-          pinHash: results[3] || origEntry.pinHash,
-          contactSelfEnc: results[4] || origEntry.contactSelfEnc,
-          lastSeenAt: origEntry.lastSeenAt,
+          contactSelfEnc: results[4] || origEntry.contactSelfEnc || null,
+          lastSeenAt: origEntry.lastSeenAt || null,
           submittedAt: origEntry.submittedAt
         };
+        /* PIN: 새로 입력했으면 신형(pinAuth)으로, 아니면 기존 형식 유지 (undefined 금지) */
+        if (results[3]) updated.pinAuth = results[3];
+        else if (origEntry.pinAuth) updated.pinAuth = origEntry.pinAuth;
+        else if (origEntry.pinHash) updated.pinHash = origEntry.pinHash;
+        if (origEntry.serial) updated.serial = origEntry.serial;
         return db.runTransaction(function (tx) {
           return tx.get(stateRef).then(function (doc) {
             var s = doc.data();
@@ -1967,7 +2015,7 @@
           contactEnc: results[1],
           referrerEnc: results[2],
           degreeChoice: degreeChoice,
-          pinHash: results[3],
+          pinAuth: results[3],
           contactSelfEnc: results[4],
           submittedAt: new Date().toISOString()
         };
@@ -2032,8 +2080,9 @@
     }
     modalPin('본인 확인', '등록 시 설정한 개인 PIN을 입력하세요.').then(function (pin) {
       if (!pin) return;
-      sha256Hex(pin).then(function (hash) {
-        if (hash !== entry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
+      verifyPin(pin, entry).then(function (ok) {
+        if (!ok) return modalNotice('오류', 'PIN이 올바르지 않아요.');
+        maybeUpgradePin(entry, pin);
         startEditing(entry);
       });
     });
@@ -2119,8 +2168,9 @@
     }
     modalPin('본인 확인', '등록 시 설정한 개인 PIN을 입력하세요.').then(function (pin) {
       if (!pin) return;
-      sha256Hex(pin).then(function (hash) {
-        if (hash !== entry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
+      verifyPin(pin, entry).then(function (ok) {
+        if (!ok) return modalNotice('오류', 'PIN이 올바르지 않아요.');
+        maybeUpgradePin(entry, pin);
         doDelete();
       }).catch(function (err) {
         modalNotice('오류', 'PIN 확인 중 오류가 발생했어요.');
@@ -2966,8 +3016,28 @@
     overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(); });
   }
 
-  init();
-  setTimeout(showAnnouncement, 800);
+  /* ---- 익명 인증 후 앱 시작 (외부 접근 차단용 규칙과 함께 동작) ---- */
+  var appStarted = false;
+  function startApp() {
+    if (appStarted) return;
+    appStarted = true;
+    init();
+    setTimeout(showAnnouncement, 800);
+  }
+  try {
+    firebase.auth().onAuthStateChanged(function (user) {
+      if (user) startApp();
+    });
+    firebase.auth().signInAnonymously().catch(function (e) {
+      /* 익명 인증이 콘솔에서 아직 안 켜졌거나 실패해도 앱은 뜨도록 */
+      try { console.warn('anonymous auth unavailable:', e && e.code); } catch (e2) {}
+      startApp();
+    });
+  } catch (e) {
+    startApp();
+  }
+  /* 인증이 끝내 응답 없을 때를 대비한 안전장치 */
+  setTimeout(startApp, 5000);
 })();
 </script>
 </body>
