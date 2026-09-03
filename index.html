@@ -802,15 +802,10 @@
     if (entry.idealType) extras += '<div class="pf-extra"><b>선호</b> ' + escapeHtml(entry.idealType) + '</div>';
     if (entry.dealbreaker) extras += '<div class="pf-extra"><b>비선호</b> ' + escapeHtml(entry.dealbreaker) + '</div>';
     var contactHtml;
-    var hasApprovedContact = (state.dateRequests || []).some(function (r) {
-      return r.approved && (r.type || 'contact') === 'contact' && (r.fromId === entry.id || r.toId === entry.id) && r.revealedContact;
-    });
     if (decryptedContacts[entry.id]) {
       contactHtml = '<div class="pf-contact open">' + ICON_UNLOCK + '<span>' + escapeHtml(decryptedContacts[entry.id]) + '</span></div>';
-    } else if (hasApprovedContact) {
-      contactHtml = '<div class="pf-contact" style="cursor:pointer;" data-action="reveal-contact" data-id="' + escapeHtml(entry.id) + '">' + ICON_LOCK + '<span>번호 공개 승인됨! PIN 입력하여 연락처 보기</span></div>';
     } else {
-      contactHtml = '<div class="pf-contact locked">' + ICON_LOCK + '<span>연락처 비공개 (관리자만 확인 가능)</span></div>';
+      contactHtml = '<div class="pf-contact" style="cursor:pointer;" data-action="reveal-contact" data-id="' + escapeHtml(entry.id) + '">' + ICON_LOCK + '<span>연락처 보기 (승인된 사람에게만 공개)</span></div>';
     }
     var adminBtn = isAdminUnlocked
       ? '<button type="button" class="card-btn admin-detail-btn" data-action="detail" data-id="' + escapeHtml(entry.id) + '">🔍 상세</button>'
