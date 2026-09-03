@@ -1161,10 +1161,14 @@
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
           var s = doc.data();
-          s.entries = s.entries.filter(function (e) { return e.id !== id; });
-          s.dateRequests = (s.dateRequests || []).filter(function (r) { return r.toId !== id; });
-          tx.set(stateRef, s);
+          var newEntries = (s.entries || []).filter(function (e) { return e.id !== id; });
+          var newRequests = (s.dateRequests || []).filter(function (r) { return r.toId !== id; });
+          tx.update(stateRef, { entries: newEntries, dateRequests: newRequests });
         });
+      }).then(function () {
+        modalNotice('완료', '명단에서 삭제되었어요.');
+      }).catch(function (err) {
+        modalNotice('오류', '삭제에 실패했어요: ' + (err.message || err));
       });
     }
     if (isAdminUnlocked) {
@@ -1179,6 +1183,8 @@
       sha256Hex(pin).then(function (hash) {
         if (hash !== entry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
         doDelete();
+      }).catch(function (err) {
+        modalNotice('오류', 'PIN 확인 중 오류가 발생했어요.');
       });
     });
   }
@@ -1230,12 +1236,14 @@
     db.runTransaction(function (tx) {
       return tx.get(stateRef).then(function (doc) {
         var state = doc.data();
-        var idx = state.pendingEntries.findIndex(function (e) { return e.id === id; });
+        var idx = (state.pendingEntries || []).findIndex(function (e) { return e.id === id; });
         if (idx < 0) return;
         var entry = state.pendingEntries.splice(idx, 1)[0];
-        state.entries.push(entry);
-        tx.set(stateRef, state);
+        var newEntries = (state.entries || []).concat([entry]);
+        tx.update(stateRef, { pendingEntries: state.pendingEntries, entries: newEntries });
       });
+    }).catch(function (err) {
+      modalNotice('오류', '승인에 실패했어요: ' + (err.message || err));
     });
   }
 
@@ -1243,9 +1251,11 @@
     db.runTransaction(function (tx) {
       return tx.get(stateRef).then(function (doc) {
         var state = doc.data();
-        state.pendingEntries = state.pendingEntries.filter(function (e) { return e.id !== id; });
-        tx.set(stateRef, state);
+        var newPending = (state.pendingEntries || []).filter(function (e) { return e.id !== id; });
+        tx.update(stateRef, { pendingEntries: newPending });
       });
+    }).catch(function (err) {
+      modalNotice('오류', '거절에 실패했어요: ' + (err.message || err));
     });
   }
 
@@ -1253,9 +1263,14 @@
     db.runTransaction(function (tx) {
       return tx.get(stateRef).then(function (doc) {
         var state = doc.data();
-        var req = state.dateRequests.find(function (r) { return r.id === id; });
-        if (req) { req.approved = true; tx.set(stateRef, state); }
+        var reqs = (state.dateRequests || []).map(function (r) {
+          if (r.id === id) { var copy = JSON.parse(JSON.stringify(r)); copy.approved = true; return copy; }
+          return r;
+        });
+        tx.update(stateRef, { dateRequests: reqs });
       });
+    }).catch(function (err) {
+      modalNotice('오류', '승인에 실패했어요: ' + (err.message || err));
     });
   }
 
@@ -1263,9 +1278,11 @@
     db.runTransaction(function (tx) {
       return tx.get(stateRef).then(function (doc) {
         var state = doc.data();
-        state.dateRequests = state.dateRequests.filter(function (r) { return r.id !== id; });
-        tx.set(stateRef, state);
+        var newRequests = (state.dateRequests || []).filter(function (r) { return r.id !== id; });
+        tx.update(stateRef, { dateRequests: newRequests });
       });
+    }).catch(function (err) {
+      modalNotice('오류', '거절에 실패했어요: ' + (err.message || err));
     });
   }
 
@@ -1273,9 +1290,11 @@
     db.runTransaction(function (tx) {
       return tx.get(stateRef).then(function (doc) {
         var state = doc.data();
-        state.dateRequests = state.dateRequests.filter(function (r) { return r.id !== id; });
-        tx.set(stateRef, state);
+        var newRequests = (state.dateRequests || []).filter(function (r) { return r.id !== id; });
+        tx.update(stateRef, { dateRequests: newRequests });
       });
+    }).catch(function (err) {
+      modalNotice('오류', '삭제에 실패했어요: ' + (err.message || err));
     });
   }
 
