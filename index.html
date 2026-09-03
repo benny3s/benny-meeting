@@ -496,10 +496,9 @@
   var NTFY_TOPIC = 'benny3s-meeting-admin-93034';
   function notifyAdmin(title, body) {
     try {
-      fetch('https://ntfy.sh/' + NTFY_TOPIC, {
+      fetch('https://ntfy.sh', {
         method: 'POST',
-        headers: { 'Title': title, 'Priority': '4', 'Tags': 'heart' },
-        body: body
+        body: JSON.stringify({ topic: NTFY_TOPIC, title: title, message: body, priority: 4, tags: ['heart'] })
       });
     } catch (e) {}
   }
@@ -1167,12 +1166,21 @@
     var isEdit = !!editingEntryId;
     var origEntry = isEdit ? (state.entries || []).find(function (e) { return e.id === editingEntryId; }) : null;
 
-    if (!nickname || !gender || !birthYear || !region || !workplace || !degreeChoice) {
-      modalNotice('입력 오류', '필수 항목을 모두 채워주세요.');
-      return;
+    var missing = [];
+    if (!nickname) missing.push('닉네임');
+    if (!gender) missing.push('성별');
+    if (!birthYear) missing.push('생년');
+    if (!region) missing.push('사는 곳');
+    if (!workplace) missing.push('직장 위치');
+    if (!degreeChoice) missing.push('베니와의 관계');
+    if (!isEdit) {
+      if (!realName) missing.push('실명');
+      if (!contact) missing.push('연락처');
+      if (!referrerText) missing.push('소개자');
+      if (!pin) missing.push('개인 PIN');
     }
-    if (!isEdit && (!realName || !contact || !referrerText || !pin)) {
-      modalNotice('입력 오류', '필수 항목을 모두 채워주세요.');
+    if (missing.length > 0) {
+      modalNotice('입력 오류', '다음 항목을 채워주세요: ' + missing.join(', '));
       return;
     }
     if (pin && pin.length < 4) {
@@ -1732,6 +1740,27 @@
     }).join('') || '<span style="color:var(--muted);font-size:0.82rem;">사진 없음</span>';
   }
 
+  function resizeImage(file, maxW, maxH, quality, cb) {
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      var img = new Image();
+      img.onload = function () {
+        var w = img.width, h = img.height;
+        if (w > maxW || h > maxH) {
+          var ratio = Math.min(maxW / w, maxH / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        cb(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
   document.body.addEventListener('change', function (e) {
     if (e.target.id === 'f-photo') {
       var files = e.target.files;
@@ -1741,12 +1770,10 @@
       var toRead = Math.min(files.length, remaining);
       for (var i = 0; i < toRead; i++) {
         (function (file) {
-          var reader = new FileReader();
-          reader.onload = function (ev) {
-            photoDataUrls.push(ev.target.result);
+          resizeImage(file, 800, 800, 0.7, function (dataUrl) {
+            photoDataUrls.push(dataUrl);
             renderPhotoThumbs();
-          };
-          reader.readAsDataURL(file);
+          });
         })(files[i]);
       }
       if (files.length > remaining) {
