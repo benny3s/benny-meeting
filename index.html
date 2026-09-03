@@ -918,7 +918,7 @@
                 '<label><input type="radio" name="degreeChoice" value="other"><span>그 외</span></label>' +
               '</div>' +
             '</div>' +
-            '<div class="field"><label>사진 <span class="opt">(선택, 최대 5장)</span></label>' +
+            '<div class="field"><label>사진 <span class="opt">(선택, 최대 3장)</span></label>' +
               '<span class="hint">사진은 전체 공개, 선택 공개 (흐리게 처리하여, 소개팅 성사될 경우에만 공개) 가능</span>' +
               '<div class="photo-upload-area" id="photo-upload-area"></div>' +
               '<div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap;">' +
@@ -1195,6 +1195,9 @@
     msg.className = 'status-msg';
 
     var pubJwk = state.adminAuth.publicKeyJwk;
+    var entryId = (isEdit && origEntry) ? origEntry.id : genId();
+    var finalPhotos = photoDataUrls.length ? photoDataUrls.slice() : (isEdit ? getPhotos(origEntry) : []);
+
     var encPromises = [
       realName ? encryptForAdmin(pubJwk, realName) : Promise.resolve(null),
       contact ? encryptForAdmin(pubJwk, contact) : Promise.resolve(null),
@@ -1210,8 +1213,8 @@
           birthYear: birthYear,
           region: region,
           workplace: workplace,
-          photos: photoDataUrls.length ? photoDataUrls.slice() : getPhotos(origEntry),
-          blurPhoto: blurPhoto && (photoDataUrls.length > 0 || getPhotos(origEntry).length > 0),
+          photos: finalPhotos,
+          blurPhoto: blurPhoto && finalPhotos.length > 0,
           height: height,
           intro: intro,
           idealType: idealType,
@@ -1232,14 +1235,14 @@
         });
       } else {
         var entry = {
-          id: genId(),
+          id: entryId,
           nickname: nickname,
           gender: gender,
           birthYear: birthYear,
           region: region,
           workplace: workplace,
-          photos: photoDataUrls.length ? photoDataUrls.slice() : [],
-          blurPhoto: blurPhoto && photoDataUrls.length > 0,
+          photos: finalPhotos,
+          blurPhoto: blurPhoto && finalPhotos.length > 0,
           height: height,
           intro: intro,
           idealType: idealType,
@@ -1765,19 +1768,19 @@
     if (e.target.id === 'f-photo') {
       var files = e.target.files;
       if (!files || !files.length) return;
-      var remaining = 5 - photoDataUrls.length;
-      if (remaining <= 0) { modalNotice('안내', '사진은 최대 5장까지 추가할 수 있어요.'); e.target.value = ''; return; }
+      var remaining = 3 - photoDataUrls.length;
+      if (remaining <= 0) { modalNotice('안내', '사진은 최대 3장까지 추가할 수 있어요.'); e.target.value = ''; return; }
       var toRead = Math.min(files.length, remaining);
       for (var i = 0; i < toRead; i++) {
         (function (file) {
-          resizeImage(file, 800, 800, 0.7, function (dataUrl) {
+          resizeImage(file, 400, 400, 0.5, function (dataUrl) {
             photoDataUrls.push(dataUrl);
             renderPhotoThumbs();
           });
         })(files[i]);
       }
       if (files.length > remaining) {
-        modalNotice('안내', '최대 5장까지만 추가됩니다. ' + (files.length - remaining) + '장은 무시되었어요.');
+        modalNotice('안내', '최대 3장까지만 추가됩니다. ' + (files.length - remaining) + '장은 무시되었어요.');
       }
       e.target.value = '';
     }
