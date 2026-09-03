@@ -401,6 +401,10 @@
     border: 1px solid var(--line); border-radius: 10px; background: var(--paper); color: var(--ink);
     resize: vertical;
   }
+  select.modal-input { cursor: pointer; appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 13px center; padding-right: 36px;
+  }
   .modal-input:focus { border-color: var(--accent); }
   .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
   .modal-actions .card-btn { flex: 1; padding: 10px; font-size: 0.86rem; }
@@ -674,27 +678,35 @@
   }
 
   function modalVerifyIdentity() {
+    var entries = (currentState && currentState.entries) || [];
+    var options = entries.map(function (e, idx) {
+      var num = String(entries.length - idx).padStart(3, '0');
+      return '<option value="' + escapeHtml(e.nickname) + '">No.' + num + '  ' + escapeHtml(e.nickname) + '</option>';
+    }).join('');
     return new Promise(function (resolve) {
       var overlay = openModal(
         '<h3>본인 확인</h3>' +
-        '<p class="modal-msg">명단에 등록된 본인의 공개 이름과 삭제 PIN을 입력해주세요.</p>' +
-        '<input type="text" class="modal-input" id="modal-verify-nickname" placeholder="공개 이름 (닉네임)">' +
+        '<p class="modal-msg">명단에서 본인을 선택하고 삭제 PIN을 입력해주세요.</p>' +
+        '<select class="modal-input" id="modal-verify-nickname">' +
+          '<option value="" disabled selected>선택해주세요</option>' +
+          options +
+        '</select>' +
         '<input type="text" inputmode="numeric" class="modal-input" id="modal-verify-pin" placeholder="삭제 PIN" style="margin-top:8px;">' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
           '<button type="button" class="card-btn primary" id="modal-ok">확인</button>' +
         '</div>'
       );
-      var nickInput = overlay.querySelector('#modal-verify-nickname');
+      var nickSelect = overlay.querySelector('#modal-verify-nickname');
       var pinInput = overlay.querySelector('#modal-verify-pin');
-      setTimeout(function () { nickInput.focus(); }, 0);
+      setTimeout(function () { nickSelect.focus(); }, 0);
       function finish(val) { closeModal(overlay); resolve(val); }
       overlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
       overlay.querySelector('#modal-ok').addEventListener('click', function () {
-        finish({ nickname: nickInput.value.trim(), pin: pinInput.value.trim() });
+        finish({ nickname: nickSelect.value, pin: pinInput.value.trim() });
       });
       pinInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') finish({ nickname: nickInput.value.trim(), pin: pinInput.value.trim() });
+        if (e.key === 'Enter') finish({ nickname: nickSelect.value, pin: pinInput.value.trim() });
         if (e.key === 'Escape') finish(null);
       });
       overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
@@ -1015,7 +1027,7 @@
           });
         }).then(function (key) {
           adminPrivateKey = key;
-          isAdminUnlocked = true;
+          isAdminUnlocked = true; requestNotifPermission();
           try { sessionStorage.setItem('adminPin', r.p1); } catch (e) {}
           return decryptAllAdminData(state);
         }).then(function () {
@@ -1104,8 +1116,9 @@
         pinHash: results[3],
         submittedAt: new Date().toISOString()
       };
-      state.pendingEntries.push(entry);
-      return saveState(state);
+      return stateRef.update({
+        pendingEntries: firebase.firestore.FieldValue.arrayUnion(entry)
+      });
     }).then(function () {
       photoDataUrl = null;
       showStamp();
@@ -1117,40 +1130,42 @@
   }
 
   function showStamp() {
-    var overlay = document.createElement('div');
-    overlay.className = 'stamp-overlay';
-    overlay.innerHTML =
-      '<div class="stamp">' +
-        '<div class="stamp-ring">' + ICON_STAMP + '</div>' +
+    var overlay = openModal(
+      '<div style="text-align:center;">' +
+        '<div class="stamp-ring" style="margin:0 auto 16px;">' + ICON_STAMP + '</div>' +
         '<h3>접수 완료!</h3>' +
-        '<p>관리자 승인 후 명단에 올라가요.</p>' +
-        '<button type="button" id="stamp-close">확인</button>' +
-      '</div>';
-    document.body.appendChild(overlay);
-    overlay.querySelector('#stamp-close').addEventListener('click', function () {
-      overlay.remove();
+        '<p class="modal-msg" style="margin-bottom:4px;">관리자에게 승인 요청이 전달되었어요!</p>' +
+        '<p style="font-size:0.82rem;color:var(--muted);margin:0 0 20px;">승인 후 명단에 올라갑니다.</p>' +
+        '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">확인</button></div>' +
+      '</div>'
+    );
+    function finish() {
+      closeModal(overlay);
       activeTab = 'list';
       paint(currentState);
-    });
-    overlay.addEventListener('click', function (e) {
-      if (e.target === overlay) {
-        overlay.remove();
-        activeTab = 'list';
-        paint(currentState);
-      }
-    });
+    }
+    overlay.querySelector('#modal-ok').addEventListener('click', finish);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(); });
   }
 
   function handleDelete(id) {
     var state = currentState;
     var entry = state.entries.find(function (e) { return e.id === id; });
     if (!entry) return;
+    function doDelete() {
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          s.entries = s.entries.filter(function (e) { return e.id !== id; });
+          s.dateRequests = (s.dateRequests || []).filter(function (r) { return r.toId !== id; });
+          tx.set(stateRef, s);
+        });
+      });
+    }
     if (isAdminUnlocked) {
       modalConfirm('삭제', escapeHtml(entry.nickname) + '님을 명단에서 삭제할까요?').then(function (ok) {
         if (!ok) return;
-        state.entries = state.entries.filter(function (e) { return e.id !== id; });
-        state.dateRequests = (state.dateRequests || []).filter(function (r) { return r.toId !== id; });
-        saveState(state).then(function () { paint(state); });
+        doDelete();
       });
       return;
     }
@@ -1158,9 +1173,7 @@
       if (!pin) return;
       sha256Hex(pin).then(function (hash) {
         if (hash !== entry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
-        state.entries = state.entries.filter(function (e) { return e.id !== id; });
-        state.dateRequests = (state.dateRequests || []).filter(function (r) { return r.toId !== id; });
-        saveState(state).then(function () { paint(state); });
+        doDelete();
       });
     });
   }
@@ -1198,8 +1211,9 @@
         var reqData = { fromId: fromEntry.id, fromName: fromEntry.nickname, toId: toId, toName: target.nickname, note: note || '' };
         encryptForAdmin(state.adminAuth.publicKeyJwk, reqData).then(function (enc) {
           var req = { id: genId(), fromId: fromEntry.id, toId: toId, submittedAt: new Date().toISOString(), iv: enc.iv, ciphertext: enc.ciphertext, wrappedKey: enc.wrappedKey };
-          state.dateRequests.push(req);
-          return saveState(state);
+          return stateRef.update({
+            dateRequests: firebase.firestore.FieldValue.arrayUnion(req)
+          });
         }).then(function () {
           modalNotice('신청 완료', escapeHtml(target.nickname) + '님에게 데이트 신청을 보냈어요!');
         });
@@ -1208,36 +1222,56 @@
   }
 
   function handleApprove(id) {
-    var state = currentState;
-    var idx = state.pendingEntries.findIndex(function (e) { return e.id === id; });
-    if (idx < 0) return;
-    var entry = state.pendingEntries.splice(idx, 1)[0];
-    state.entries.push(entry);
-    saveState(state).then(function () { paint(state); });
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var state = doc.data();
+        var idx = state.pendingEntries.findIndex(function (e) { return e.id === id; });
+        if (idx < 0) return;
+        var entry = state.pendingEntries.splice(idx, 1)[0];
+        state.entries.push(entry);
+        tx.set(stateRef, state);
+      });
+    });
   }
 
   function handleReject(id) {
-    var state = currentState;
-    state.pendingEntries = state.pendingEntries.filter(function (e) { return e.id !== id; });
-    saveState(state).then(function () { paint(state); });
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var state = doc.data();
+        state.pendingEntries = state.pendingEntries.filter(function (e) { return e.id !== id; });
+        tx.set(stateRef, state);
+      });
+    });
   }
 
   function handleApproveRequest(id) {
-    var state = currentState;
-    var req = state.dateRequests.find(function (r) { return r.id === id; });
-    if (req) { req.approved = true; saveState(state).then(function () { paint(state); }); }
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var state = doc.data();
+        var req = state.dateRequests.find(function (r) { return r.id === id; });
+        if (req) { req.approved = true; tx.set(stateRef, state); }
+      });
+    });
   }
 
   function handleRejectRequest(id) {
-    var state = currentState;
-    state.dateRequests = state.dateRequests.filter(function (r) { return r.id !== id; });
-    saveState(state).then(function () { paint(state); });
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var state = doc.data();
+        state.dateRequests = state.dateRequests.filter(function (r) { return r.id !== id; });
+        tx.set(stateRef, state);
+      });
+    });
   }
 
   function handleDeleteRequest(id) {
-    var state = currentState;
-    state.dateRequests = state.dateRequests.filter(function (r) { return r.id !== id; });
-    saveState(state).then(function () { paint(state); });
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var state = doc.data();
+        state.dateRequests = state.dateRequests.filter(function (r) { return r.id !== id; });
+        tx.set(stateRef, state);
+      });
+    });
   }
 
   function handleRevealPhoto(id) {
@@ -1392,7 +1426,7 @@
         if (savedPin && state.adminAuth) {
           adminPromise = unlockAdminKey(savedPin, state.adminAuth).then(function (key) {
             adminPrivateKey = key;
-            isAdminUnlocked = true;
+            isAdminUnlocked = true; requestNotifPermission();
           }).catch(function () {
             sessionStorage.removeItem('adminPin');
           });
@@ -1412,12 +1446,39 @@
         '</div>';
     });
 
+    var prevPendingCount = -1;
+    var prevRequestCount = -1;
+
+    function requestNotifPermission() {
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+    }
+
+    function showNotification(title, body) {
+      if (!('Notification' in window)) return;
+      if (Notification.permission === 'granted') {
+        var n = new Notification(title, { body: body, icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="80" font-size="80">💌</text></svg>' });
+        n.onclick = function () { window.focus(); n.close(); };
+      }
+    }
+
     stateRef.onSnapshot(function (doc) {
       if (!doc.exists) return;
       var state = doc.data();
       if (!Array.isArray(state.pendingEntries)) state.pendingEntries = [];
       if (!Array.isArray(state.dateRequests)) state.dateRequests = [];
       if (!Array.isArray(state.approvedPairs)) state.approvedPairs = [];
+
+      if (prevPendingCount >= 0 && state.pendingEntries.length > prevPendingCount) {
+        showNotification('새 접수!', '새로운 인연 신청서가 도착했어요. (' + state.pendingEntries.length + '건 대기중)');
+      }
+      if (prevRequestCount >= 0 && state.dateRequests.length > prevRequestCount) {
+        showNotification('데이트 신청!', '새로운 데이트 신청이 도착했어요.');
+      }
+      prevPendingCount = state.pendingEntries.length;
+      prevRequestCount = state.dateRequests.length;
+
       currentState = state;
       decryptAllAdminData(state).then(function () {
         paint(state);
