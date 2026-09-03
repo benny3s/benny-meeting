@@ -87,6 +87,12 @@
   .masthead h1 { font-size: clamp(1.5rem, 4vw, 2.1rem); letter-spacing: 0.01em; }
   .masthead p { margin: 6px 0 0; color: var(--paper); opacity: 0.72; font-size: 0.92rem; }
   .admin-bar { max-width: 880px; margin: 14px auto 0; display: flex; justify-content: flex-end; }
+  .notice-bar {
+    max-width: 880px; margin: 12px auto 0; padding: 10px 16px; border-radius: 10px;
+    background: var(--gold-soft); color: var(--ink); font-size: 0.85rem;
+    text-align: center; border: 1px solid var(--gold);
+  }
+  .notice-icon { font-size: 1rem; }
   .admin-link {
     background: none; border: 1px solid rgba(251,243,238,0.3); color: var(--paper);
     opacity: 0.8; font-size: 0.78rem; padding: 5px 12px; border-radius: 999px; cursor: pointer;
@@ -478,6 +484,7 @@
   var decryptedRequests = {};
   var currentState = null;
   var photoDataUrls = [];
+  var editingEntryId = null;
 
   var ICON_PIN = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>';
   var ICON_BRIEF = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
@@ -813,7 +820,9 @@
         '</div>' +
         '<div class="pf-actions">' +
           '<button type="button" class="card-btn primary" data-action="date" data-id="' + escapeHtml(entry.id) + '">💌 데이트 신청</button>' +
+          '<button type="button" class="card-btn" data-action="cancel-request" data-id="' + escapeHtml(entry.id) + '">신청 취소</button>' +
           adminBtn +
+          '<button type="button" class="card-btn" data-action="edit" data-id="' + escapeHtml(entry.id) + '">수정</button>' +
           '<button type="button" class="card-btn danger" data-action="delete" data-id="' + escapeHtml(entry.id) + '">삭제</button>' +
         '</div>' +
       '</article>'
@@ -847,15 +856,19 @@
   }
 
   function renderForm(state) {
+    var isEdit = !!editingEntryId;
     var setupNote = (!state.adminAuth)
       ? '<div class="readonly-note">관리자 초기 설정이 아직 안 됐어요. 운영자라면 위의 "관리자" 버튼을 눌러 PIN을 먼저 설정해주세요.</div>'
       : '';
+    var editNote = isEdit
+      ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">프로필 수정 모드입니다. 실명·연락처·소개자·PIN은 비워두면 기존 값이 유지돼요. <button type="button" class="card-btn" id="cancel-edit" style="margin-left:8px;padding:4px 12px;">수정 취소</button></div>'
+      : '';
     return (
-      setupNote +
+      setupNote + editNote +
       '<div class="form-card">' +
         '<div class="form-lede">' +
-          '<h2>좋은 사람, 소개해 주세요</h2>' +
-          '<p>아래 정보를 채워서 제출하면 관리자 승인 후 명단에 올라가요.</p>' +
+          '<h2>' + (isEdit ? '프로필 수정' : '좋은 사람, 소개해 주세요') + '</h2>' +
+          '<p>' + (isEdit ? '수정할 항목을 변경한 뒤 저장하세요.' : '아래 정보를 채워서 제출하면 관리자 승인 후 명단에 올라가요.') + '</p>' +
         '</div>' +
         '<form id="entry-form" novalidate>' +
           '<div class="field-group">' +
@@ -863,12 +876,12 @@
               '<div class="field"><label for="f-nickname">공개 이름 (닉네임) <span class="req">필수</span></label>' +
                 '<input type="text" id="f-nickname" name="nickname" maxlength="20" placeholder="예: 민지" required>' +
                 '<span class="hint">닉네임 사용 추천 (전 소개팅녀/소개팅남 모르게)</span></div>' +
-              '<div class="field"><label for="f-realname">실명 <span class="req">필수</span></label>' +
-                '<input type="text" id="f-realname" name="realName" maxlength="20" placeholder="예: 김민지" required>' +
+              '<div class="field"><label for="f-realname">실명 ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
+                '<input type="text" id="f-realname" name="realName" maxlength="20" placeholder="예: 김민지"' + (isEdit ? '' : ' required') + '>' +
                 '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
             '</div>' +
-            '<div class="field"><label for="f-contact">연락처 <span class="req">필수</span></label>' +
-              '<input type="text" id="f-contact" name="contact" maxlength="60" placeholder="카카오톡 ID 또는 전화번호" required>' +
+            '<div class="field"><label for="f-contact">연락처 ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
+              '<input type="text" id="f-contact" name="contact" maxlength="60" placeholder="카카오톡 ID 또는 전화번호"' + (isEdit ? '' : ' required') + '>' +
               '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
             '<div class="field">' +
               '<label>성별 <span class="req">필수</span></label>' +
@@ -885,8 +898,8 @@
             '</div>' +
             '<div class="field"><label for="f-workplace">직장 위치 <span class="req">필수</span></label>' +
               '<input type="text" id="f-workplace" name="workplace" maxlength="60" placeholder="예: 서울 강남구 (회사명 공개 자유)" required></div>' +
-            '<div class="field"><label for="f-referrer">누구의 소개인가요? <span class="req">필수</span></label>' +
-              '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 김민지" required>' +
+            '<div class="field"><label for="f-referrer">누구의 소개인가요? ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
+              '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 김민지"' + (isEdit ? '' : ' required') + '>' +
               '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
             '<div class="field"><label>베니와의 관계 <span class="req">필수</span></label>' +
               '<div class="degree-group">' +
@@ -909,8 +922,8 @@
             '<div class="row-2">' +
               '<div class="field"><label for="f-height">키 (cm) <span class="opt">(선택)</span></label>' +
                 '<input type="number" id="f-height" name="height" min="130" max="220" placeholder="예: 168"></div>' +
-              '<div class="field"><label for="f-pin">개인 PIN <span class="req">필수</span></label>' +
-                '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8" placeholder="숫자 4~8자리" required>' +
+              '<div class="field"><label for="f-pin">개인 PIN ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
+                '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8" placeholder="숫자 4~8자리"' + (isEdit ? '' : ' required') + '>' +
                 '<span class="hint">나중에 본인이 신청을 취소하거나 데이트를 신청할 때 필요해요.</span></div>' +
             '</div>' +
             '<div class="field"><label for="f-intro">자기소개 <span class="opt">(선택)</span></label>' +
@@ -922,7 +935,7 @@
           '</div>' +
           '<hr class="perforation">' +
           '<div class="submit-row">' +
-            '<button type="submit" class="submit-btn" id="submit-btn">도장 찍고 제출하기</button>' +
+            '<button type="submit" class="submit-btn" id="submit-btn">' + (isEdit ? '수정 저장하기' : '도장 찍고 제출하기') + '</button>' +
             '<span class="status-msg" id="status-msg"></span>' +
           '</div>' +
         '</form>' +
@@ -1029,6 +1042,9 @@
           (isAdminUnlocked ? ICON_UNLOCK + ' 관리자 모드' : ICON_LOCK + ' 관리자') +
         '</button>' +
       '</div></div>' +
+      '<div class="notice-bar">' +
+        '<span class="notice-icon">&#128227;</span> 신청서 작성 또는 데이트 신청 후, 관리자에게 알려주세요! (알림 기능 준비 중)' +
+      '</div>' +
       '<div class="page">' +
         '<div class="tabs" role="tablist">' + tabs + '</div>' +
         '<div id="tab-panel">' + panel + '</div>' +
@@ -1137,11 +1153,18 @@
     var dealbreaker = (form.querySelector('[name="dealbreaker"]').value || '').trim();
     var blurPhoto = form.querySelector('#f-blur') ? form.querySelector('#f-blur').checked : false;
 
-    if (!nickname || !realName || !contact || !gender || !birthYear || !region || !workplace || !referrerText || !degreeChoice || !pin) {
+    var isEdit = !!editingEntryId;
+    var origEntry = isEdit ? (state.entries || []).find(function (e) { return e.id === editingEntryId; }) : null;
+
+    if (!nickname || !gender || !birthYear || !region || !workplace || !degreeChoice) {
       modalNotice('입력 오류', '필수 항목을 모두 채워주세요.');
       return;
     }
-    if (pin.length < 4) {
+    if (!isEdit && (!realName || !contact || !referrerText || !pin)) {
+      modalNotice('입력 오류', '필수 항목을 모두 채워주세요.');
+      return;
+    }
+    if (pin && pin.length < 4) {
       modalNotice('입력 오류', 'PIN은 4자리 이상이어야 해요.');
       return;
     }
@@ -1149,42 +1172,81 @@
     var btn = document.getElementById('submit-btn');
     var msg = document.getElementById('status-msg');
     btn.disabled = true;
-    msg.textContent = '제출 중...';
+    msg.textContent = isEdit ? '수정 중...' : '제출 중...';
     msg.className = 'status-msg';
 
     var pubJwk = state.adminAuth.publicKeyJwk;
-    Promise.all([
-      encryptForAdmin(pubJwk, realName),
-      encryptForAdmin(pubJwk, contact),
-      encryptForAdmin(pubJwk, referrerText),
-      sha256Hex(pin)
-    ]).then(function (results) {
-      var entry = {
-        id: genId(),
-        nickname: nickname,
-        gender: gender,
-        birthYear: birthYear,
-        region: region,
-        workplace: workplace,
-        photos: photoDataUrls.length ? photoDataUrls.slice() : [],
-        blurPhoto: blurPhoto && photoDataUrls.length > 0,
-        height: height,
-        intro: intro,
-        idealType: idealType,
-        dealbreaker: dealbreaker,
-        realNameEnc: results[0],
-        contactEnc: results[1],
-        referrerEnc: results[2],
-        degreeChoice: degreeChoice,
-        pinHash: results[3],
-        submittedAt: new Date().toISOString()
-      };
-      return stateRef.update({
-        pendingEntries: firebase.firestore.FieldValue.arrayUnion(entry)
-      });
+    var encPromises = [
+      realName ? encryptForAdmin(pubJwk, realName) : Promise.resolve(null),
+      contact ? encryptForAdmin(pubJwk, contact) : Promise.resolve(null),
+      referrerText ? encryptForAdmin(pubJwk, referrerText) : Promise.resolve(null),
+      pin ? sha256Hex(pin) : Promise.resolve(null)
+    ];
+    Promise.all(encPromises).then(function (results) {
+      if (isEdit && origEntry) {
+        var updated = {
+          id: origEntry.id,
+          nickname: nickname,
+          gender: gender,
+          birthYear: birthYear,
+          region: region,
+          workplace: workplace,
+          photos: photoDataUrls.length ? photoDataUrls.slice() : getPhotos(origEntry),
+          blurPhoto: blurPhoto && (photoDataUrls.length > 0 || getPhotos(origEntry).length > 0),
+          height: height,
+          intro: intro,
+          idealType: idealType,
+          dealbreaker: dealbreaker,
+          realNameEnc: results[0] || origEntry.realNameEnc,
+          contactEnc: results[1] || origEntry.contactEnc,
+          referrerEnc: results[2] || origEntry.referrerEnc,
+          degreeChoice: degreeChoice,
+          pinHash: results[3] || origEntry.pinHash,
+          submittedAt: origEntry.submittedAt
+        };
+        return db.runTransaction(function (tx) {
+          return tx.get(stateRef).then(function (doc) {
+            var s = doc.data();
+            var newEntries = (s.entries || []).map(function (e) { return e.id === editingEntryId ? updated : e; });
+            tx.update(stateRef, { entries: newEntries });
+          });
+        });
+      } else {
+        var entry = {
+          id: genId(),
+          nickname: nickname,
+          gender: gender,
+          birthYear: birthYear,
+          region: region,
+          workplace: workplace,
+          photos: photoDataUrls.length ? photoDataUrls.slice() : [],
+          blurPhoto: blurPhoto && photoDataUrls.length > 0,
+          height: height,
+          intro: intro,
+          idealType: idealType,
+          dealbreaker: dealbreaker,
+          realNameEnc: results[0],
+          contactEnc: results[1],
+          referrerEnc: results[2],
+          degreeChoice: degreeChoice,
+          pinHash: results[3],
+          submittedAt: new Date().toISOString()
+        };
+        return stateRef.update({
+          pendingEntries: firebase.firestore.FieldValue.arrayUnion(entry)
+        });
+      }
     }).then(function () {
       photoDataUrls = [];
-      showStamp();
+      if (isEdit) {
+        editingEntryId = null;
+        modalNotice('완료', '프로필이 수정되었어요.');
+        activeTab = 'list';
+        paint(currentState);
+      } else {
+        editingEntryId = null;
+        showStamp();
+      }
     }).catch(function (err) {
       btn.disabled = false;
       msg.textContent = '오류가 발생했어요: ' + (err.message || err);
@@ -1209,6 +1271,81 @@
     }
     overlay.querySelector('#modal-ok').addEventListener('click', finish);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(); });
+  }
+
+  function handleEdit(id) {
+    var state = currentState;
+    var entry = state.entries.find(function (e) { return e.id === id; });
+    if (!entry) return;
+    if (isAdminUnlocked) {
+      startEditing(entry);
+      return;
+    }
+    modalPin('본인 확인', '등록 시 설정한 개인 PIN을 입력하세요.').then(function (pin) {
+      if (!pin) return;
+      sha256Hex(pin).then(function (hash) {
+        if (hash !== entry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
+        startEditing(entry);
+      });
+    });
+  }
+
+  function startEditing(entry) {
+    editingEntryId = entry.id;
+    photoDataUrls = getPhotos(entry).slice();
+    activeTab = 'form';
+    paint(currentState);
+    setTimeout(function () {
+      var form = document.getElementById('entry-form');
+      if (!form) return;
+      var setVal = function (name, val) { var el = form.querySelector('[name="' + name + '"]'); if (el) el.value = val || ''; };
+      setVal('nickname', entry.nickname);
+      setVal('realName', '');
+      setVal('contact', '');
+      setVal('gender', entry.gender);
+      var genderRadio = form.querySelector('[name="gender"][value="' + entry.gender + '"]');
+      if (genderRadio) genderRadio.checked = true;
+      setVal('birthYear', entry.birthYear);
+      setVal('region', entry.region);
+      setVal('workplace', entry.workplace);
+      setVal('referrerText', '');
+      var degRadio = form.querySelector('[name="degreeChoice"][value="' + (entry.degreeChoice || '') + '"]');
+      if (degRadio) degRadio.checked = true;
+      setVal('height', entry.height || '');
+      setVal('intro', entry.intro || '');
+      setVal('idealType', entry.idealType || '');
+      setVal('dealbreaker', entry.dealbreaker || '');
+      var blurCheck = form.querySelector('#f-blur');
+      if (blurCheck) blurCheck.checked = !!entry.blurPhoto;
+      renderPhotoThumbs();
+    }, 50);
+  }
+
+  function handleCancelRequest(toId) {
+    var state = currentState;
+    modalVerifyIdentity().then(function (r) {
+      if (!r) return;
+      var myEntry = state.entries.find(function (e) { return e.nickname === r.nickname; });
+      if (!myEntry) return modalNotice('오류', '해당 닉네임으로 등록된 사람이 없어요.');
+      sha256Hex(r.pin).then(function (hash) {
+        if (hash !== myEntry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
+        var req = (state.dateRequests || []).find(function (rq) {
+          return rq.fromId === myEntry.id && rq.toId === toId && !rq.approved;
+        });
+        if (!req) return modalNotice('안내', '취소할 수 있는 신청이 없어요.');
+        db.runTransaction(function (tx) {
+          return tx.get(stateRef).then(function (doc) {
+            var s = doc.data();
+            var newRequests = (s.dateRequests || []).filter(function (rq) { return rq.id !== req.id; });
+            tx.update(stateRef, { dateRequests: newRequests });
+          });
+        }).then(function () {
+          modalNotice('완료', '데이트 신청이 취소되었어요.');
+        }).catch(function (err) {
+          modalNotice('오류', '취소에 실패했어요: ' + (err.message || err));
+        });
+      });
+    });
   }
 
   function handleDelete(id) {
@@ -1531,6 +1668,12 @@
       handleAdminToggle();
       return;
     }
+    if (e.target.id === 'cancel-edit') {
+      editingEntryId = null;
+      photoDataUrls = [];
+      paint(currentState);
+      return;
+    }
     var actionBtn = e.target.closest('[data-action]');
     if (actionBtn) {
       var action = actionBtn.getAttribute('data-action');
@@ -1546,6 +1689,8 @@
       else if (action === 'gallery') handleGallery(id);
       else if (action === 'reveal-contact') handleRevealContact(id);
       else if (action === 'detail') handleDetail(id);
+      else if (action === 'edit') handleEdit(id);
+      else if (action === 'cancel-request') handleCancelRequest(id);
       return;
     }
   });
