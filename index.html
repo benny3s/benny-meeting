@@ -497,7 +497,7 @@
   var ICON_LOCK = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/></svg>';
   var ICON_UNLOCK = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 9-3"/></svg>';
 
-  var NTFY_TOPIC = 'benny3s-meeting-admin-93034';
+  var NTFY_TOPIC = 'benny3s-meeting-notify';
   function notifyAdmin(title, body) {
     try {
       fetch('https://ntfy.sh', {
@@ -801,13 +801,13 @@
     if (entry.idealType) extras += '<div class="pf-extra"><b>선호</b> ' + escapeHtml(entry.idealType) + '</div>';
     if (entry.dealbreaker) extras += '<div class="pf-extra"><b>비선호</b> ' + escapeHtml(entry.dealbreaker) + '</div>';
     var contactHtml;
-    var hasApprovedMatch = (state.dateRequests || []).some(function (r) {
-      return r.approved && (r.fromId === entry.id || r.toId === entry.id) && r.revealedContact;
+    var hasApprovedContact = (state.dateRequests || []).some(function (r) {
+      return r.approved && (r.type || 'contact') === 'contact' && (r.fromId === entry.id || r.toId === entry.id) && r.revealedContact;
     });
     if (decryptedContacts[entry.id]) {
       contactHtml = '<div class="pf-contact open">' + ICON_UNLOCK + '<span>' + escapeHtml(decryptedContacts[entry.id]) + '</span></div>';
-    } else if (hasApprovedMatch) {
-      contactHtml = '<div class="pf-contact" style="cursor:pointer;" data-action="reveal-contact" data-id="' + escapeHtml(entry.id) + '">' + ICON_LOCK + '<span>데이트 성사! PIN 입력하여 연락처 보기</span></div>';
+    } else if (hasApprovedContact) {
+      contactHtml = '<div class="pf-contact" style="cursor:pointer;" data-action="reveal-contact" data-id="' + escapeHtml(entry.id) + '">' + ICON_LOCK + '<span>번호 공개 승인됨! PIN 입력하여 연락처 보기</span></div>';
     } else {
       contactHtml = '<div class="pf-contact locked">' + ICON_LOCK + '<span>연락처 비공개 (관리자만 확인 가능)</span></div>';
     }
@@ -833,7 +833,8 @@
           contactHtml +
         '</div>' +
         '<div class="pf-actions">' +
-          '<button type="button" class="card-btn primary" data-action="date" data-id="' + escapeHtml(entry.id) + '">💌 데이트 신청</button>' +
+          '<button type="button" class="card-btn" data-action="request-photo" data-id="' + escapeHtml(entry.id) + '">📷 사진 요청</button>' +
+          '<button type="button" class="card-btn primary" data-action="request-contact" data-id="' + escapeHtml(entry.id) + '">📱 번호 요청</button>' +
           adminBtn +
           '<button type="button" class="card-btn" data-action="edit" data-id="' + escapeHtml(entry.id) + '">수정</button>' +
           '<button type="button" class="card-btn danger" data-action="delete" data-id="' + escapeHtml(entry.id) + '">삭제</button>' +
@@ -1000,19 +1001,24 @@
     var reqs = state.dateRequests || [];
     var items = reqs.map(function (r) {
       var d = decryptedRequests[r.id];
+      var reqType = r.type || 'contact';
+      var typeBadge = reqType === 'photo'
+        ? '<span class="chip" style="background:#e8f0fe;color:#1a73e8;">📷 사진</span>'
+        : '<span class="chip" style="background:#fce8e6;color:#d93025;">📱 번호</span>';
       var body;
       if (d) {
         var fromNum = entryNum(d.fromId);
         var toNum = entryNum(d.toId);
         body =
-          '<div class="who">' +
+          '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + typeBadge +
+          '<div class="who" style="display:inline;">' +
             '<button type="button" class="card-btn" data-action="detail" data-id="' + escapeHtml(d.fromId) + '" style="flex:none;display:inline-flex;padding:4px 10px;">No. ' + fromNum + ' ' + escapeHtml(d.fromName) + '</button>' +
             ' → ' +
             '<button type="button" class="card-btn" data-action="detail" data-id="' + escapeHtml(d.toId) + '" style="flex:none;display:inline-flex;padding:4px 10px;">No. ' + toNum + ' ' + escapeHtml(d.toName) + '</button>' +
-          '</div>' +
+          '</div></div>' +
           (d.note ? '<div class="note">"' + escapeHtml(d.note) + '"</div>' : '');
       } else {
-        body = '<div class="who">복호화 중...</div>';
+        body = '<div class="who">' + typeBadge + ' 복호화 중...</div>';
       }
       var actionBtns = r.approved
         ? '<span class="chip chip--degree">승인됨</span>' +
@@ -1033,9 +1039,9 @@
       '<div class="admin-panel">' +
         pendingSection +
         '<hr class="perforation">' +
-        '<h2>💌 데이트 신청함</h2>' +
-        '<p class="sub">명단에서 들어온 데이트 신청이에요.</p>' +
-        (reqs.length ? items : '<p class="sub">아직 들어온 신청이 없어요.</p>') +
+        '<h2>📬 요청함</h2>' +
+        '<p class="sub">명단에서 들어온 사진/번호 요청이에요.</p>' +
+        (reqs.length ? items : '<p class="sub">아직 들어온 요청이 없어요.</p>') +
       '</div>'
     );
   }
@@ -1050,7 +1056,7 @@
     if (isAdminUnlocked) {
       tabs += '<button type="button" class="tab-btn" data-tab="admin" role="tab" aria-selected="' + (activeTab === 'admin') + '">관리자' +
         '<span class="count" title="승인 대기">대기 ' + pendingCount + '</span>' +
-        '<span class="count" title="데이트 신청">신청 ' + reqCount + '</span></button>';
+        '<span class="count" title="요청">요청 ' + reqCount + '</span></button>';
     }
     var panel;
     if (activeTab === 'list') panel = renderList(state);
@@ -1067,7 +1073,7 @@
         '</button>' +
       '</div></div>' +
       '<div class="notice-bar">' +
-        '<span class="notice-icon">&#128227;</span> 신청서 작성 또는 데이트 신청 후, 관리자에게 알려주세요! (알림 기능 준비 중)' +
+        '<span class="notice-icon">&#128227;</span> 신청서 작성 또는 사진/번호 요청 후, 관리자에게 알려주세요! (알림 기능 준비 중)' +
       '</div>' +
       '<div class="page">' +
         '<div class="tabs" role="tablist">' + tabs + '</div>' +
@@ -1429,28 +1435,32 @@
     });
   }
 
-  function handleDateRequest(toId) {
+  function handleRequest(toId, type) {
     var state = currentState;
     if (!state.adminAuth) { modalNotice('안내', '관리자 설정이 아직 완료되지 않았어요.'); return; }
     var target = state.entries.find(function (e) { return e.id === toId; });
     if (!target) return;
+    var isPhoto = type === 'photo';
+    var typeLabel = isPhoto ? '사진 보기' : '번호 보기';
     modalVerifyIdentity().then(function (r) {
       if (!r) return;
       var fromEntry = state.entries.find(function (e) { return e.nickname === r.nickname; });
       if (!fromEntry) return modalNotice('오류', '해당 닉네임으로 등록된 사람이 없어요.');
       sha256Hex(r.pin).then(function (hash) {
         if (hash !== fromEntry.pinHash) return modalNotice('오류', 'PIN이 올바르지 않아요.');
+        if (fromEntry.id === toId) return modalNotice('안내', '본인에게는 요청할 수 없어요.');
         var existingReq = (state.dateRequests || []).find(function (req) {
-          return req.fromId === fromEntry.id && req.toId === toId;
+          return req.fromId === fromEntry.id && req.toId === toId && (req.type || 'contact') === type;
         });
-        if (existingReq) return modalNotice('안내', '이미 ' + escapeHtml(target.nickname) + '님에게 데이트 신청을 보냈어요. 관리자 처리 후 다시 신청할 수 있어요.');
+        if (existingReq) return modalNotice('안내', '이미 ' + escapeHtml(target.nickname) + '님에게 ' + typeLabel + ' 요청을 보냈어요.');
+        var icon = isPhoto ? '📷' : '📱';
         var noteOverlay = openModal(
-          '<h3>💌 ' + escapeHtml(target.nickname) + '님에게</h3>' +
-          '<p class="modal-msg">한 마디 남기세요 (선택)</p>' +
-          '<textarea class="modal-input" id="modal-note" rows="3" maxlength="200" placeholder="예: 프로필 보고 관심이 생겼어요!"></textarea>' +
+          '<h3>' + icon + ' ' + escapeHtml(target.nickname) + '님 ' + typeLabel + ' 요청</h3>' +
+          '<p class="modal-msg">관리자 승인 후 확인할 수 있어요.</p>' +
+          '<textarea class="modal-input" id="modal-note" rows="3" maxlength="200" placeholder="한 마디 남기기 (선택)"></textarea>' +
           '<div class="modal-actions">' +
             '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
-            '<button type="button" class="card-btn primary" id="modal-ok">신청하기</button>' +
+            '<button type="button" class="card-btn primary" id="modal-ok">요청하기</button>' +
           '</div>'
         );
         return new Promise(function (resolve) {
@@ -1465,13 +1475,13 @@
         if (note === null || note === undefined) return;
         var reqData = { fromId: fromEntry.id, fromName: fromEntry.nickname, toId: toId, toName: target.nickname, note: note || '' };
         encryptForAdmin(state.adminAuth.publicKeyJwk, reqData).then(function (enc) {
-          var req = { id: genId(), fromId: fromEntry.id, toId: toId, submittedAt: new Date().toISOString(), iv: enc.iv, ciphertext: enc.ciphertext, wrappedKey: enc.wrappedKey };
+          var req = { id: genId(), type: type, fromId: fromEntry.id, toId: toId, submittedAt: new Date().toISOString(), iv: enc.iv, ciphertext: enc.ciphertext, wrappedKey: enc.wrappedKey };
           return stateRef.update({
             dateRequests: firebase.firestore.FieldValue.arrayUnion(req)
           });
         }).then(function () {
-          notifyAdmin('데이트 신청', fromEntry.nickname + '님이 ' + target.nickname + '님에게 데이트 신청을 보냈어요!');
-          modalNotice('신청 완료', escapeHtml(target.nickname) + '님에게 데이트 신청을 보냈어요!');
+          notifyAdmin(typeLabel + ' 요청', fromEntry.nickname + '님이 ' + target.nickname + '님의 ' + typeLabel + '를 요청했어요!');
+          modalNotice('요청 완료', escapeHtml(target.nickname) + '님에게 ' + typeLabel + ' 요청을 보냈어요!');
         });
       });
     });
@@ -1508,6 +1518,28 @@
     var state = currentState;
     var req = (state.dateRequests || []).find(function (r) { return r.id === id; });
     if (!req) return;
+    var reqType = req.type || 'contact';
+
+    if (reqType === 'photo') {
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).map(function (r) {
+            if (r.id === id) {
+              var copy = JSON.parse(JSON.stringify(r));
+              copy.approved = true;
+              return copy;
+            }
+            return r;
+          });
+          tx.update(stateRef, { dateRequests: reqs });
+        });
+      }).catch(function (err) {
+        modalNotice('오류', '승인에 실패했어요: ' + (err.message || err));
+      });
+      return;
+    }
+
     var fromEntry = (state.entries || []).find(function (e) { return e.id === req.fromId; });
     var toEntry = (state.entries || []).find(function (e) { return e.id === req.toId; });
     var decryptPromises = [];
@@ -1580,16 +1612,13 @@
           el.classList.remove('blurred'); el.setAttribute('data-action', 'gallery');
           return;
         }
-        var approved = (state.dateRequests || []).some(function (req) {
-          return req.approved && (
-            (req.fromId === myEntry.id && req.toId === id) ||
-            (req.toId === myEntry.id && req.fromId === id)
-          );
+        var photoApproved = (state.dateRequests || []).some(function (req) {
+          return req.approved && (req.type === 'photo') && req.fromId === myEntry.id && req.toId === id;
         });
-        if (approved) {
+        if (photoApproved) {
           el.classList.remove('blurred'); el.setAttribute('data-action', 'gallery');
         } else {
-          modalNotice('안내', '승인된 데이트 매칭이 있어야 사진을 볼 수 있어요.');
+          modalNotice('안내', '사진 보기 요청을 보내고 관리자 승인을 받아야 해요.');
         }
       });
     });
@@ -1639,9 +1668,9 @@
     var entry = state.entries.find(function (e) { return e.id === id; });
     if (!entry) return;
     var matchReqs = (state.dateRequests || []).filter(function (r) {
-      return r.approved && r.revealedContact && (r.fromId === id || r.toId === id);
+      return r.approved && (r.type || 'contact') === 'contact' && r.revealedContact && (r.fromId === id || r.toId === id);
     });
-    if (!matchReqs.length) return modalNotice('안내', '성사된 데이트가 없어요.');
+    if (!matchReqs.length) return modalNotice('안내', '승인된 번호 요청이 없어요.');
     modalVerifyIdentity().then(function (r) {
       if (!r) return;
       var myEntry = state.entries.find(function (e) { return e.nickname === r.nickname; });
@@ -1790,7 +1819,8 @@
       var action = actionBtn.getAttribute('data-action');
       var id = actionBtn.getAttribute('data-id');
       if (action === 'delete') handleDelete(id);
-      else if (action === 'date') handleDateRequest(id);
+      else if (action === 'request-photo') handleRequest(id, 'photo');
+      else if (action === 'request-contact') handleRequest(id, 'contact');
       else if (action === 'approve') handleApprove(id);
       else if (action === 'reject') handleReject(id);
       else if (action === 'approve-request') handleApproveRequest(id);
@@ -1885,19 +1915,10 @@
   /* ---- init ---- */
   function init() {
     var localState = readStateLocal();
-    var resetAdmin = window.location.search.indexOf('reset-admin') !== -1;
 
     stateRef.get().then(function (doc) {
       if (doc.exists) {
-        var data = doc.data();
-        if (resetAdmin && data.adminAuth) {
-          data.adminAuth = null;
-          return stateRef.set(data).then(function () {
-            window.location.href = window.location.pathname;
-            return data;
-          });
-        }
-        return data;
+        return doc.data();
       }
       return stateRef.set(localState).then(function () { return localState; });
     }).then(function (state) {
@@ -1960,7 +1981,7 @@
         showNotification('새 접수!', '새로운 인연 신청서가 도착했어요. (' + state.pendingEntries.length + '건 대기중)');
       }
       if (prevRequestCount >= 0 && state.dateRequests.length > prevRequestCount) {
-        showNotification('데이트 신청!', '새로운 데이트 신청이 도착했어요.');
+        showNotification('새 요청!', '새로운 사진/번호 요청이 도착했어요.');
       }
       prevPendingCount = state.pendingEntries.length;
       prevRequestCount = state.dateRequests.length;
