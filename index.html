@@ -723,6 +723,7 @@
     var deg = degreeLabel(entry.degreeChoice || entry.degree);
     var extras = '';
     if (entry.height) extras += '<div class="pf-extra"><b>키</b> ' + escapeHtml(entry.height) + 'cm</div>';
+    if (entry.intro) extras += '<div class="pf-extra"><b>소개</b> ' + escapeHtml(entry.intro) + '</div>';
     if (entry.idealType) extras += '<div class="pf-extra"><b>선호</b> ' + escapeHtml(entry.idealType) + '</div>';
     if (entry.dealbreaker) extras += '<div class="pf-extra"><b>비선호</b> ' + escapeHtml(entry.dealbreaker) + '</div>';
     var contactHtml;
@@ -854,6 +855,8 @@
                 '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8" placeholder="숫자 4~8자리" required>' +
                 '<span class="hint">나중에 본인이 신청을 취소하거나 데이트를 신청할 때 필요해요.</span></div>' +
             '</div>' +
+            '<div class="field"><label for="f-intro">자기소개 <span class="opt">(선택)</span></label>' +
+              '<textarea id="f-intro" name="intro" rows="2" maxlength="300" placeholder="예: 요리를 좋아하고, 주말엔 카페 탐방 다녀요!"></textarea></div>' +
             '<div class="field"><label for="f-idealtype">원하는 이성 조건 <span class="opt">(선택)</span></label>' +
               '<textarea id="f-idealtype" name="idealType" rows="2" maxlength="200" placeholder="예: 유머러스하고 대화가 잘 통하는 사람"></textarea></div>' +
             '<div class="field"><label for="f-dealbreaker">피하고 싶은 조건 <span class="opt">(선택)</span></label>' +
@@ -1071,6 +1074,7 @@
     var degreeChoice = degreeEl ? degreeEl.value : '';
     var pin = (form.querySelector('[name="pin"]').value || '').trim();
     var height = (form.querySelector('[name="height"]').value || '').trim();
+    var intro = (form.querySelector('[name="intro"]').value || '').trim();
     var idealType = (form.querySelector('[name="idealType"]').value || '').trim();
     var dealbreaker = (form.querySelector('[name="dealbreaker"]').value || '').trim();
     var blurPhoto = form.querySelector('#f-blur') ? form.querySelector('#f-blur').checked : false;
@@ -1107,6 +1111,7 @@
         photo: photoDataUrl || null,
         blurPhoto: blurPhoto && !!photoDataUrl,
         height: height,
+        intro: intro,
         idealType: idealType,
         dealbreaker: dealbreaker,
         realNameEnc: results[0],
