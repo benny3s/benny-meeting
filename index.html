@@ -665,7 +665,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-22';
+  var APP_VERSION = '2026-09-04-23';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -1631,7 +1631,7 @@
 
   function renderForm(state) {
     var isEdit = !!editingEntryId;
-    var exampleTip = (isEdit || exampleTipDismissed) ? '' :
+    var exampleTip = exampleTipDismissed ? '' :
       '<div class="example-tip" id="example-tip">' +
         '<button type="button" class="example-tip-x" id="example-tip-close" aria-label="닫기">&times;</button>' +
         '<div class="example-tip-title">✍️ 이렇게 써보세요 (예시)</div>' +
@@ -2599,6 +2599,7 @@
 
   function startEditing(entry) {
     editingEntryId = entry.id;
+    exampleTipDismissed = false; /* 수정 모드에서도 예시 카드 표시 */
     photoDataUrls = [];
     formPhotosReady = false;
     /* 원본 사진(고화질)을 photos/{id}에서 불러와 편집기에 채움 */
