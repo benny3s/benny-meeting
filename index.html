@@ -3863,7 +3863,7 @@
   if (fcmMessaging) {
     try {
       fcmMessaging.onMessage(function (payload) {
-        var n = (payload && payload.notification) || {};
+        var n = (payload && payload.notification) || (payload && payload.data) || {};
         modalNotice(n.title || '새 알림', n.body || '');
       });
     } catch (e) {}

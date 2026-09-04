@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 앱 상태(신청서·요청·로그 등) — 로그인(익명 인증)한 사용자만
+    match /app/state {
+      allow read, write: if request.auth != null;
+    }
+
+    // 사진 — 로그인한 사용자만
+    match /photos/{entryId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // 푸시 토큰 — 로그인한 사용자만
+    match /pushTokens/{entryId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // 그 외 전부 차단
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
