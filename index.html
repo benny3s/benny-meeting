@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="light">
-<title>베니 미팅</title>
+<title>베친소</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap">
 <style id="page-style">
   :root {
@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-29';
+  var APP_VERSION = '2026-09-05-30';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -2125,7 +2125,7 @@
     return (
       '<div class="masthead"><div class="masthead-inner">' +
         '<div class="masthead-icon">' + ICON_HEART + '</div>' +
-        '<div><h1 id="masthead-title" title="새로고침" style="cursor:pointer;">베니 미팅</h1><p>관리자 베니(<a href="https://instagram.com/benny3_song" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:underline">@benny3_song</a>)의 친구를 소개하는, 작은 신청 창구에요.</p></div>' +
+        '<div><h1 id="masthead-title" title="새로고침" style="cursor:pointer;">베친소</h1><p>관리자 베니(<a href="https://instagram.com/benny3_song" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:underline">@benny3_song</a>)의 친구를 소개하는, 작은 신청 창구에요.</p></div>' +
       '</div>' +
       '<div class="admin-bar">' +
         '<div class="admin-bar-row">' +
@@ -3761,7 +3761,7 @@
       } catch (e) {}
     }
     var overlay = openModal(
-      '<h3 style="text-align:center;">안녕하세요! 베니 미팅입니다 &#128522;</h3>' +
+      '<h3 style="text-align:center;">안녕하세요! 베친소입니다 &#128522;</h3>' +
       '<div class="modal-msg" style="text-align:left;line-height:1.8;font-size:0.88rem;">' +
         '<div style="background:var(--gold-soft);border:1px solid var(--gold);border-radius:10px;padding:10px 12px;margin-bottom:12px;">' +
           '&#128276; <b>알림 기능이 아직 준비 중이에요.</b><br>사진/번호 요청이 왔는지 확인하려면 <b>가끔 직접 로그인해서 "신청 현황" 탭</b>을 봐주세요! 자동 알림(카카오톡 등)은 준비되는 대로 추가할게요.' +
@@ -3809,6 +3809,32 @@
   function myEntryOrPending() {
     return findMyEntry(currentState) || findMyPending(currentState);
   }
+  /* 셀프 테스트: 이 기기에서 시스템 알림이 뜨는지 즉시 확인 (서비스워커로 표시) */
+  function sendTestNotification() {
+    if (!('Notification' in window)) { modalNotice('안내', '이 브라우저는 알림을 지원하지 않아요.'); return; }
+    var icon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"%3E%3Crect width="48" height="48" fill="%23B23A48"/%3E%3Ctext x="24" y="34" font-size="26" text-anchor="middle" fill="white"%3E%E2%99%A5%3C/text%3E%3C/svg%3E';
+    function fire() {
+      var opts = { body: '이 알림이 보이면 정상이에요! 실제 요청이 오면 이렇게 알려드려요.', icon: icon, tag: 'benchinso-test' };
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+        navigator.serviceWorker.getRegistration().then(function (reg) {
+          if (reg && reg.showNotification) { reg.showNotification('베친소 테스트 알림 🔔', opts); }
+          else { try { new Notification('베친소 테스트 알림 🔔', opts); } catch (e) {} }
+        }).catch(function () { try { new Notification('베친소 테스트 알림 🔔', opts); } catch (e) {} });
+      } else { try { new Notification('베친소 테스트 알림 🔔', opts); } catch (e) {} }
+    }
+    if (Notification.permission === 'granted') {
+      fire();
+      if (notifOn()) modalNotice('테스트 알림 전송 🔔', '방금 알림을 보냈어요! 화면 상단(또는 알림 센터)에 떴는지 확인해보세요. 앱을 잠깐 내려두고 보면 더 확실해요.');
+      else modalNotice('테스트 알림 전송 🔔', '알림은 떴지만, 아직 "알림 켜기"를 안 하셔서 실제 요청 알림은 안 올 수 있어요. 먼저 🔔 알림 켜기를 해주세요.');
+    } else if (Notification.permission === 'denied') {
+      modalNotice('알림 차단됨', '브라우저 설정에서 이 사이트의 알림을 "허용"으로 바꿔주세요. (주소창 왼쪽 자물쇠 → 알림)');
+    } else {
+      Notification.requestPermission().then(function (p) {
+        if (p === 'granted') { fire(); modalNotice('테스트 알림 전송 🔔', '방금 알림을 보냈어요! 화면 상단(또는 알림 센터)에서 확인해보세요.'); }
+        else { modalNotice('알림 미허용', '"허용"을 눌러야 테스트할 수 있어요.'); }
+      });
+    }
+  }
   function showNotifHelp() {
     var ua = navigator.userAgent || '';
     var isIOS = /iPhone|iPad|iPod/i.test(ua);
@@ -3823,6 +3849,7 @@
     }
     var html =
       '<h3>🔔 알림 켜는 법</h3>' +
+      '<button type="button" class="submit-btn" id="notif-test-btn" style="width:100%;box-sizing:border-box;margin:2px 0 12px;padding:11px;font-size:0.92rem;">🔔 테스트 알림 보내기</button>' +
       '<p class="modal-msg" style="margin-bottom:6px;">요청이 오거나 승인·거절되면 기기로 바로 알림을 받아요. 기기별로 켜는 방법이 조금 달라요.</p>' +
       sec('android', '🤖 안드로이드 (크롬)',
         '<li>이 화면에서 <b>🔔 알림 켜기</b> 를 누르세요.</li>' +
@@ -3844,6 +3871,8 @@
     overlay.classList.add('wide-modal');
     function finish() { closeModal(overlay); }
     overlay.querySelector('#modal-ok').addEventListener('click', finish);
+    var tb = overlay.querySelector('#notif-test-btn');
+    if (tb) tb.addEventListener('click', sendTestNotification);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(); });
   }
   function handleNotifToggle() {
@@ -3947,7 +3976,7 @@
       var base = location.href.split('?')[0].split('#')[0];
       var dir = base.substring(0, base.lastIndexOf('/') + 1);
       var manifest = {
-        name: '베니 미팅', short_name: '베니 미팅',
+        name: '베친소', short_name: '베친소',
         start_url: base, scope: dir, display: 'standalone',
         background_color: '#FBF3EE', theme_color: '#B23A48',
         icons: [
