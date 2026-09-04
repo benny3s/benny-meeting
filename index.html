@@ -342,6 +342,41 @@
     padding: 7px 16px; border-radius: 999px; font-size: 0.85rem; cursor: pointer;
   }
   .filter-btn[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .view-toggle {
+    margin-left: 10px; background: var(--card); border: 1px solid var(--line); color: var(--muted);
+    padding: 5px 12px; border-radius: 999px; font-size: 0.8rem; cursor: pointer; vertical-align: middle;
+  }
+  .view-toggle.on { background: var(--gold-soft); color: var(--gold); border-color: var(--gold); }
+
+  /* 간단히(리스트) 보기 */
+  .compact-list { display: flex; flex-direction: column; gap: 8px; }
+  .compact-row {
+    display: flex; align-items: center; gap: 12px; cursor: pointer;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
+  }
+  .compact-row:hover { border-color: var(--gold); }
+  .compact-thumb {
+    width: 52px; height: 52px; border-radius: 10px; overflow: hidden; flex: none; background: var(--line);
+  }
+  .compact-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .compact-thumb.blurred img { filter: blur(7px); }
+  .compact-thumb--empty { display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; }
+  .compact-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .compact-name { font-weight: 700; font-size: 0.96rem; }
+  .compact-chips { display: flex; gap: 5px; flex-wrap: wrap; }
+  .compact-chips .chip { font-size: 0.72rem; padding: 1px 8px; }
+  .compact-meta {
+    display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+    font-size: 0.8rem; color: var(--muted);
+  }
+  .compact-meta svg { flex: none; opacity: 0.7; }
+  .compact-meta span { margin-right: 8px; }
+  .compact-arrow { color: var(--muted); font-size: 1.4rem; flex: none; }
+
+  /* 상세 카드 팝업 (간단히 보기에서 클릭 시) */
+  .modal-overlay.card-detail-modal .modal-box {
+    padding: 0; background: transparent; box-shadow: none; max-width: 340px; overflow: visible;
+  }
 
   .roster-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px;
@@ -586,11 +621,12 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-10';
+  var APP_VERSION = '2026-09-04-11';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
   var listFilter = 'all';
+  var listView = 'card'; /* 'card' | 'compact' */
   var activeTab = 'form';
   var isAdminUnlocked = false;
   var adminPrivateKey = null;
@@ -1463,21 +1499,73 @@
     if (!ordered.length) {
       return '<div class="empty-state"><div class="big">' + ICON_HEART + '</div><p>아직 등록된 사람이 없어요.<br>첫 번째로 신청해 보세요!</p></div>';
     }
-    var cards = ordered.map(function (e) {
-      var idx = entries.indexOf(e);
-      return cardHtml(e, idx + 1, state);
-    }).join('');
+    var body;
+    if (listView === 'compact') {
+      body = '<div class="compact-list">' + ordered.map(function (e) {
+        var idx = entries.indexOf(e);
+        return compactRowHtml(e, idx + 1);
+      }).join('') + '</div>';
+    } else {
+      body = '<div class="roster-grid">' + ordered.map(function (e) {
+        var idx = entries.indexOf(e);
+        return cardHtml(e, idx + 1, state);
+      }).join('') + '</div>';
+    }
+    var viewToggle = '<button type="button" class="view-toggle' + (listView === 'compact' ? ' on' : '') + '" data-viewtoggle="1">' +
+      (listView === 'compact' ? '🖼 사진으로' : '☰ 간단히') + '</button>';
     return (
       '<div class="list-toolbar">' +
-        '<div class="summary"><strong>' + entries.length + '명</strong> 등록 (남 ' + maleCount + ' / 여 ' + femaleCount + ')</div>' +
+        '<div class="summary"><strong>' + entries.length + '명</strong> 등록 (남 ' + maleCount + ' / 여 ' + femaleCount + ')' + viewToggle + '</div>' +
         '<div class="filter-group">' +
           '<button type="button" class="filter-btn" data-filter="all" aria-pressed="' + (listFilter === 'all') + '">전체</button>' +
           '<button type="button" class="filter-btn" data-filter="male" aria-pressed="' + (listFilter === 'male') + '">남성</button>' +
           '<button type="button" class="filter-btn" data-filter="female" aria-pressed="' + (listFilter === 'female') + '">여성</button>' +
         '</div>' +
       '</div>' +
-      '<div class="roster-grid">' + cards + '</div>'
+      body
     );
+  }
+
+  /* 간단히(리스트) 보기 한 줄 — 클릭 시 상세 카드 팝업 */
+  function compactRowHtml(entry, num) {
+    var displayName = entry.nickname || entry.name || '';
+    var thumb = cardThumb(entry);
+    var photo = thumb
+      ? '<div class="compact-thumb' + (entry.blurPhoto ? ' blurred' : '') + '"><img src="' + thumb + '" alt="" loading="lazy"></div>'
+      : '<div class="compact-thumb compact-thumb--empty" style="background:' + avatarColor(entry.id) + '">' + escapeHtml(initials(displayName)) + '</div>';
+    var ageStr = entry.birthYear ? (String(entry.birthYear).slice(2) + '년생') : '-';
+    var deg = degreeLabel(entry.degreeChoice || entry.degree);
+    return (
+      '<div class="compact-row" data-action="card-detail" data-id="' + escapeHtml(entry.id) + '">' +
+        photo +
+        '<div class="compact-info">' +
+          '<div class="compact-name">' + escapeHtml(displayName) + '</div>' +
+          '<div class="compact-chips">' +
+            '<span class="chip chip--gender-' + escapeHtml(entry.gender) + '">' + genderLabel(entry.gender) + '</span>' +
+            '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
+            '<span class="chip chip--degree">' + escapeHtml(deg) + '</span>' +
+          '</div>' +
+          '<div class="compact-meta">' + ICON_PIN + '<span>' + escapeHtml(entry.region || '-') + '</span>' +
+            ICON_BRIEF + '<span>' + escapeHtml(entry.workplace || '-') + '</span></div>' +
+        '</div>' +
+        '<span class="compact-arrow">›</span>' +
+      '</div>'
+    );
+  }
+
+  function handleCardDetail(id) {
+    var state = currentState;
+    var entry = (state.entries || []).find(function (e) { return e.id === id; });
+    if (!entry) return;
+    var idx = (state.entries || []).indexOf(entry);
+    var overlay = openModal(cardHtml(entry, idx + 1, state));
+    overlay.classList.add('card-detail-modal');
+    var closeActions = ['edit', 'delete', 'request-photo', 'request-contact', 'detail'];
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) { closeModal(overlay); return; }
+      var btn = e.target.closest('[data-action]');
+      if (btn && closeActions.indexOf(btn.getAttribute('data-action')) >= 0) closeModal(overlay);
+    });
   }
 
   function renderForm(state) {
@@ -3217,6 +3305,11 @@
       paint(currentState);
       return;
     }
+    if (e.target.closest('[data-viewtoggle]')) {
+      listView = (listView === 'compact') ? 'card' : 'compact';
+      paint(currentState);
+      return;
+    }
     if (e.target.closest('#admin-toggle')) {
       handleAdminToggle();
       return;
@@ -3268,6 +3361,7 @@
       else if (action === 'gallery') handleGallery(id);
       else if (action === 'reveal-contact') handleRevealContact(id);
       else if (action === 'detail') handleDetail(id);
+      else if (action === 'card-detail') handleCardDetail(id);
       else if (action === 'detail-pending') handleDetailPending(id);
       else if (action === 'edit') handleEdit(id);
       else if (action === 'cancel-request') handleCancelRequest(id);
