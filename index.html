@@ -376,7 +376,16 @@
   /* 상세 카드 팝업 (간단히 보기에서 클릭 시) */
   .modal-overlay.card-detail-modal .modal-box {
     padding: 0; background: transparent; box-shadow: none; max-width: 340px; overflow: visible;
+    position: relative;
   }
+  .card-close {
+    position: absolute; top: 8px; right: 8px; z-index: 3;
+    width: 34px; height: 34px; border-radius: 50%; border: none; cursor: pointer;
+    background: rgba(0,0,0,0.55); color: #fff; font-size: 1.5rem; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* 모달 열릴 때 배경 스크롤 잠금 */
+  body.modal-open { overflow: hidden; }
 
   .roster-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px;
@@ -621,7 +630,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-11';
+  var APP_VERSION = '2026-09-04-12';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -920,6 +929,7 @@
   var selfPop = false;     /* 우리가 정리용으로 부른 history.back() */
   function pushOverlay(el, dismiss) {
     overlayStack.push({ el: el, dismiss: dismiss });
+    document.body.classList.add('modal-open'); /* 배경 스크롤 잠금 */
     try { history.pushState({ meetOverlay: overlayStack.length }, ''); } catch (e) {}
   }
   function popOverlay(el) {
@@ -929,6 +939,7 @@
     }
     if (idx < 0) return;
     overlayStack.splice(idx, 1);
+    if (!overlayStack.length) document.body.classList.remove('modal-open'); /* 스크롤 잠금 해제 */
     if (!handlingPop) {
       selfPop = true;
       try { history.back(); } catch (e) { selfPop = false; }
@@ -1558,11 +1569,12 @@
     var entry = (state.entries || []).find(function (e) { return e.id === id; });
     if (!entry) return;
     var idx = (state.entries || []).indexOf(entry);
-    var overlay = openModal(cardHtml(entry, idx + 1, state));
+    var overlay = openModal('<button type="button" class="card-close" id="card-detail-close" aria-label="닫기">&times;</button>' + cardHtml(entry, idx + 1, state));
     overlay.classList.add('card-detail-modal');
     var closeActions = ['edit', 'delete', 'request-photo', 'request-contact', 'detail'];
     overlay.addEventListener('click', function (e) {
       if (e.target === overlay) { closeModal(overlay); return; }
+      if (e.target.closest('#card-detail-close')) { closeModal(overlay); return; }
       var btn = e.target.closest('[data-action]');
       if (btn && closeActions.indexOf(btn.getAttribute('data-action')) >= 0) closeModal(overlay);
     });
