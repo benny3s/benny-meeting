@@ -2127,7 +2127,8 @@
           '<button type="button" class="admin-link" id="show-notice">&#128227; 공지사항</button>' +
           (NOTIF_ENABLED
             ? '<button type="button" class="admin-link' + (notifOn() ? ' unlocked' : '') + '" id="notif-toggle">' +
-              (notifOn() ? '&#128276; 알림 켜짐' : '&#128276; 알림 켜기') + '</button>'
+              (notifOn() ? '&#128276; 알림 켜짐' : '&#128276; 알림 켜기') + '</button>' +
+              '<button type="button" class="admin-link" id="notif-help" title="알림 켜는 법" style="padding:6px 11px;">&#10067;</button>'
             : '') +
         '</div>' +
         '<div class="admin-bar-row">' +
@@ -3496,6 +3497,10 @@
       handleNotifToggle();
       return;
     }
+    if (e.target.closest('#notif-help')) {
+      showNotifHelp();
+      return;
+    }
     if (e.target.closest('#add-home')) {
       handleAddToHome();
       return;
@@ -3802,6 +3807,43 @@
   }
   function myEntryOrPending() {
     return findMyEntry(currentState) || findMyPending(currentState);
+  }
+  function showNotifHelp() {
+    var ua = navigator.userAgent || '';
+    var isIOS = /iPhone|iPad|iPod/i.test(ua);
+    var isAndroid = /Android/i.test(ua);
+    var mine = isIOS ? 'ios' : (isAndroid ? 'android' : 'pc');
+    function badge(k) { return mine === k ? ' <span style="background:var(--accent);color:#fff;font-size:0.68rem;padding:1px 7px;border-radius:8px;vertical-align:middle;">내 기기</span>' : ''; }
+    function sec(k, title, steps) {
+      var hot = mine === k;
+      return '<div style="border:1px solid ' + (hot ? 'var(--accent)' : 'var(--line)') + ';border-radius:12px;padding:12px 14px;margin-top:10px;' + (hot ? 'background:var(--paper);' : '') + '">' +
+        '<div style="font-weight:700;font-size:0.92rem;margin-bottom:6px;">' + title + badge(k) + '</div>' +
+        '<ol style="margin:0;padding-left:18px;font-size:0.84rem;line-height:1.6;color:var(--ink);">' + steps + '</ol></div>';
+    }
+    var html =
+      '<h3>🔔 알림 켜는 법</h3>' +
+      '<p class="modal-msg" style="margin-bottom:6px;">요청이 오거나 승인·거절되면 기기로 바로 알림을 받아요. 기기별로 켜는 방법이 조금 달라요.</p>' +
+      sec('android', '🤖 안드로이드 (크롬)',
+        '<li>이 화면에서 <b>🔔 알림 켜기</b> 를 누르세요.</li>' +
+        '<li>“알림을 허용하시겠어요?” 가 뜨면 <b>허용</b>.</li>' +
+        '<li>끝! 앱을 꺼둬도 알림이 와요.</li>') +
+      sec('ios', '🍎 아이폰 (사파리 · 홈 화면 추가 필수)',
+        '<li><b>사파리(Safari)</b>로 이 페이지를 여세요. (크롬 앱은 안 돼요)</li>' +
+        '<li>아래쪽 공유 버튼 <b>⬆️</b> → <b>“홈 화면에 추가”</b>.</li>' +
+        '<li>홈 화면에 생긴 <b>아이콘</b>으로 앱을 다시 여세요.</li>' +
+        '<li>그 안에서 <b>🔔 알림 켜기</b> → <b>허용</b>.</li>' +
+        '<li style="color:var(--muted);">※ iOS 16.4 이상에서만 웹 알림이 돼요.</li>') +
+      sec('pc', '💻 PC (크롬 · 엣지)',
+        '<li><b>🔔 알림 켜기</b> 를 누르세요.</li>' +
+        '<li>주소창 아래 뜨는 창에서 <b>허용</b>.</li>' +
+        '<li>브라우저가 켜져 있을 때 알림이 와요.</li>') +
+      '<p class="modal-msg" style="margin:12px 0 0;font-size:0.8rem;">실수로 <b>차단</b>을 눌렀다면: 주소창 왼쪽 <b>자물쇠</b> 아이콘 → 알림 → <b>허용</b> 으로 바꾸면 돼요.</p>' +
+      '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">확인</button></div>';
+    var overlay = openModal(html);
+    overlay.classList.add('wide-modal');
+    function finish() { closeModal(overlay); }
+    overlay.querySelector('#modal-ok').addEventListener('click', finish);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(); });
   }
   function handleNotifToggle() {
     if (!currentUser) { modalNotice('로그인 필요', '알림은 로그인한 뒤 켤 수 있어요. 먼저 로그인해주세요.'); return; }
