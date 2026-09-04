@@ -378,6 +378,10 @@
     padding: 0; background: transparent; box-shadow: none; max-width: 340px; overflow: visible;
     position: relative;
   }
+  /* 긴 프로필은 팝업 안에서 스크롤 (X 버튼은 고정) */
+  .card-detail-modal .card-scroll {
+    max-height: 86vh; overflow-y: auto; border-radius: 16px; -webkit-overflow-scrolling: touch;
+  }
   .card-close {
     position: absolute; top: 8px; right: 8px; z-index: 3;
     width: 34px; height: 34px; border-radius: 50%; border: none; cursor: pointer;
@@ -630,7 +634,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-12';
+  var APP_VERSION = '2026-09-04-13';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -1569,7 +1573,10 @@
     var entry = (state.entries || []).find(function (e) { return e.id === id; });
     if (!entry) return;
     var idx = (state.entries || []).indexOf(entry);
-    var overlay = openModal('<button type="button" class="card-close" id="card-detail-close" aria-label="닫기">&times;</button>' + cardHtml(entry, idx + 1, state));
+    var overlay = openModal(
+      '<button type="button" class="card-close" id="card-detail-close" aria-label="닫기">&times;</button>' +
+      '<div class="card-scroll">' + cardHtml(entry, idx + 1, state) + '</div>'
+    );
     overlay.classList.add('card-detail-modal');
     var closeActions = ['edit', 'delete', 'request-photo', 'request-contact', 'detail'];
     overlay.addEventListener('click', function (e) {
