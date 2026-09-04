@@ -1,4 +1,4 @@
-/* 인연 접수처 — 요청 이벤트 발생 시 상대에게 FCM 웹 푸시 발송 */
+/* 베니 미팅 — 요청 이벤트 발생 시 상대에게 FCM 웹 푸시 발송 */
 const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
 admin.initializeApp();
@@ -84,6 +84,14 @@ exports.onStateChange = functions
         else if (ns === 'pending' && (ps === 'held' || ps === 'rejected')) jobs.push(sendTo(r.toId, type + ' 재요청', nameOf(entries, r.fromId) + '님이 정보를 담아 다시 요청했어요'));
       }
     });
+
+    /* 새 신청서(승인 대기) → 관리자에게 */
+    const beforePend = {};
+    (before.pendingEntries || []).forEach((p) => { beforePend[p.id] = true; });
+    (after.pendingEntries || []).forEach((p) => {
+      if (!beforePend[p.id]) jobs.push(sendTo('admin', '새 신청서 📝', (p.nickname || '누군가') + '님이 신청서를 냈어요 (승인 대기)'));
+    });
+
     await Promise.all(jobs);
     return null;
   });
