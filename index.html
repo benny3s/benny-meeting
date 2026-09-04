@@ -1584,7 +1584,10 @@
     }).join('');
     return (
       '<div class="admin-panel">' +
-        '<h2>신청 현황</h2>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
+          '<h2 style="margin:0;">신청 현황</h2>' +
+          '<button type="button" class="card-btn" id="change-my-pin" style="flex:none;">🔑 PIN 변경</button>' +
+        '</div>' +
         '<p class="sub">' + escapeHtml(me.nickname) + '님 (고유번호 ' + escapeHtml(formatUid(me) || '—') + '), 반가워요! 받은 요청은 직접 승인하거나 거절할 수 있어요.</p>' +
         sections +
       '</div>'
@@ -1927,6 +1930,72 @@
     });
   }
 
+  /* 숫자 PIN 설정 모달 (신규/확인) */
+  function modalNumericPinSetup(title, message) {
+    return new Promise(function (resolve) {
+      var overlay = openModal(
+        '<h3>' + escapeHtml(title) + '</h3>' +
+        '<p class="modal-msg">' + escapeHtml(message) + '</p>' +
+        '<input type="text" inputmode="numeric" class="modal-input" id="np1" data-numeric maxlength="8" placeholder="새 PIN (숫자 4~8자리)">' +
+        '<input type="text" inputmode="numeric" class="modal-input" id="np2" data-numeric maxlength="8" placeholder="새 PIN 확인" style="margin-top:8px;">' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
+          '<button type="button" class="card-btn primary" id="modal-ok">변경</button>' +
+        '</div>'
+      );
+      function finish(v) { closeModal(overlay); resolve(v); }
+      overlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
+      overlay.querySelector('#modal-ok').addEventListener('click', function () {
+        finish({ p1: overlay.querySelector('#np1').value.trim(), p2: overlay.querySelector('#np2').value.trim() });
+      });
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
+    });
+  }
+
+  /* 로그인한 본인이 개인 PIN 변경 (연락처 자가암호화도 새 PIN으로 재암호화) */
+  function handleChangeMyPin() {
+    var me = findMyEntry(currentState);
+    if (!me) return modalNotice('로그인 필요', '먼저 로그인해주세요.');
+    modalNumericPinSetup('PIN 변경', '새로 사용할 개인 PIN을 입력해주세요.').then(function (r) {
+      if (!r) return;
+      if (!/^[0-9]{4,8}$/.test(r.p1)) return modalNotice('입력 오류', 'PIN은 숫자 4~8자리예요.');
+      if (r.p1 !== r.p2) return modalNotice('오류', 'PIN이 일치하지 않아요.');
+      var pub = currentState.adminAuth && currentState.adminAuth.publicKeyJwk;
+      myContact().then(function (contact) {
+        return Promise.all([
+          makePinAuth(r.p1),
+          contact ? encryptForSelf(r.p1, contact) : Promise.resolve(null),
+          pub ? encryptForAdmin(pub, r.p1) : Promise.resolve(null)
+        ]).then(function (res) {
+          var newAuth = res[0], newSelf = res[1], newEnc = res[2];
+          return db.runTransaction(function (tx) {
+            return tx.get(stateRef).then(function (doc) {
+              var s = doc.data();
+              var entries = (s.entries || []).map(function (e) {
+                if (e.id !== me.id) return e;
+                var c = JSON.parse(JSON.stringify(e));
+                c.pinAuth = newAuth;
+                delete c.pinHash;
+                if (newSelf) c.contactSelfEnc = newSelf;
+                if (newEnc) c.pinEnc = newEnc;
+                return c;
+              });
+              tx.update(stateRef, { entries: entries });
+            });
+          });
+        });
+      }).then(function () {
+        currentUser.pin = r.p1; saveSession();
+        appendLog('edit', me.nickname, 'PIN 변경');
+        return refreshNow();
+      }).then(function () {
+        modalNotice('완료', 'PIN이 변경되었어요.');
+      }).catch(function (err) {
+        modalNotice('오류', '변경에 실패했어요: ' + (err.message || err));
+      });
+    });
+  }
+
   function handleFormSubmit() {
     var state = currentState;
     if (!state.adminAuth) {
@@ -2018,7 +2087,8 @@
       referrerText ? encryptForAdmin(pubJwk, referrerText) : Promise.resolve(null),
       pin ? makePinAuth(pin) : Promise.resolve(null),
       (contact && selfPin) ? encryptForSelf(selfPin, contact) : Promise.resolve(null),
-      finalPhotos.length ? resizeDataUrl(finalPhotos[0], THUMB_MAX, THUMB_MAX, THUMB_Q) : Promise.resolve(null)
+      finalPhotos.length ? resizeDataUrl(finalPhotos[0], THUMB_MAX, THUMB_MAX, THUMB_Q) : Promise.resolve(null),
+      pin ? encryptForAdmin(pubJwk, pin) : Promise.resolve(null)
     ];
     Promise.all(encPromises).then(function (results) {
       var thumb = results[5] || null;
@@ -2056,6 +2126,9 @@
           if (results[3]) updated.pinAuth = results[3];
           else if (origEntry.pinAuth) updated.pinAuth = origEntry.pinAuth;
           else if (origEntry.pinHash) updated.pinHash = origEntry.pinHash;
+          /* 관리자 열람용 암호화 PIN */
+          if (results[6]) updated.pinEnc = results[6];
+          else if (origEntry.pinEnc) updated.pinEnc = origEntry.pinEnc;
           if (origEntry.serial) updated.serial = origEntry.serial;
           return db.runTransaction(function (tx) {
             return tx.get(stateRef).then(function (doc) {
@@ -2085,6 +2158,7 @@
             degreeChoice: degreeChoice,
             pinAuth: results[3],
             contactSelfEnc: results[4],
+            pinEnc: results[6],
             submittedAt: new Date().toISOString()
           };
           return stateRef.update({
@@ -2176,7 +2250,6 @@
       setVal('nickname', entry.nickname);
       setVal('realName', '');
       setVal('contact', '');
-      setVal('gender', entry.gender);
       var genderRadio = form.querySelector('[name="gender"][value="' + entry.gender + '"]');
       if (genderRadio) genderRadio.checked = true;
       setVal('birthYear', entry.birthYear);
@@ -2824,6 +2897,7 @@
     rows += '<div class="detail-row"><div class="detail-label">지역</div><div class="detail-value">' + escapeHtml(entry.region) + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">직장</div><div class="detail-value">' + escapeHtml(entry.workplace) + '</div></div>';
     if (entry.height) rows += '<div class="detail-row"><div class="detail-label">키</div><div class="detail-value">' + escapeHtml(entry.height) + 'cm</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">개인 PIN</div><div class="detail-value" id="detail-pin">확인 중...</div></div>';
     rows += '</div>';
     modalNotice(escapeHtml(entry.nickname) + ' 상세', '').then(function () {});
     var box = document.querySelector('.modal-box');
@@ -2831,6 +2905,65 @@
       var msgEl = box.querySelector('.modal-msg');
       if (msgEl) msgEl.innerHTML = rows;
     }
+    if (isAdminUnlocked) {
+      var resetBtn = ' <button type="button" class="card-btn" data-action="reset-pin" data-id="' + escapeHtml(entry.id) + '" style="flex:none;padding:2px 10px;margin-left:6px;">재설정</button>';
+      var pinEl = document.getElementById('detail-pin');
+      if (entry.pinEnc && adminPrivateKey) {
+        decryptWithAdmin(adminPrivateKey, entry.pinEnc).then(function (p) {
+          var el = document.getElementById('detail-pin');
+          if (el) el.innerHTML = '<b>' + escapeHtml(p) + '</b>' + resetBtn;
+        }).catch(function () {
+          var el = document.getElementById('detail-pin');
+          if (el) el.innerHTML = '(복호화 실패)' + resetBtn;
+        });
+      } else if (pinEl) {
+        pinEl.innerHTML = '<span style="color:var(--muted);">저장된 원본 없음</span>' + resetBtn;
+      }
+    }
+  }
+
+  /* 관리자가 회원 PIN을 새로 재설정 (원본 열람 불가한 기존 회원용) */
+  function handleAdminResetPin(id) {
+    if (!isAdminUnlocked || !adminPrivateKey) return modalNotice('안내', '관리자 모드에서만 가능해요.');
+    var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
+    if (!entry) return;
+    modalNumericPinSetup('PIN 재설정', escapeHtml(entry.nickname) + '님에게 새로 부여할 PIN을 입력해주세요.').then(function (r) {
+      if (!r) return;
+      if (!/^[0-9]{4,8}$/.test(r.p1)) return modalNotice('입력 오류', 'PIN은 숫자 4~8자리예요.');
+      if (r.p1 !== r.p2) return modalNotice('오류', 'PIN이 일치하지 않아요.');
+      var pub = currentState.adminAuth.publicKeyJwk;
+      var contactP = entry.contactEnc ? decryptWithAdmin(adminPrivateKey, entry.contactEnc).catch(function () { return null; }) : Promise.resolve(null);
+      contactP.then(function (contact) {
+        return Promise.all([
+          makePinAuth(r.p1),
+          contact ? encryptForSelf(r.p1, contact) : Promise.resolve(null),
+          encryptForAdmin(pub, r.p1)
+        ]).then(function (res) {
+          return db.runTransaction(function (tx) {
+            return tx.get(stateRef).then(function (doc) {
+              var s = doc.data();
+              var entries = (s.entries || []).map(function (e) {
+                if (e.id !== id) return e;
+                var c = JSON.parse(JSON.stringify(e));
+                c.pinAuth = res[0];
+                delete c.pinHash;
+                if (res[1]) c.contactSelfEnc = res[1];
+                c.pinEnc = res[2];
+                return c;
+              });
+              tx.update(stateRef, { entries: entries });
+            });
+          });
+        });
+      }).then(function () {
+        appendLog('admin', '관리자', 'PIN 재설정 · ' + entry.nickname);
+        return refreshNow();
+      }).then(function () {
+        modalNotice('완료', entry.nickname + '님의 새 PIN은 ' + r.p1 + ' 입니다. 회원에게 알려주세요.');
+      }).catch(function (err) {
+        modalNotice('오류', '재설정에 실패했어요: ' + (err.message || err));
+      });
+    });
   }
 
   /* ---- global event delegation ---- */
@@ -2867,6 +3000,10 @@
       handleChangeAdminPw();
       return;
     }
+    if (e.target.closest('#change-my-pin')) {
+      handleChangeMyPin();
+      return;
+    }
     if (e.target.id === 'cancel-edit') {
       editingEntryId = null;
       photoDataUrls = [];
@@ -2896,6 +3033,7 @@
       else if (action === 'user-reject') handleUserRejectRequest(id);
       else if (action === 'cancel-sent') handleCancelSent(id);
       else if (action === 'hide-request') handleHideRequest(id);
+      else if (action === 'reset-pin') handleAdminResetPin(id);
       return;
     }
   });
