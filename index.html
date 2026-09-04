@@ -634,7 +634,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-13';
+  var APP_VERSION = '2026-09-04-14';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -1370,12 +1370,12 @@
     return '<span class="chip" style="background:#f1f3f4;color:#5f6368;">대기중</span>';
   }
   /* 답장 메시지 입력 모달 (승인/보류/거절 공통). OK=문자열('' 가능), 취소=null */
-  function modalMessage(title, msg, okLabel, okClass) {
+  function modalMessage(title, msg, okLabel, okClass, placeholder) {
     return new Promise(function (resolve) {
       var overlay = openModal(
         '<h3>' + escapeHtml(title) + '</h3>' +
         '<p class="modal-msg">' + escapeHtml(msg) + '</p>' +
-        '<textarea class="modal-input" id="modal-msg-text" rows="3" maxlength="200" placeholder="답장 메시지 (선택)"></textarea>' +
+        '<textarea class="modal-input" id="modal-msg-text" rows="3" maxlength="200" placeholder="' + escapeHtml(placeholder || '답장 메시지 (선택)') + '"></textarea>' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
           '<button type="button" class="card-btn ' + (okClass || 'primary') + '" id="modal-ok">' + escapeHtml(okLabel || '확인') + '</button>' +
@@ -1727,13 +1727,27 @@
           '<button type="button" class="card-btn" data-action="user-hold" data-id="' + escapeHtml(r.id) + '">보류</button>' +
           '<button type="button" class="card-btn danger" data-action="user-reject" data-id="' + escapeHtml(r.id) + '">거절</button>' +
         '</div>';
-    } else if (!incoming && (st === 'pending' || st === 'held')) {
+    } else if (!incoming && st === 'pending') {
       actions =
         '<div class="mine-actions">' +
           '<button type="button" class="card-btn" data-action="cancel-sent" data-id="' + escapeHtml(r.id) + '">요청 취소</button>' +
         '</div>';
+    } else if (!incoming && st === 'held') {
+      /* 보낸 요청이 보류됨 → 정보 담아 다시 요청 가능 */
+      actions =
+        '<div class="mine-actions">' +
+          '<button type="button" class="card-btn primary" data-action="reapply" data-id="' + escapeHtml(r.id) + '">다시 요청</button>' +
+          '<button type="button" class="card-btn" data-action="cancel-sent" data-id="' + escapeHtml(r.id) + '">요청 취소</button>' +
+        '</div>';
+    } else if (!incoming && st === 'rejected') {
+      /* 보낸 요청이 거절됨 → 정보 담아 다시 요청 가능 */
+      actions =
+        '<div class="mine-actions">' +
+          '<button type="button" class="card-btn primary" data-action="reapply" data-id="' + escapeHtml(r.id) + '">다시 요청</button>' +
+          '<button type="button" class="card-btn" data-action="hide-request" data-id="' + escapeHtml(r.id) + '">내역 삭제</button>' +
+        '</div>';
     } else if (st === 'approved' || st === 'rejected') {
-      /* 승인/거절 이후 개인이 자기 목록에서 내역 삭제 가능 */
+      /* (받은 요청 처리 완료 또는 승인된 보낸 요청) 내역 삭제 */
       actions =
         '<div class="mine-actions">' +
           '<button type="button" class="card-btn" data-action="hide-request" data-id="' + escapeHtml(r.id) + '">내역 삭제</button>' +
@@ -2869,7 +2883,7 @@
       ? escapeHtml(fromName) + '님에게 사진을 공개할까요? 승인하면 바로 볼 수 있게 돼요.'
       : escapeHtml(fromName) + '님과 서로 번호를 공개할까요? 승인하면 바로 서로의 번호를 볼 수 있어요.') +
       ' 상대에게 전할 답장을 남길 수 있어요.';
-    modalMessage('요청 승인', msg, '승인', 'primary').then(function (replyMsg) {
+    modalMessage('요청 승인', msg, '승인', 'primary', '예: 반가워요! 잘 부탁드려요 :)').then(function (replyMsg) {
       if (replyMsg === null) return;
       /* 번호 요청이면 내 번호를 담아 바로 확정 (관리자 개입 없음) */
       var contactPromise = isPhoto ? Promise.resolve(null) : ensureMyContact();
@@ -2923,7 +2937,7 @@
     var isPhoto = (req.type || 'contact') === 'photo';
     var from = (state.entries || []).find(function (e) { return e.id === req.fromId; });
     var fromName = from ? from.nickname : '상대방';
-    modalMessage('요청 거절', escapeHtml(fromName) + '님의 ' + (isPhoto ? '사진' : '번호') + ' 요청을 거절할까요? 남기고 싶은 말이 있다면 적어주세요.', '거절하기', 'danger').then(function (rejectMsg) {
+    modalMessage('요청 거절', escapeHtml(fromName) + '님의 ' + (isPhoto ? '사진' : '번호') + ' 요청을 거절할까요? 더 알고 싶은 점이 있으면 남겨주세요. 상대가 정보를 담아 다시 요청할 수 있어요.', '거절하기', 'danger', '예: 직장·직업이 궁금해요. 알려주시면 다시 볼게요! / 종교가 달라서요').then(function (rejectMsg) {
       if (rejectMsg === null || rejectMsg === undefined) return;
       return db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
@@ -2962,7 +2976,7 @@
     var isPhoto = (req.type || 'contact') === 'photo';
     var from = (state.entries || []).find(function (e) { return e.id === req.fromId; });
     var fromName = from ? from.nickname : '상대방';
-    modalMessage('요청 보류', escapeHtml(fromName) + '님의 요청을 보류할까요? 나중에 다시 승인하거나 거절할 수 있어요.', '보류하기', 'primary').then(function (holdMsg) {
+    modalMessage('요청 보류', escapeHtml(fromName) + '님의 요청을 보류할까요? 더 알고 싶은 점을 남기면, 상대가 정보를 담아 다시 요청할 수 있어요.', '보류하기', 'primary', '예: 직장·직업이 궁금해요. 알려주시면 결정할게요! / 키가 어떻게 되세요?').then(function (holdMsg) {
       if (holdMsg === null || holdMsg === undefined) return;
       return db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
@@ -3007,6 +3021,69 @@
         return refreshNow();
       }).catch(function (err) {
         modalNotice('오류', '취소에 실패했어요: ' + (err.message || err));
+      });
+    });
+  }
+
+  /* 보류/거절된 보낸 요청을, 상대 피드백을 보고 정보를 담아 다시 요청 */
+  function handleReapplyRequest(id) {
+    var state = currentState;
+    var me = findMyEntry(state);
+    if (!me) return modalNotice('로그인 필요', '먼저 로그인해주세요.');
+    var req = (state.dateRequests || []).find(function (r) { return r.id === id; });
+    if (!req || req.fromId !== me.id) return;
+    var st = reqStatus(req);
+    if (st !== 'held' && st !== 'rejected') return;
+    var isPhoto = (req.type || 'contact') === 'photo';
+    var to = (state.entries || []).find(function (e) { return e.id === req.toId; });
+    var toName = to ? to.nickname : '상대방';
+    var feedback = st === 'held' ? (req.holdMessage || '') : (req.rejectMessage || '');
+    var feedbackHtml = feedback
+      ? '<div class="mine-note" style="background:var(--gold-soft);color:var(--ink);">' + escapeHtml(toName) + '님의 메시지<br>"' + escapeHtml(feedback) + '"</div>'
+      : '<div class="mine-note">' + escapeHtml(toName) + '님이 남긴 메시지는 없어요.</div>';
+    var overlay = openModal(
+      '<h3>다시 요청하기</h3>' +
+      '<p class="modal-msg">' + escapeHtml(toName) + '님에게 ' + (isPhoto ? '사진' : '번호') + ' 요청을 다시 보내요. 상대가 궁금해한 정보를 담아주세요.</p>' +
+      feedbackHtml +
+      '<textarea class="modal-input" id="reapply-note" rows="3" maxlength="200" placeholder="예: 직장은 강남 ○○회사 다니고 있어요! 다시 요청드려요" style="margin-top:8px;">' + escapeHtml(reqNote(req) || '') + '</textarea>' +
+      '<div class="modal-actions">' +
+        '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
+        '<button type="button" class="card-btn primary" id="modal-ok">다시 요청</button>' +
+      '</div>'
+    );
+    new Promise(function (resolve) {
+      function finish(v) { closeModal(overlay); resolve(v); }
+      overlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
+      overlay.querySelector('#modal-ok').addEventListener('click', function () { finish(overlay.querySelector('#reapply-note').value.trim()); });
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
+    }).then(function (note) {
+      if (note === null || note === undefined) return;
+      return db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).map(function (r) {
+            if (r.id !== id) return r;
+            var c = JSON.parse(JSON.stringify(r));
+            c.note = note || '';
+            /* 대기 상태로 초기화 (이전 보류/거절/답장 흔적 제거) */
+            delete c.held; delete c.holdMessage; delete c.heldBy;
+            delete c.rejected; delete c.rejectMessage; delete c.rejectedBy;
+            delete c.approved; delete c.userApproved; delete c.approveMessage;
+            delete c.decidedAt; delete c.revealedContact; delete c.toContact;
+            c.submittedAt = new Date().toISOString();
+            c.reappliedAt = new Date().toISOString();
+            return c;
+          });
+          tx.update(stateRef, { dateRequests: reqs });
+        });
+      }).then(function () {
+        appendLog('request', me.nickname, (isPhoto ? '사진' : '번호') + ' 요청 재신청 → ' + toName);
+        notifyAdmin('요청 재신청', me.nickname + '님이 ' + toName + '님에게 다시 요청했어요.');
+        return refreshNow();
+      }).then(function () {
+        modalNotice('다시 요청 완료', escapeHtml(toName) + '님에게 다시 요청했어요! 상대가 확인하면 결정해 줄 거예요.');
+      }).catch(function (err) {
+        modalNotice('오류', '다시 요청에 실패했어요: ' + (err.message || err));
       });
     });
   }
@@ -3388,6 +3465,7 @@
       else if (action === 'user-hold') handleUserHoldRequest(id);
       else if (action === 'user-reject') handleUserRejectRequest(id);
       else if (action === 'cancel-sent') handleCancelSent(id);
+      else if (action === 'reapply') handleReapplyRequest(id);
       else if (action === 'hide-request') handleHideRequest(id);
       else if (action === 'reset-pin') handleAdminResetPin(id);
       return;
