@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-32';
+  var APP_VERSION = '2026-09-05-33';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -2022,7 +2022,8 @@
 
     return (
       '<div class="admin-panel">' +
-        '<div style="display:flex;justify-content:flex-end;margin-bottom:12px;">' +
+        '<div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
+          '<button type="button" class="card-btn' + (adminNotifOn() ? ' approve' : '') + '" id="admin-notif-toggle" style="flex:none;">' + (adminNotifOn() ? '🔔 관리자 알림 켜짐' : '🔔 관리자 알림 켜기') + '</button>' +
           '<button type="button" class="card-btn" id="admin-change-pw" style="flex:none;">🔑 비밀번호 변경</button>' +
         '</div>' +
         pendingSection +
@@ -2282,7 +2283,7 @@
           });
         }).then(function (key) {
           adminPrivateKey = key;
-          isAdminUnlocked = true; requestNotifPermission(); registerAdminTokenIfNeeded();
+          isAdminUnlocked = true; requestNotifPermission();
           try { sessionStorage.setItem('adminPin', r.p1); } catch (e) {}
           return decryptAllAdminData(state);
         }).then(function () {
@@ -2295,7 +2296,7 @@
       if (!pin) return;
       unlockAdminKey(pin, state.adminAuth).then(function (key) {
         adminPrivateKey = key;
-        isAdminUnlocked = true; registerAdminTokenIfNeeded();
+        isAdminUnlocked = true;
         try { sessionStorage.setItem('adminPin', pin); } catch (e) {}
         return decryptAllAdminData(state);
       }).then(function () {
@@ -2697,6 +2698,8 @@
       }).then(function () {
         photosRef.doc(id).delete().catch(function () {});
         delete photoCache[id];
+        if (isAdminUnlocked) appendLog('admin', '관리자', '프로필 삭제 · ' + entry.nickname);
+        else appendLog('edit', entry.nickname, '프로필 삭제 (본인)');
         modalNotice('완료', '명단에서 삭제되었어요.');
       }).catch(function (err) {
         modalNotice('오류', '삭제에 실패했어요: ' + (err.message || err));
@@ -3517,6 +3520,10 @@
       logoutUser();
       return;
     }
+    if (e.target.closest('#admin-notif-toggle')) {
+      handleAdminNotifToggle();
+      return;
+    }
     if (e.target.closest('#admin-change-pw')) {
       handleChangeAdminPw();
       return;
@@ -3689,7 +3696,7 @@
         if (savedPin && state.adminAuth) {
           adminPromise = unlockAdminKey(savedPin, state.adminAuth).then(function (key) {
             adminPrivateKey = key;
-            isAdminUnlocked = true; requestNotifPermission(); registerAdminTokenIfNeeded();
+            isAdminUnlocked = true; requestNotifPermission();
           }).catch(function () {
             sessionStorage.removeItem('adminPin');
           });
@@ -3802,9 +3809,37 @@
   }
 
   /* ---- 폰 알림 (FCM 웹 푸시) ---- */
-  function notifOn() { try { return !!localStorage.getItem('notifToken'); } catch (e) { return false; } }
+  /* 기존 사용자 마이그레이션: 토큰만 있고 플래그가 없으면 회원 알림 ON 으로 간주 */
+  try {
+    if (localStorage.getItem('notifToken') && localStorage.getItem('memberNotifOn') === null && localStorage.getItem('adminNotifOn') === null) {
+      localStorage.setItem('memberNotifOn', '1');
+    }
+  } catch (e) {}
+  function notifOn() { try { return localStorage.getItem('memberNotifOn') === '1'; } catch (e) { return false; } }
+  function adminNotifOn() { try { return localStorage.getItem('adminNotifOn') === '1'; } catch (e) { return false; } }
   function notifSupported() {
     return !!fcmMessaging && ('Notification' in window) && ('serviceWorker' in navigator);
+  }
+  /* 알림 권한 요청 + 서비스워커 등록 + FCM 토큰 발급 (회원/관리자 알림 공용) */
+  function ensureFcmToken() {
+    return Notification.requestPermission().then(function (perm) {
+      if (perm !== 'granted') throw new Error('알림 권한이 필요해요 ("허용"을 눌러주세요)');
+      var swPath = location.pathname.replace(/[^/]*$/, '') + 'firebase-messaging-sw.js';
+      return navigator.serviceWorker.register(swPath);
+    }).then(function (reg) {
+      return fcmMessaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+    }).then(function (token) {
+      if (!token) throw new Error('토큰을 받지 못했어요');
+      try { localStorage.setItem('notifToken', token); } catch (e) {}
+      return token;
+    });
+  }
+  /* 회원/관리자 둘 다 꺼졌을 때만 토큰 완전 폐기 */
+  function maybeReleaseToken() {
+    if (notifOn() || adminNotifOn()) return;
+    var token = ''; try { token = localStorage.getItem('notifToken') || ''; } catch (e) {}
+    if (fcmMessaging && token) { try { fcmMessaging.deleteToken().catch(function () {}); } catch (e) {} }
+    try { localStorage.removeItem('notifToken'); } catch (e) {}
   }
   function myEntryOrPending() {
     return findMyEntry(currentState) || findMyPending(currentState);
@@ -3825,7 +3860,7 @@
     }
     if (Notification.permission === 'granted') {
       fire();
-      if (notifOn()) modalNotice('테스트 알림 전송 🔔', '방금 알림을 보냈어요! 화면 상단(또는 알림 센터)에 떴는지 확인해보세요. 앱을 잠깐 내려두고 보면 더 확실해요.');
+      if (notifOn() || adminNotifOn()) modalNotice('테스트 알림 전송 🔔', '방금 알림을 보냈어요! 화면 상단(또는 알림 센터)에 떴는지 확인해보세요. 앱을 잠깐 내려두고 보면 더 확실해요.');
       else modalNotice('테스트 알림 전송 🔔', '알림은 떴지만, 아직 "알림 켜기"를 안 하셔서 실제 요청 알림은 안 올 수 있어요. 먼저 🔔 알림 켜기를 해주세요.');
     } else if (Notification.permission === 'denied') {
       modalNotice('알림 차단됨', '브라우저 설정에서 이 사이트의 알림을 "허용"으로 바꿔주세요. (주소창 왼쪽 자물쇠 → 알림)');
@@ -3893,31 +3928,20 @@
     if (notifOn()) { disableNotif(); } else { enableNotif(); }
   }
   function enableNotif() {
-    Notification.requestPermission().then(function (perm) {
-      if (perm !== 'granted') { modalNotice('알림 미허용', '알림을 받으려면 "허용"을 눌러주세요.'); return; }
-      var swPath = location.pathname.replace(/[^/]*$/, '') + 'firebase-messaging-sw.js';
-      navigator.serviceWorker.register(swPath).then(function (reg) {
-        return fcmMessaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
-      }).then(function (token) {
-        if (!token) throw new Error('토큰을 받지 못했어요');
-        var me = myEntryOrPending();
-        var uid = me ? me.id : currentUser.id;
-        return pushTokensRef.doc(uid).set({
-          tokens: firebase.firestore.FieldValue.arrayUnion(token),
-          nickname: (me && me.nickname) || currentUser.nickname || '',
-          updatedAt: new Date().toISOString()
-        }, { merge: true }).then(function () {
-          try { localStorage.setItem('notifToken', token); } catch (e) {}
-        });
-      }).then(function () {
-        registerAdminTokenIfNeeded();
-        paint(currentState);
-        modalNotice('알림 켜짐 🔔', '이제 요청이 오면 이 기기로 알림을 받아요! (앱을 꺼둬도 와요)');
-      }).catch(function (err) {
-        modalNotice('오류', '알림을 켜지 못했어요: ' + (err.message || err));
-      });
+    ensureFcmToken().then(function (token) {
+      var me = myEntryOrPending();
+      var uid = me ? me.id : currentUser.id;
+      return pushTokensRef.doc(uid).set({
+        tokens: firebase.firestore.FieldValue.arrayUnion(token),
+        nickname: (me && me.nickname) || currentUser.nickname || '',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }).then(function () {
+      try { localStorage.setItem('memberNotifOn', '1'); } catch (e) {}
+      paint(currentState);
+      modalNotice('알림 켜짐 🔔', '이제 요청이 오면 이 기기로 알림을 받아요! (앱을 꺼둬도 와요)');
     }).catch(function (err) {
-      modalNotice('오류', '알림 권한 요청에 실패했어요: ' + (err.message || err));
+      modalNotice('오류', '알림을 켜지 못했어요: ' + (err.message || err));
     });
   }
   function disableNotif() {
@@ -3927,26 +3951,53 @@
     var p = (token && uid)
       ? pushTokensRef.doc(uid).set({ tokens: firebase.firestore.FieldValue.arrayRemove(token) }, { merge: true })
       : Promise.resolve();
-    /* 관리자 알림 등록분도 함께 해제 */
-    if (token) { try { pushTokensRef.doc('admin').set({ tokens: firebase.firestore.FieldValue.arrayRemove(token) }, { merge: true }); } catch (e) {} }
-    if (fcmMessaging && token) { try { fcmMessaging.deleteToken().catch(function () {}); } catch (e) {} }
     p.catch(function () {}).then(function () {
-      try { localStorage.removeItem('notifToken'); } catch (e) {}
+      try { localStorage.removeItem('memberNotifOn'); } catch (e) {}
+      maybeReleaseToken(); /* 관리자 알림도 꺼져 있을 때만 토큰 폐기 */
       paint(currentState);
-      modalNotice('알림 꺼짐', '이 기기로는 더 이상 알림이 오지 않아요.');
+      modalNotice('알림 꺼짐', '이 기기로는 더 이상 회원 알림이 오지 않아요.');
     });
   }
-  /* 관리자로 로그인 + 알림이 켜져 있으면, 이 기기 토큰을 관리자 알림 대상으로도 등록 (새 신청서 알림 수신용) */
-  function registerAdminTokenIfNeeded() {
-    if (!isAdminUnlocked) return;
+  /* ---- 관리자 알림 (관리자 페이지에서 기기별로 켜고 끔) ---- */
+  function handleAdminNotifToggle() {
+    if (!isAdminUnlocked) { modalNotice('안내', '관리자 모드에서만 설정할 수 있어요.'); return; }
+    if (!notifSupported()) { modalNotice('안내', '이 브라우저에서는 알림을 지원하지 않아요. 크롬(안드로이드/PC)이나 홈 화면에 추가한 아이폰(사파리)에서 사용해주세요.'); return; }
+    var ua = navigator.userAgent || '';
+    if (/iPhone|iPad|iPod/i.test(ua) && !isStandalone()) {
+      modalNotice('아이폰 알림 안내', '아이폰은 먼저 "홈 화면에 추가"로 홈 화면에 아이콘을 만든 뒤, 그 아이콘으로 열어서 켜주세요.');
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      modalNotice('알림 차단됨', '브라우저 설정에서 이 사이트의 알림을 "허용"으로 바꿔주세요. (주소창 왼쪽 자물쇠 → 알림)');
+      return;
+    }
+    if (adminNotifOn()) { disableAdminNotif(); } else { enableAdminNotif(); }
+  }
+  function enableAdminNotif() {
+    ensureFcmToken().then(function (token) {
+      return pushTokensRef.doc('admin').set({
+        tokens: firebase.firestore.FieldValue.arrayUnion(token),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }).then(function () {
+      try { localStorage.setItem('adminNotifOn', '1'); } catch (e) {}
+      paint(currentState);
+      modalNotice('관리자 알림 켜짐 🔔', '새 신청서가 들어오면 이 기기로 바로 알림이 와요!');
+    }).catch(function (err) {
+      modalNotice('오류', '관리자 알림을 켜지 못했어요: ' + (err.message || err));
+    });
+  }
+  function disableAdminNotif() {
     var token = ''; try { token = localStorage.getItem('notifToken') || ''; } catch (e) {}
-    var me = myEntryOrPending();
-    if (!token && !me) return;
-    var payload = { updatedAt: new Date().toISOString() };
-    if (token) payload.tokens = firebase.firestore.FieldValue.arrayUnion(token);
-    /* 관리자의 회원 엔트리 id 를 남겨두면, 그 계정의 모든 기기로 관리자 알림이 감 */
-    if (me) payload.entryId = me.id;
-    try { pushTokensRef.doc('admin').set(payload, { merge: true }); } catch (e) {}
+    var p = token
+      ? pushTokensRef.doc('admin').set({ tokens: firebase.firestore.FieldValue.arrayRemove(token) }, { merge: true })
+      : Promise.resolve();
+    p.catch(function () {}).then(function () {
+      try { localStorage.removeItem('adminNotifOn'); } catch (e) {}
+      maybeReleaseToken(); /* 회원 알림도 꺼져 있을 때만 토큰 폐기 */
+      paint(currentState);
+      modalNotice('관리자 알림 꺼짐', '이 기기로는 새 신청서 알림이 오지 않아요.');
+    });
   }
   /* 앱이 열려 있을 때 오는 메시지 */
   if (fcmMessaging) {

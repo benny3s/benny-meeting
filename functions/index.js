@@ -60,23 +60,10 @@ async function sendTo(id, title, body) {
   const tokens = await tokensFor(id);
   await sendToTokens(tokens, title, body, [id]);
 }
-/* 관리자에게: pushTokens/admin 의 토큰 + (있으면) 관리자 회원 엔트리의 모든 기기 토큰 */
+/* 관리자에게: pushTokens/admin 에 등록된 기기들 (관리자 페이지의 알림 토글로 기기별 관리) */
 async function sendToAdmin(title, body) {
-  const ids = ['admin'];
-  const set = {};
-  try {
-    const a = await db.collection('pushTokens').doc('admin').get();
-    if (a.exists) {
-      const d = a.data() || {};
-      (Array.isArray(d.tokens) ? d.tokens : []).forEach((t) => { set[t] = 1; });
-      if (d.entryId) {
-        ids.push(d.entryId);
-        const e = await db.collection('pushTokens').doc(d.entryId).get();
-        if (e.exists) (Array.isArray(e.data().tokens) ? e.data().tokens : []).forEach((t) => { set[t] = 1; });
-      }
-    }
-  } catch (e) {}
-  await sendToTokens(Object.keys(set), title, body, ids);
+  const tokens = await tokensFor('admin');
+  await sendToTokens(tokens, title, body, ['admin']);
 }
 
 exports.onStateChange = functions
