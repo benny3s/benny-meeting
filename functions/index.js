@@ -85,6 +85,10 @@ exports.onStateChange = functions
         /* 새 요청 → 받는 사람에게 */
         jobs.push(sendTo(r.toId, '새 ' + type + ' 요청', nameOf(entries, r.fromId) + '님이 ' + type + ' 요청을 보냈어요'));
       } else {
+        /* 요청자가 자기 사진을 공개함 → 받는 사람에게 */
+        if (!prev.fromRevealed && r.fromRevealed) {
+          jobs.push(sendTo(r.toId, '📷 사진 공개', nameOf(entries, r.fromId) + '님이 자기 사진을 공개했어요'));
+        }
         const ps = reqStatus(prev), ns = reqStatus(r);
         if (ps === ns) return;
         /* approved 와 user_approved(당사자 승인·관리자 확정 대기) 를 하나의 "승인" 이벤트로 취급해 중복 알림 방지 */

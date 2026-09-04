@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-40';
+  var APP_VERSION = '2026-09-05-41';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -694,6 +694,7 @@
   var listView = 'card'; /* 'card' | 'compact' */
   var activeTab = 'form';
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
+  function testAccountsShown() { try { return localStorage.getItem('showTestAccounts') === '1'; } catch (e) { return false; } }
   var isAdminUnlocked = false;
   var adminPrivateKey = null;
   var decryptedContacts = {};
@@ -1709,7 +1710,8 @@
     }
     var adminBtn = isAdminUnlocked
       ? '<button type="button" class="card-btn admin-detail-btn" data-action="detail" data-id="' + escapeHtml(entry.id) + '">🔍 상세</button>' +
-        '<button type="button" class="card-btn" data-action="admin-msg" data-id="' + escapeHtml(entry.id) + '">💬 메시지</button>'
+        '<button type="button" class="card-btn" data-action="admin-msg" data-id="' + escapeHtml(entry.id) + '">💬 메시지</button>' +
+        '<button type="button" class="card-btn" data-action="toggle-test" data-id="' + escapeHtml(entry.id) + '">' + (entry.testAccount ? '🧪 테스트 해제' : '🧪 테스트 지정') + '</button>'
       : '';
     return (
       '<article class="pf-card" data-id="' + escapeHtml(entry.id) + '">' +
@@ -1721,6 +1723,7 @@
             '<span class="chip chip--gender-' + escapeHtml(entry.gender) + '">' + genderLabel(entry.gender) + '</span>' +
             '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
             (entry.height ? '<span class="chip">' + escapeHtml(entry.height) + 'cm</span>' : '') +
+            (entry.testAccount && isAdminUnlocked ? '<span class="chip" style="background:#e8eaed;color:#5f6368;">🧪 테스트</span>' : '') +
           '</div>' +
           '<ul class="pf-meta">' +
             '<li>' + ICON_PIN + '<span>' + escapeHtml(entry.region) + '</span></li>' +
@@ -1741,7 +1744,8 @@
   }
 
   function renderList(state) {
-    var entries = state.entries || [];
+    var showTest = isAdminUnlocked && testAccountsShown();
+    var entries = (state.entries || []).filter(function (e) { return !e.testAccount || showTest; });
     var maleCount = entries.filter(function (e) { return e.gender === 'male'; }).length;
     var femaleCount = entries.filter(function (e) { return e.gender === 'female'; }).length;
     var filtered = entries.filter(function (e) { return listFilter === 'all' || e.gender === listFilter; });
@@ -1794,6 +1798,7 @@
             '<span class="chip chip--gender-' + escapeHtml(entry.gender) + '">' + genderLabel(entry.gender) + '</span>' +
             '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
             (entry.height ? '<span class="chip">' + escapeHtml(entry.height) + 'cm</span>' : '') +
+            (entry.testAccount && isAdminUnlocked ? '<span class="chip" style="background:#e8eaed;color:#5f6368;">🧪 테스트</span>' : '') +
           '</div>' +
           '<div class="compact-meta">' + ICON_PIN + '<span>' + escapeHtml(entry.region || '-') + '</span>' +
             ICON_BRIEF + '<span>' + escapeHtml(entry.workplace || '-') + '</span></div>' +
@@ -1989,6 +1994,13 @@
     if (st === 'approved' && r.approveMessage) replyMsg = '<div class="mine-note">답장: ' + escapeHtml(r.approveMessage) + '</div>';
     else if (st === 'held' && r.holdMessage) replyMsg = '<div class="mine-note">보류 메시지: ' + escapeHtml(r.holdMessage) + '</div>';
     else if (st === 'rejected' && r.rejectMessage) replyMsg = '<div class="mine-note reject">거절 메시지: ' + escapeHtml(r.rejectMessage) + '</div>';
+    /* 보낸 사진 요청: 내 사진도 상대에게 공개할 수 있음 (상대가 보류로 "사진 보여주세요" 한 경우 등) */
+    var revealMine = '';
+    if (!incoming && isPhoto) {
+      revealMine = r.fromRevealed
+        ? '<div class="mine-note" style="color:#137333;">📷 내 사진을 상대에게 공개했어요.</div>'
+        : '<div class="mine-actions"><button type="button" class="card-btn" data-action="reveal-mine" data-id="' + escapeHtml(r.id) + '">📷 내 사진 공개</button></div>';
+    }
     return (
       '<div class="mine-item">' +
         '<div class="mine-head">' + typeBadge + '<b>' + escapeHtml(otherLabel) + '</b>' + statusChip(st) +
@@ -1996,6 +2008,7 @@
         (note ? '<div class="mine-note">"' + escapeHtml(note) + '"</div>' : '') +
         replyMsg +
         actions +
+        revealMine +
       '</div>'
     );
   }
@@ -2253,6 +2266,12 @@
         seenSection +
         '<hr class="perforation">' +
         logSection +
+        '<hr class="perforation">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">' +
+          '<div><b style="font-size:0.9rem;">🧪 테스트 계정 표시</b>' +
+            '<div class="sub" style="margin:2px 0 0;">켜면 테스트로 지정한 계정이 명단에 보여요 (관리자 전용). 일반 회원에겐 항상 숨겨져요. 카드의 <b>🧪 테스트 지정</b> 버튼으로 계정을 지정하세요.</div></div>' +
+          '<button type="button" class="card-btn' + (testAccountsShown() ? ' approve' : '') + '" id="toggle-show-test" style="flex:none;">' + (testAccountsShown() ? '켜짐' : '꺼짐') + '</button>' +
+        '</div>' +
       '</div>'
     );
   }
@@ -2309,7 +2328,8 @@
   }
 
   function renderApp(state) {
-    var entries = state.entries || [];
+    var showTestList = isAdminUnlocked && testAccountsShown();
+    var entries = (state.entries || []).filter(function (e) { return !e.testAccount || showTestList; });
     var pendingCount = (state.pendingEntries || []).length;
     var reqCount = (state.dateRequests || []).filter(function (r) {
       var st = reqStatus(r); return st !== 'approved' && st !== 'rejected';
@@ -3167,6 +3187,68 @@
     });
   }
 
+  /* viewerId 가 targetId 의 사진을 볼 수 있는가:
+     (1) 내가 보낸 사진 요청을 상대가 승인, 또는 (2) 상대가 나에게 자기 사진을 직접 공개(fromRevealed) */
+  function canViewPhotoOf(state, viewerId, targetId) {
+    return (state.dateRequests || []).some(function (req) {
+      if ((req.type || 'contact') !== 'photo') return false;
+      if (req.approved && req.fromId === viewerId && req.toId === targetId) return true;
+      if (req.fromRevealed && req.fromId === targetId && req.toId === viewerId) return true;
+      return false;
+    });
+  }
+  /* 보낸 사진 요청에서 "내 사진 공개" → 상대가 내 사진을 볼 수 있게 함 */
+  function handleRevealMine(id) {
+    var me = findMyEntry(currentState);
+    if (!me) return modalNotice('로그인 필요', '먼저 로그인해주세요.');
+    var req = (currentState.dateRequests || []).find(function (r) { return r.id === id; });
+    if (!req || req.fromId !== me.id || (req.type || 'contact') !== 'photo' || req.fromRevealed) return;
+    var toName = nickForEntry(currentState, req.toId);
+    modalConfirm('내 사진 공개', escapeHtml(toName) + '님에게 내 사진을 공개할까요? 공개하면 상대가 바로 내 사진을 볼 수 있어요.', '공개', 'primary').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).map(function (r) {
+            if (r.id === id) { var c = JSON.parse(JSON.stringify(r)); c.fromRevealed = true; c.fromRevealedAt = new Date().toISOString(); return c; }
+            return r;
+          });
+          tx.update(stateRef, { dateRequests: reqs });
+        });
+      }).then(function () {
+        appendLog('request', me.nickname, '내 사진 공개 → ' + toName);
+        return refreshNow();
+      }).then(function () {
+        modalNotice('공개 완료', escapeHtml(toName) + '님이 이제 내 사진을 볼 수 있어요.');
+      }).catch(function (err) { modalNotice('오류', '공개에 실패했어요: ' + (err.message || err)); });
+    });
+  }
+  /* 관리자: 회원을 테스트 계정으로 지정/해제 (일반 회원 명단에서 숨김) */
+  function handleToggleTest(id) {
+    if (!isAdminUnlocked) return;
+    var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
+    if (!entry) return;
+    var makeTest = !entry.testAccount;
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var entries = (s.entries || []).map(function (e) {
+          if (e.id !== id) return e;
+          var c = JSON.parse(JSON.stringify(e));
+          if (makeTest) c.testAccount = true; else delete c.testAccount;
+          return c;
+        });
+        tx.update(stateRef, { entries: entries });
+      });
+    }).then(function () {
+      appendLog('admin', '관리자', (makeTest ? '테스트 계정 지정 · ' : '테스트 계정 해제 · ') + entry.nickname);
+      return refreshNow();
+    }).then(function () {
+      modalNotice('완료', escapeHtml(entry.nickname) + (makeTest
+        ? '님을 <b>테스트 계정</b>으로 지정했어요. 일반 회원 명단에서는 안 보여요. (관리자는 아래 "테스트 계정 표시"를 켜면 볼 수 있어요)'
+        : '님의 테스트 계정 지정을 해제했어요.'));
+    }).catch(function (err) { modalNotice('오류', '변경 실패: ' + (err.message || err)); });
+  }
   /* ---- user (recipient) decisions on incoming requests ---- */
   /* 승인 모달: 사진 요청이면 "승인 + 나도 요청"(상호 공개) 버튼도 제공. null=취소, 아니면 {reciprocal, message} */
   function modalApprove(msg, placeholder, showReciprocal) {
@@ -3502,9 +3584,7 @@
         el.classList.remove('blurred'); el.setAttribute('data-action', 'gallery');
         return;
       }
-      var photoApproved = (state.dateRequests || []).some(function (req) {
-        return req.approved && (req.type === 'photo') && req.fromId === myEntry.id && req.toId === id;
-      });
+      var photoApproved = canViewPhotoOf(state, myEntry.id, id);
       if (photoApproved) {
         el.classList.remove('blurred'); el.setAttribute('data-action', 'gallery');
       } else {
@@ -3818,6 +3898,11 @@
       handleAdminNotifToggle();
       return;
     }
+    if (e.target.closest('#toggle-show-test')) {
+      try { localStorage.setItem('showTestAccounts', testAccountsShown() ? '0' : '1'); } catch (e2) {}
+      paint(currentState);
+      return;
+    }
     if (e.target.closest('#admin-change-pw')) {
       handleChangeAdminPw();
       return;
@@ -3857,6 +3942,8 @@
       else if (action === 'user-approve') handleUserApproveRequest(id);
       else if (action === 'user-hold') handleUserHoldRequest(id);
       else if (action === 'user-reject') handleUserRejectRequest(id);
+      else if (action === 'reveal-mine') handleRevealMine(id);
+      else if (action === 'toggle-test') handleToggleTest(id);
       else if (action === 'cancel-sent') handleCancelSent(id);
       else if (action === 'reapply') handleReapplyRequest(id);
       else if (action === 'hide-request') handleHideRequest(id);
@@ -4075,7 +4162,7 @@
 
         /* 1) 알림 */
         '<div style="background:var(--gold-soft);border:1px solid var(--gold);border-radius:10px;padding:10px 12px;margin-bottom:14px;">' +
-          '&#128276; <b>알림 기능이 켜졌어요! (NEW)</b><br>' +
+          '&#128276; <b>알림 기능이 생겼어요! (New)</b><br>' +
           '이제 사진/번호 요청, 승인·보류·거절, 메시지가 오면 <b>기기로 바로 알림</b>을 받을 수 있어요. (앱을 꺼둬도 와요)<br>' +
           '상단 <b>&#128276; 알림 켜기</b> 를 눌러 켜주세요. 켜는 방법은 <b>&#128214; 알림 켜는 법</b> 버튼에 기기별로 정리해 뒀어요. ' +
           '<span style="color:var(--muted);">(아이폰은 먼저 "홈 화면에 추가" 후 그 아이콘으로 열어서 켜주세요.)</span>' +
@@ -4086,14 +4173,14 @@
         '<ul style="padding-left:20px;margin:6px 0;">' +
           '<li>사진/번호를 요청할 때 <b>간단한 메시지</b>를 함께 보낼 수 있어요.</li>' +
           '<li>요청을 받으면 <b>승인 / 보류 / 거절</b>과 함께 <b>답장 메시지</b>를 보낼 수 있어요.</li>' +
-          '<li>예를 들어 <b>보류</b>하면서 요청한 분에게 <b>"사진을 공개해 주세요"</b> 또는 <b>"직업을 알려주세요"</b> 처럼 조건을 물어볼 수 있어요.</li>' +
-          '<li>상단 <b>&#128172; Q&amp;A</b> 로 관리자에게 문의·건의를 보낼 수 있어요. (답장도 알림으로 와요)</li>' +
+          '<li>예를 들어 사진 요청에 대해 <b>"보류"</b>로 보내면서, <b>"사진 보여주세요"</b> 또는 <b>"직업을 알려주세요"</b> 처럼 요청을 할 수 있어요.</li>' +
+          '<li>상단 <b>&#128172; Q&amp;A</b> 로 관리자에게 문의·건의를 보낼 수 있어요.</li>' +
         '</ul>' +
 
         /* 3) 보안 & 개인정보 */
         '<p style="margin-top:12px;"><b>&#128274; 보안 &amp; 개인정보</b></p>' +
         '<ul style="padding-left:20px;margin:6px 0;">' +
-          '<li>실명·연락처·소개자 정보는 <b>암호화</b>되어 저장돼요. 관리자 외에는 아무도 볼 수 없어요.</li>' +
+          '<li>실명·연락처·소개자 정보는 <b>암호화</b>되어 저장돼요.</li>' +
           '<li>사진/번호는 <b>당사자 본인이 직접 승인</b>해야만 공개돼요. 번호는 <b>본인 PIN으로 한 번 더 암호화</b>되어 승인할 때만 열려요.</li>' +
           '<li><b>데이터베이스 잠금</b> — 인증된 접속만 허용하고, 외부에서 데이터를 통째로 보거나 지울 수 없도록 규칙으로 막았어요.</li>' +
           '<li>개인 PIN은 원본이 아닌 <b>강력한 해시(PBKDF2)</b>로만 저장돼요.</li>' +
