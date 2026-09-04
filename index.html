@@ -510,6 +510,18 @@
   .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
   .modal-actions .card-btn { flex: 1; padding: 10px; font-size: 0.86rem; }
 
+  /* 새 버전 알림 바 */
+  .update-bar {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    z-index: 80; background: var(--ink); color: var(--paper);
+    padding: 10px 14px; border-radius: 999px; box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    display: flex; align-items: center; gap: 12px; font-size: 0.86rem; max-width: 92vw;
+  }
+  .update-bar button {
+    border: none; background: var(--accent); color: #fff; font-weight: 700;
+    padding: 7px 14px; border-radius: 999px; cursor: pointer; font-size: 0.84rem; white-space: nowrap;
+  }
+
   /* 검색형 콤보박스 (로그인) */
   .combo { position: relative; }
   .combo-list {
@@ -548,6 +560,10 @@
 <script id="app-logic">
 (function () {
   'use strict';
+
+  /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
+  var APP_VERSION = '2026-09-04-01';
+  var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
   var listFilter = 'all';
@@ -947,14 +963,14 @@
     });
   }
 
-  function modalConfirm(title, message) {
+  function modalConfirm(title, message, okLabel, okClass) {
     return new Promise(function (resolve) {
       var overlay = openModal(
         '<h3>' + escapeHtml(title) + '</h3>' +
         '<p class="modal-msg">' + escapeHtml(message) + '</p>' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
-          '<button type="button" class="card-btn danger" id="modal-ok">삭제</button>' +
+          '<button type="button" class="card-btn ' + (okClass || 'danger') + '" id="modal-ok">' + escapeHtml(okLabel || '삭제') + '</button>' +
         '</div>'
       );
       function finish(val) { closeModal(overlay); resolve(val); }
@@ -1206,6 +1222,31 @@
       if (!Array.isArray(s.logs)) s.logs = [];
       paint(s);
     }).catch(function () {});
+  }
+
+  /* ---- 새 버전 감지 → 새로고침 안내 (배포 후 캐시된 옛 화면 방지) ---- */
+  function checkVersion(state) {
+    if (!state) return;
+    var sv = state.appVersion || '';
+    if (sv && sv > APP_VERSION) {
+      if (!reloadPrompted) { reloadPrompted = true; showReloadBanner(sv); }
+    } else if (APP_VERSION > sv) {
+      /* 내가 최신이면 기록 (다른 열린 탭들이 감지) */
+      stateRef.update({ appVersion: APP_VERSION }).catch(function () {});
+    }
+  }
+  function showReloadBanner(sv) {
+    if (document.getElementById('update-bar')) return;
+    var bar = document.createElement('div');
+    bar.id = 'update-bar';
+    bar.className = 'update-bar';
+    bar.innerHTML = '<span>&#10024; 새 버전이 나왔어요.</span>' +
+      '<button type="button" id="reload-now">지금 새로고침</button>';
+    document.body.appendChild(bar);
+    document.getElementById('reload-now').addEventListener('click', function () {
+      /* 쿼리스트링으로 캐시 우회 새로고침 */
+      location.replace(location.pathname + '?v=' + encodeURIComponent(sv));
+    });
   }
 
   /* ---- activity log ---- */
@@ -2722,7 +2763,7 @@
     if (!me) return;
     var req = (state.dateRequests || []).find(function (r) { return r.id === id; });
     if (!req || req.fromId !== me.id) return;
-    modalConfirm('요청 취소', '보낸 요청을 취소할까요?').then(function (ok) {
+    modalConfirm('요청 취소', '보낸 요청을 취소할까요?', '요청 취소').then(function (ok) {
       if (!ok) return;
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
@@ -3207,6 +3248,7 @@
       if (ensureSerials(state)) {
         stateRef.update({ entries: state.entries }).catch(function () {});
       }
+      checkVersion(state);
       restoreSession(state);
 
       var adminPromise = Promise.resolve();
@@ -3260,6 +3302,7 @@
       if (!Array.isArray(state.approvedPairs)) state.approvedPairs = [];
       if (!Array.isArray(state.logs)) state.logs = [];
       if (!currentUser) restoreSession(state);
+      checkVersion(state);
 
       if (prevPendingCount >= 0 && state.pendingEntries.length > prevPendingCount) {
         showNotification('새 접수!', '새로운 인연 신청서가 도착했어요. (' + state.pendingEntries.length + '건 대기중)');
