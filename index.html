@@ -588,6 +588,7 @@
     max-width: 340px; width: 100%; box-shadow: 0 20px 50px rgba(0,0,0,0.35);
     max-height: 86vh; overflow-y: auto;
   }
+  .modal-overlay.wide-modal .modal-box { max-width: 520px; }
   .modal-box h3 { font-size: 1.1rem; margin-bottom: 8px; }
   .modal-msg { color: var(--muted); font-size: 0.86rem; margin: 0 0 16px; line-height: 1.5; }
   .modal-input {
@@ -673,7 +674,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-24';
+  var APP_VERSION = '2026-09-04-25';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -1117,22 +1118,23 @@
     if (!currentUser) return null;
     return (state.pendingEntries || []).find(function (e) { return e.id === currentUser.id; }) || null;
   }
+  /* 로그인 유지: localStorage에 저장해 기기에서 오래 유지 (로그아웃 전까지) */
   function saveSession() {
     try {
-      if (currentUser) sessionStorage.setItem('meetUser', JSON.stringify(currentUser));
-      else sessionStorage.removeItem('meetUser');
+      if (currentUser) localStorage.setItem('meetUser', JSON.stringify(currentUser));
+      else { localStorage.removeItem('meetUser'); sessionStorage.removeItem('meetUser'); }
     } catch (e) {}
   }
   function restoreSession(state) {
     try {
-      var raw = sessionStorage.getItem('meetUser');
+      var raw = localStorage.getItem('meetUser') || sessionStorage.getItem('meetUser');
       if (!raw) return;
       var u = JSON.parse(raw);
       if (!u || !u.id) return;
       var exists = (state.entries || []).some(function (e) { return e.id === u.id; }) ||
         (state.pendingEntries || []).some(function (e) { return e.id === u.id; });
       if (exists) currentUser = u;
-      else { try { sessionStorage.removeItem('meetUser'); } catch (e2) {} }
+      else { try { localStorage.removeItem('meetUser'); sessionStorage.removeItem('meetUser'); } catch (e2) {} }
     } catch (e) {}
   }
   function logoutUser() {
@@ -3759,6 +3761,7 @@
       '</div>' +
       '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">확인했어요</button></div>'
     );
+    overlay.classList.add('wide-modal');
     function finish() {
       closeModal(overlay);
       try { localStorage.setItem('announce-v3', '1'); } catch (e) {}
