@@ -562,7 +562,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-02';
+  var APP_VERSION = '2026-09-04-03';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -1905,6 +1905,78 @@
   function paint(state) {
     currentState = state;
     document.getElementById('app').innerHTML = renderApp(state);
+    maybeRestoreDraft();
+  }
+
+  /* 신청서를 작성 중이면(포커스/입력/사진 있음) 배경 갱신으로 화면을 다시 그리지 않음
+     — 다른 사람 활동으로 인한 실시간 갱신이 입력 중인 폼을 지우는 문제 방지 */
+  function isEditingForm() {
+    if (activeTab !== 'form') return false;
+    var form = document.getElementById('entry-form');
+    if (!form) return false;
+    if (form.contains(document.activeElement)) return true;
+    if (photoDataUrls && photoDataUrls.length) return true;
+    var fields = form.querySelectorAll('input, textarea, select');
+    for (var i = 0; i < fields.length; i++) {
+      var el = fields[i];
+      if (el.type === 'radio' || el.type === 'checkbox') { if (el.checked) return true; }
+      else if ((el.value || '').trim()) return true;
+    }
+    return false;
+  }
+
+  /* ---- 신청서 임시 저장 (새로고침/이동/오류로도 안 날아가게) ---- */
+  var DRAFT_KEY = 'form-draft-v1';
+  function saveDraft() {
+    if (editingEntryId) return; /* 신규 작성만 */
+    var form = document.getElementById('entry-form');
+    if (!form) return;
+    try {
+      var g = function (n) { var el = form.querySelector('[name="' + n + '"]'); return el ? el.value : ''; };
+      var radio = function (n) { var el = form.querySelector('[name="' + n + '"]:checked'); return el ? el.value : ''; };
+      var draft = {
+        nickname: g('nickname'), realName: g('realName'), contact: g('contact'),
+        gender: radio('gender'), birthYear: g('birthYear'), region: g('region'),
+        workplace: g('workplace'), referrerText: g('referrerText'), degreeChoice: radio('degreeChoice'),
+        height: g('height'), intro: g('intro'), idealType: g('idealType'), dealbreaker: g('dealbreaker'),
+        photos: (photoDataUrls || []).slice(), savedAt: Date.now()
+      };
+      /* PIN은 민감정보라 저장하지 않음 */
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch (e) {}
+  }
+  function loadDraft() { try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch (e) { return null; } }
+  function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch (e) {} }
+  function draftHasContent(d) {
+    return !!(d && (d.nickname || d.realName || d.contact || d.region || d.workplace ||
+      d.intro || d.idealType || d.dealbreaker || d.height || d.birthYear ||
+      d.gender || d.degreeChoice || (d.photos && d.photos.length)));
+  }
+  function maybeRestoreDraft() {
+    if (editingEntryId) return;
+    var form = document.getElementById('entry-form');
+    if (!form) return;
+    var nick = form.querySelector('[name="nickname"]');
+    if (!nick || nick.value) return; /* 이미 채워져 있으면 건드리지 않음 */
+    var d = loadDraft();
+    if (!draftHasContent(d)) return;
+    var setVal = function (n, v) { var el = form.querySelector('[name="' + n + '"]'); if (el && v) el.value = v; };
+    setVal('nickname', d.nickname); setVal('realName', d.realName); setVal('contact', d.contact);
+    setVal('birthYear', d.birthYear); setVal('region', d.region); setVal('workplace', d.workplace);
+    setVal('referrerText', d.referrerText); setVal('height', d.height);
+    setVal('intro', d.intro); setVal('idealType', d.idealType); setVal('dealbreaker', d.dealbreaker);
+    if (d.gender) { var gr = form.querySelector('[name="gender"][value="' + d.gender + '"]'); if (gr) gr.checked = true; }
+    if (d.degreeChoice) { var dr = form.querySelector('[name="degreeChoice"][value="' + d.degreeChoice + '"]'); if (dr) dr.checked = true; }
+    if (d.photos && d.photos.length) { photoDataUrls = d.photos.slice(); renderPhotoThumbs(); }
+    var lede = form.parentNode.querySelector('.form-lede');
+    if (lede && !document.getElementById('draft-restored-note')) {
+      var note = document.createElement('div');
+      note.id = 'draft-restored-note';
+      note.className = 'readonly-note';
+      note.style.cssText = 'background:var(--gold-soft);border-color:var(--gold);margin-top:10px;';
+      note.innerHTML = '&#128190; 작성 중이던 내용을 불러왔어요. <button type="button" class="card-btn" id="draft-clear" style="margin-left:8px;padding:4px 12px;">새로 쓰기</button>';
+      lede.parentNode.insertBefore(note, lede.nextSibling);
+    }
   }
 
   function saveState(state) {
@@ -2241,6 +2313,7 @@
         paint(currentState);
       } else {
         editingEntryId = null;
+        clearDraft(); /* 제출 성공 → 임시저장 삭제 */
         currentUser = { id: entryId, nickname: nickname, pin: pin };
         saveSession();
         appendLog('signup', nickname, '신청서 제출');
@@ -3140,9 +3213,11 @@
   function stripNonDigits(el) { var v = el.value.replace(/[^0-9]/g, ''); if (el.value !== v) el.value = v; }
   document.body.addEventListener('input', function (e) {
     if (e.target.hasAttribute && e.target.hasAttribute('data-numeric')) stripNonDigits(e.target);
+    if (e.target.closest && e.target.closest('#entry-form')) saveDraft();
   });
   document.body.addEventListener('compositionend', function (e) {
     if (e.target.hasAttribute && e.target.hasAttribute('data-numeric')) stripNonDigits(e.target);
+    if (e.target.closest && e.target.closest('#entry-form')) saveDraft();
   });
 
   document.body.addEventListener('submit', function (e) {
@@ -3200,7 +3275,11 @@
         modalNotice('안내', '최대 3장까지만 추가됩니다. ' + (files.length - remaining) + '장은 무시되었어요.');
       }
       e.target.value = '';
+      setTimeout(saveDraft, 300); /* 사진 압축 후 임시저장 */
+      return;
     }
+    /* 성별/관계 등 라디오·체크 선택도 임시저장 */
+    if (e.target.closest && e.target.closest('#entry-form')) saveDraft();
   });
 
   document.body.addEventListener('click', function (e) {
@@ -3209,6 +3288,15 @@
       var idx = parseInt(removeBtn.getAttribute('data-remove-photo'), 10);
       photoDataUrls.splice(idx, 1);
       renderPhotoThumbs();
+      saveDraft();
+      return;
+    }
+    if (e.target.id === 'draft-clear') {
+      clearDraft();
+      photoDataUrls = [];
+      editingEntryId = null;
+      paint(currentState);
+      return;
     }
   });
 
@@ -3299,6 +3387,8 @@
 
       currentState = state;
       decryptAllAdminData(state).then(function () {
+        /* 신청서 작성 중이면 화면을 다시 그리지 않음 (입력 내용 보존) */
+        if (isEditingForm()) return;
         paint(state);
       });
     });
