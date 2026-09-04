@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="light">
-<title>베친소</title>
+<title>인연 접수처</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap">
 <style id="page-style">
   :root {
@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-33';
+  var APP_VERSION = '2026-09-05-34';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1407,6 +1407,114 @@
       return stateRef.update({ logs: logs });
     }).catch(function () {});
   }
+  /* ---- 관리자 <-> 회원 메시지 ---- */
+  function sendMessageTo(entryId, from, text) {
+    text = (text || '').trim();
+    if (!text || !entryId) return Promise.resolve();
+    var m = { id: genId(), entryId: entryId, from: from, text: text, at: new Date().toISOString() };
+    return db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var msgs = (s.messages || []).concat([m]);
+        tx.update(stateRef, { messages: msgs });
+      });
+    });
+  }
+  function threadFor(state, entryId, viewer) {
+    var hideKey = viewer === 'admin' ? 'hiddenByAdmin' : 'hiddenByUser';
+    return (state.messages || []).filter(function (m) {
+      return m.entryId === entryId && !m[hideKey];
+    }).sort(function (a, b) { return (a.at || '').localeCompare(b.at || ''); });
+  }
+  function nickForEntry(state, entryId) {
+    var e = (state.entries || []).find(function (x) { return x.id === entryId; })
+      || (state.pendingEntries || []).find(function (x) { return x.id === entryId; });
+    return e ? e.nickname : '(알 수 없음)';
+  }
+  function msgLineHtml(m, canDelete) {
+    var who = m.from === 'admin' ? '관리자' : '회원';
+    var col = m.from === 'admin' ? 'var(--accent)' : 'var(--ink)';
+    var del = canDelete ? '<button type="button" data-action="msg-del" data-id="' + escapeHtml(m.id) + '" title="삭제" style="border:none;background:none;color:var(--muted);cursor:pointer;float:right;font-size:0.95rem;">&#10005;</button>' : '';
+    return '<div style="padding:7px 0;border-bottom:1px dashed var(--line);">' +
+      del +
+      '<span style="font-weight:700;color:' + col + ';">' + who + '</span> ' +
+      '<span style="color:var(--muted);font-size:0.72rem;">' + fmtDate(m.at) + '</span>' +
+      '<div style="margin-top:2px;white-space:pre-wrap;word-break:break-word;">' + escapeHtml(m.text) + '</div>' +
+    '</div>';
+  }
+  function openMemberMsgCenter() {
+    if (!currentUser) { modalNotice('로그인 필요', '피드백/문의는 로그인 후 이용할 수 있어요. 먼저 로그인해주세요.'); return; }
+    var thread = threadFor(currentState, currentUser.id, 'user');
+    var body = thread.length ? thread.map(function (m) { return msgLineHtml(m, false); }).join('')
+      : '<p class="modal-msg" style="margin:0 0 4px;">아직 주고받은 메시지가 없어요. 첫 메시지를 남겨보세요!</p>';
+    var overlay = openModal(
+      '<h3>💬 관리자에게 (피드백 · 문의)</h3>' +
+      '<div style="max-height:36vh;overflow-y:auto;margin:6px 0 10px;">' + body + '</div>' +
+      '<textarea class="modal-input" id="mc-text" rows="3" maxlength="300" placeholder="건의사항이나 궁금한 점을 남겨주세요"></textarea>' +
+      '<div class="modal-actions">' +
+        (thread.length ? '<button type="button" class="card-btn" id="mc-delall">전체 삭제</button>' : '') +
+        '<button type="button" class="card-btn" id="modal-cancel">닫기</button>' +
+        '<button type="button" class="card-btn primary" id="mc-send">보내기</button>' +
+      '</div>'
+    );
+    overlay.classList.add('wide-modal');
+    function close() { closeModal(overlay); }
+    overlay.querySelector('#modal-cancel').addEventListener('click', close);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    overlay.querySelector('#mc-send').addEventListener('click', function () {
+      var t = overlay.querySelector('#mc-text').value.trim();
+      if (!t) return;
+      sendMessageTo(currentUser.id, 'user', t).then(function () {
+        appendLog('message', currentUser.nickname, '관리자에게 메시지');
+        close();
+        modalNotice('보냈어요 ✅', '관리자에게 메시지를 전달했어요. 답장이 오면 알림으로 알려드릴게요.');
+      }).catch(function (err) { modalNotice('오류', '전송 실패: ' + (err.message || err)); });
+    });
+    var da = overlay.querySelector('#mc-delall');
+    if (da) da.addEventListener('click', function () {
+      modalConfirm('전체 삭제', '내 화면에서 관리자와의 메시지 이력을 모두 지울까요? (관리자 화면에는 남아요)').then(function (ok) {
+        if (!ok) return;
+        deleteMyThread().then(close);
+      });
+    });
+  }
+  function deleteMyThread() {
+    var uid = currentUser && currentUser.id;
+    if (!uid) return Promise.resolve();
+    return db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var msgs = (s.messages || []).map(function (m) {
+          if (m.entryId === uid && !m.hiddenByUser) { var c = JSON.parse(JSON.stringify(m)); c.hiddenByUser = true; return c; }
+          return m;
+        });
+        tx.update(stateRef, { messages: msgs });
+      });
+    }).then(function () { paint(currentState); });
+  }
+  function handleAdminMessageCompose(entryId) {
+    var nick = nickForEntry(currentState, entryId);
+    modalMessage('메시지 보내기', nick + '님에게 보낼 메시지를 입력하세요.', '보내기', 'primary', '예: 안녕하세요! 관리자입니다.').then(function (t) {
+      if (t === null) return;
+      if (!t) { modalNotice('안내', '내용을 입력해주세요.'); return; }
+      sendMessageTo(entryId, 'admin', t).then(function () {
+        appendLog('admin', '관리자', '메시지 발송 · ' + nick);
+        modalNotice('보냈어요 ✅', nick + '님에게 메시지를 보냈어요.');
+      }).catch(function (err) { modalNotice('오류', '전송 실패: ' + (err.message || err)); });
+    });
+  }
+  function deleteAdminMessage(id) {
+    return db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var msgs = (s.messages || []).map(function (m) {
+          if (m.id === id) { var c = JSON.parse(JSON.stringify(m)); c.hiddenByAdmin = true; return c; }
+          return m;
+        });
+        tx.update(stateRef, { messages: msgs });
+      });
+    }).then(function () { paint(currentState); });
+  }
   function touchLastSeen(entryId) {
     var now = new Date().toISOString();
     db.runTransaction(function (tx) {
@@ -1545,7 +1653,8 @@
       contactHtml = '<div class="pf-contact" style="cursor:pointer;" data-action="reveal-contact" data-id="' + escapeHtml(entry.id) + '">' + ICON_LOCK + '<span>연락처 보기 (승인된 사람에게만 공개)</span></div>';
     }
     var adminBtn = isAdminUnlocked
-      ? '<button type="button" class="card-btn admin-detail-btn" data-action="detail" data-id="' + escapeHtml(entry.id) + '">🔍 상세</button>'
+      ? '<button type="button" class="card-btn admin-detail-btn" data-action="detail" data-id="' + escapeHtml(entry.id) + '">🔍 상세</button>' +
+        '<button type="button" class="card-btn" data-action="admin-msg" data-id="' + escapeHtml(entry.id) + '">💬 메시지</button>'
       : '';
     return (
       '<article class="pf-card" data-id="' + escapeHtml(entry.id) + '">' +
@@ -1880,6 +1989,19 @@
         '</div>'
       );
     }).join('');
+    var thread = threadFor(state, me.id, 'user');
+    var msgBody = thread.length
+      ? thread.map(function (m) { return msgLineHtml(m, false); }).join('')
+      : '<p class="sub" style="margin:0;">아직 관리자와 주고받은 메시지가 없어요.</p>';
+    var msgSection =
+      '<div class="mine-section">' +
+        '<h3>💬 관리자 메시지<span class="count">' + thread.length + '</span></h3>' +
+        msgBody +
+        '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">' +
+          '<button type="button" class="card-btn primary" id="member-msg-open" style="flex:none;">✍️ 관리자에게 메시지</button>' +
+          (thread.length ? '<button type="button" class="card-btn" id="member-msg-delall" style="flex:none;">전체 삭제</button>' : '') +
+        '</div>' +
+      '</div>';
     return (
       '<div class="admin-panel">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
@@ -1889,6 +2011,7 @@
         '<div class="my-uid">고유번호 ' + escapeHtml(formatUid(me) || '—') + '</div>' +
         '<p class="sub">' + escapeHtml(me.nickname) + '님, 반가워요! 받은 요청은 직접 승인하거나 거절할 수 있어요.</p>' +
         sections +
+        msgSection +
       '</div>'
     );
   }
@@ -2020,6 +2143,31 @@
       '<p class="sub">최근 ' + LOG_LIMIT + '건까지 보관돼요. (관리자만 볼 수 있어요)</p>' +
       (logs.length ? '<div class="log-list">' + logRows + '</div>' : '<p class="sub">아직 기록이 없어요.</p>');
 
+    /* 관리자 메시지 (회원별 스레드) */
+    var msgByEntry = {};
+    (state.messages || []).forEach(function (m) {
+      if (m.hiddenByAdmin) return;
+      (msgByEntry[m.entryId] = msgByEntry[m.entryId] || []).push(m);
+    });
+    var msgEntryIds = Object.keys(msgByEntry).sort(function (a, b) {
+      var la = msgByEntry[a][msgByEntry[a].length - 1].at || '';
+      var lb = msgByEntry[b][msgByEntry[b].length - 1].at || '';
+      return lb.localeCompare(la);
+    });
+    var adminMsgItems = msgEntryIds.map(function (eid) {
+      var msgs = msgByEntry[eid].slice().sort(function (a, b) { return (a.at || '').localeCompare(b.at || ''); });
+      var lines = msgs.map(function (m) { return msgLineHtml(m, true); }).join('');
+      return '<details style="margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:10px 14px;">' +
+        '<summary style="cursor:pointer;font-weight:700;">' + escapeHtml(uidOf(eid)) + ' ' + escapeHtml(nameOf(eid)) + ' <span class="count">' + msgs.length + '</span></summary>' +
+        '<div style="margin-top:8px;">' + lines +
+          '<button type="button" class="card-btn primary" data-action="admin-msg-reply" data-id="' + escapeHtml(eid) + '" style="margin-top:10px;">✍️ 답장</button>' +
+        '</div></details>';
+    }).join('');
+    var adminMsgSection =
+      '<h2>💬 관리자 메시지<span class="pending-count">' + msgEntryIds.length + '</span></h2>' +
+      '<p class="sub">회원이 보낸 피드백·문의와 주고받은 메시지예요. ✕ 로 각 메시지를 내 화면에서 지울 수 있어요.</p>' +
+      (msgEntryIds.length ? adminMsgItems : '<p class="sub">아직 메시지가 없어요.</p>');
+
     return (
       '<div class="admin-panel">' +
         '<div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
@@ -2038,6 +2186,8 @@
         seenSection +
         '<hr class="perforation">' +
         logSection +
+        '<hr class="perforation">' +
+        adminMsgSection +
       '</div>'
     );
   }
@@ -2126,13 +2276,14 @@
     return (
       '<div class="masthead"><div class="masthead-inner">' +
         '<div class="masthead-icon">' + ICON_HEART + '</div>' +
-        '<div><h1 id="masthead-title" title="새로고침" style="cursor:pointer;">베친소</h1><p>관리자 베니(<a href="https://instagram.com/benny3_song" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:underline">@benny3_song</a>)의 친구를 소개하는, 작은 신청 창구에요.</p></div>' +
+        '<div><h1 id="masthead-title" title="새로고침" style="cursor:pointer;">인연 접수처</h1><p>관리자(<a href="https://instagram.com/benny3_song" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:underline">@benny3_song</a>) 주변 사람들 중심으로 시작한, 서로를 소개하는 작은 창구에요.</p></div>' +
       '</div>' +
       '<div class="admin-bar">' +
         '<div class="admin-bar-row">' +
           '<button type="button" class="admin-link" id="copy-url">&#128279; URL 복사</button>' +
           (isStandalone() ? '' : '<button type="button" class="admin-link" id="add-home">&#128241; 홈 화면에 추가</button>') +
           '<button type="button" class="admin-link" id="show-notice">&#128227; 공지사항</button>' +
+          '<button type="button" class="admin-link" id="feedback-btn">&#128172; 피드백</button>' +
           (NOTIF_ENABLED
             ? '<button type="button" class="admin-link' + (notifOn() ? ' unlocked' : '') + '" id="notif-toggle">' +
               (notifOn() ? '&#128276; 알림 켜짐' : '&#128276; 알림 켜기') + '</button>' +
@@ -3492,6 +3643,20 @@
       showAnnouncement(true);
       return;
     }
+    if (e.target.closest('#feedback-btn')) {
+      openMemberMsgCenter();
+      return;
+    }
+    if (e.target.closest('#member-msg-open')) {
+      openMemberMsgCenter();
+      return;
+    }
+    if (e.target.closest('#member-msg-delall')) {
+      modalConfirm('전체 삭제', '내 화면에서 관리자와의 메시지 이력을 모두 지울까요? (관리자 화면에는 남아요)').then(function (ok) {
+        if (ok) deleteMyThread();
+      });
+      return;
+    }
     if (e.target.closest('#copy-url')) {
       handleCopyUrl();
       return;
@@ -3567,6 +3732,9 @@
       else if (action === 'reapply') handleReapplyRequest(id);
       else if (action === 'hide-request') handleHideRequest(id);
       else if (action === 'reset-pin') handleAdminResetPin(id);
+      else if (action === 'admin-msg') handleAdminMessageCompose(id);
+      else if (action === 'admin-msg-reply') handleAdminMessageCompose(id);
+      else if (action === 'msg-del') { if (isAdminUnlocked) deleteAdminMessage(id); }
       return;
     }
   });
@@ -3683,6 +3851,7 @@
       if (!Array.isArray(state.dateRequests)) state.dateRequests = [];
       if (!Array.isArray(state.approvedPairs)) state.approvedPairs = [];
       if (!Array.isArray(state.logs)) state.logs = [];
+      if (!Array.isArray(state.messages)) state.messages = [];
       /* 기존 회원 고유번호 백필 (한 번만, 결정적이라 클라이언트 간 동일) */
       if (ensureSerials(state)) {
         stateRef.update({ entries: state.entries }).catch(function () {});
@@ -3768,7 +3937,7 @@
       } catch (e) {}
     }
     var overlay = openModal(
-      '<h3 style="text-align:center;">안녕하세요! 베친소입니다 &#128522;</h3>' +
+      '<h3 style="text-align:center;">안녕하세요! 인연 접수처입니다 &#128522;</h3>' +
       '<div class="modal-msg" style="text-align:left;line-height:1.8;font-size:0.88rem;">' +
         '<div style="background:var(--gold-soft);border:1px solid var(--gold);border-radius:10px;padding:10px 12px;margin-bottom:12px;">' +
           '&#128276; <b>알림 기능이 아직 준비 중이에요.</b><br>사진/번호 요청이 왔는지 확인하려면 <b>가끔 직접 로그인해서 "신청 현황" 탭</b>을 봐주세요! 자동 알림(카카오톡 등)은 준비되는 대로 추가할게요.' +
@@ -3853,10 +4022,10 @@
       var opts = { body: '이 알림이 보이면 정상이에요! 실제 요청이 오면 이렇게 알려드려요.', icon: icon, tag: 'benchinso-test-' + Date.now(), renotify: true };
       if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
         navigator.serviceWorker.getRegistration().then(function (reg) {
-          if (reg && reg.showNotification) { reg.showNotification('베친소 테스트 알림 🔔', opts); }
-          else { try { new Notification('베친소 테스트 알림 🔔', opts); } catch (e) {} }
-        }).catch(function () { try { new Notification('베친소 테스트 알림 🔔', opts); } catch (e) {} });
-      } else { try { new Notification('베친소 테스트 알림 🔔', opts); } catch (e) {} }
+          if (reg && reg.showNotification) { reg.showNotification('인연 접수처 테스트 알림 🔔', opts); }
+          else { try { new Notification('인연 접수처 테스트 알림 🔔', opts); } catch (e) {} }
+        }).catch(function () { try { new Notification('인연 접수처 테스트 알림 🔔', opts); } catch (e) {} });
+      } else { try { new Notification('인연 접수처 테스트 알림 🔔', opts); } catch (e) {} }
     }
     if (Notification.permission === 'granted') {
       fire();
@@ -4029,7 +4198,7 @@
       var base = location.href.split('?')[0].split('#')[0];
       var dir = base.substring(0, base.lastIndexOf('/') + 1);
       var manifest = {
-        name: '베친소', short_name: '베친소',
+        name: '인연 접수처', short_name: '인연접수처',
         start_url: base, scope: dir, display: 'standalone',
         background_color: '#FBF3EE', theme_color: '#B23A48',
         icons: [

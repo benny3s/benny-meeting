@@ -1,4 +1,4 @@
-/* 베친소 — 요청 이벤트 발생 시 상대에게 FCM 웹 푸시 발송 */
+/* 인연 접수처 — 요청 이벤트 발생 시 상대에게 FCM 웹 푸시 발송 */
 const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
 admin.initializeApp();
@@ -102,6 +102,20 @@ exports.onStateChange = functions
     (before.pendingEntries || []).forEach((p) => { beforePend[p.id] = true; });
     (after.pendingEntries || []).forEach((p) => {
       if (!beforePend[p.id]) jobs.push(sendToAdmin('새 신청서 📝', (p.nickname || '누군가') + '님이 신청서를 냈어요 (승인 대기)'));
+    });
+
+    /* 새 메시지 → 상대에게 (회원→관리자 / 관리자→회원) */
+    const nickAny = (id) => {
+      const e = (after.entries || []).find((x) => x.id === id) || (after.pendingEntries || []).find((x) => x.id === id);
+      return e ? e.nickname : '회원';
+    };
+    const beforeMsg = {};
+    (before.messages || []).forEach((m) => { beforeMsg[m.id] = true; });
+    (after.messages || []).forEach((m) => {
+      if (beforeMsg[m.id]) return;
+      const preview = (m.text || '').slice(0, 40);
+      if (m.from === 'user') jobs.push(sendToAdmin('💬 새 피드백/메시지', nickAny(m.entryId) + ': ' + preview));
+      else if (m.from === 'admin') jobs.push(sendTo(m.entryId, '💬 관리자 메시지', preview));
     });
 
     await Promise.all(jobs);
