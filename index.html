@@ -665,7 +665,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-21';
+  var APP_VERSION = '2026-09-04-22';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -2102,6 +2102,7 @@
       '</div>' +
       '<div class="admin-bar">' +
         '<div class="admin-bar-row">' +
+          '<button type="button" class="admin-link" id="copy-url">&#128279; URL 복사</button>' +
           (isStandalone() ? '' : '<button type="button" class="admin-link" id="add-home">&#128241; 바로가기 추가</button>') +
           '<button type="button" class="admin-link" id="show-notice">&#128227; 공지사항</button>' +
         '</div>' +
@@ -3462,6 +3463,10 @@
       showAnnouncement(true);
       return;
     }
+    if (e.target.closest('#copy-url')) {
+      handleCopyUrl();
+      return;
+    }
     if (e.target.closest('#add-home')) {
       handleAddToHome();
       return;
@@ -3796,6 +3801,36 @@
       document.head.appendChild(tc);
     } catch (e) {}
   }
+  function handleCopyUrl() {
+    var url = location.origin + location.pathname.replace(/index\.html$/, '');
+    function manual() {
+      var overlay = openModal(
+        '<h3>🔗 사이트 주소</h3>' +
+        '<p class="modal-msg">아래 주소를 눌러 전체 선택 후 복사하세요.</p>' +
+        '<input type="text" class="modal-input" id="copy-url-field" readonly value="' + escapeHtml(url) + '">' +
+        '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">확인</button></div>'
+      );
+      var f = overlay.querySelector('#copy-url-field');
+      setTimeout(function () { try { f.focus(); f.select(); } catch (e) {} }, 50);
+      overlay.querySelector('#modal-ok').addEventListener('click', function () { closeModal(overlay); });
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(overlay); });
+    }
+    function ok() { modalNotice('복사 완료', '사이트 주소가 복사됐어요! 친구에게 붙여넣기 하면 돼요.'); }
+    function tryExec() {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        var done = document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (done) ok(); else manual();
+      } catch (e) { manual(); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(ok).catch(tryExec);
+    } else { tryExec(); }
+  }
+
   function handleAddToHome() {
     if (deferredInstallPrompt) {
       deferredInstallPrompt.prompt();
