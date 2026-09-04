@@ -562,7 +562,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-06';
+  var APP_VERSION = '2026-09-04-07';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -1283,6 +1283,9 @@
     if (r.userApproved) return 'user_approved';
     return 'pending';
   }
+  function statusLabel(st) {
+    return st === 'approved' ? '승인됨' : st === 'rejected' ? '거절됨' : st === 'held' ? '보류 중' : st === 'user_approved' ? '본인 승인' : '대기중';
+  }
   function statusChip(st) {
     if (st === 'approved') return '<span class="chip" style="background:#e6f4ea;color:#137333;">승인됨</span>';
     if (st === 'rejected') return '<span class="chip" style="background:#fce8e6;color:#c5221f;">거절됨</span>';
@@ -1753,6 +1756,31 @@
       );
     }).join('');
 
+    /* 관리자가 요청함에서 숨긴 요청 (당사자 기록은 유지됨) */
+    var hiddenReqs = (state.dateRequests || []).filter(function (r) { return r.adminHidden; });
+    var hiddenSection = '';
+    if (hiddenReqs.length) {
+      var hiddenItems = hiddenReqs.map(function (r) {
+        var isPhoto = (r.type || 'contact') === 'photo';
+        var fromN = nameOf(r.fromId), toN = nameOf(r.toId);
+        return (
+          '<div class="request-item">' +
+            '<div style="font-size:.86rem;">' + (isPhoto ? '📷' : '📱') + ' ' + escapeHtml(fromN) + ' → ' + escapeHtml(toN) +
+              ' <span class="chip" style="background:#f1f3f4;color:#5f6368;">' + statusLabel(reqStatus(r)) + '</span></div>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+              '<button type="button" class="card-btn" data-action="unhide-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">다시 표시</button>' +
+              '<button type="button" class="card-btn danger" data-action="purge-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">완전 삭제</button>' +
+            '</div>' +
+          '</div>'
+        );
+      }).join('');
+      hiddenSection =
+        '<details style="margin-top:12px;">' +
+          '<summary style="cursor:pointer;color:var(--muted);font-size:.86rem;">🗂 숨긴 요청 (' + hiddenReqs.length + ')</summary>' +
+          '<div style="margin-top:8px;">' + hiddenItems + '</div>' +
+        '</details>';
+    }
+
     /* 접속 기록 */
     var seenRows = allEntries.slice().sort(function (a, b) {
       return (b.lastSeenAt || '').localeCompare(a.lastSeenAt || '');
@@ -1794,6 +1822,7 @@
         '<h2>📬 요청함</h2>' +
         '<p class="sub">명단에서 들어온 사진/번호 요청이에요.</p>' +
         (reqs.length ? items : '<p class="sub">아직 들어온 요청이 없어요.</p>') +
+        hiddenSection +
         '<hr class="perforation">' +
         capSection +
         '<hr class="perforation">' +
@@ -2876,9 +2905,8 @@
             var hidden = c.hiddenBy || [];
             if (hidden.indexOf(me.id) < 0) hidden.push(me.id);
             c.hiddenBy = hidden;
-            /* 요청자·수신자·관리자 모두 숨겼을 때만 레코드 완전 삭제 */
-            var allHid = hidden.indexOf(c.fromId) >= 0 && hidden.indexOf(c.toId) >= 0 && c.adminHidden;
-            if (!allHid) reqs.push(c);
+            /* 개인 삭제는 본인 화면에서만 숨김 — 기록은 항상 유지 (관리자만 완전 삭제 가능) */
+            reqs.push(c);
           });
           tx.update(stateRef, { dateRequests: reqs });
         });
@@ -2890,31 +2918,81 @@
     });
   }
 
+  /* 관리자 삭제 방식 선택: 'hide'(요청함만) / 'purge'(완전 삭제) / null(취소) */
+  function modalDeleteChoice() {
+    return new Promise(function (resolve) {
+      var overlay = openModal(
+        '<h3>요청 삭제</h3>' +
+        '<p class="modal-msg">어떻게 삭제할까요?</p>' +
+        '<div style="display:flex;flex-direction:column;gap:8px;">' +
+          '<button type="button" class="card-btn" id="del-hide" style="text-align:left;">요청함에서만 숨기기<br><span style="font-size:.74rem;color:var(--muted);">당사자들의 기록은 그대로 남아요</span></button>' +
+          '<button type="button" class="card-btn danger" id="del-purge" style="text-align:left;">완전 삭제 (당사자 기록도)<br><span style="font-size:.74rem;">모두에게서 영구 삭제돼요</span></button>' +
+          '<button type="button" class="card-btn" id="del-cancel">취소</button>' +
+        '</div>'
+      );
+      function finish(v) { closeModal(overlay); resolve(v); }
+      overlay.querySelector('#del-hide').addEventListener('click', function () { finish('hide'); });
+      overlay.querySelector('#del-purge').addEventListener('click', function () { finish('purge'); });
+      overlay.querySelector('#del-cancel').addEventListener('click', function () { finish(null); });
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
+    });
+  }
   function handleDeleteRequest(id) {
-    modalConfirm('요청함에서 삭제', '관리자 요청함에서만 숨겨요. 당사자들의 "신청 현황" 기록은 그대로 남아요.').then(function (ok) {
-      if (!ok) return;
+    modalDeleteChoice().then(function (choice) {
+      if (!choice) return;
+      if (choice === 'purge') return purgeRequest(id, true);
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
-          var state = doc.data();
-          var reqs = [];
-          (state.dateRequests || []).forEach(function (r) {
-            if (r.id !== id) { reqs.push(r); return; }
-            var c = JSON.parse(JSON.stringify(r));
-            c.adminHidden = true;
-            /* 요청자·수신자·관리자 모두 숨겼을 때만 완전 삭제 */
-            var hidden = c.hiddenBy || [];
-            var allHid = hidden.indexOf(c.fromId) >= 0 && hidden.indexOf(c.toId) >= 0 && c.adminHidden;
-            if (!allHid) reqs.push(c);
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).map(function (r) {
+            if (r.id !== id) return r;
+            var c = JSON.parse(JSON.stringify(r)); c.adminHidden = true; return c;
           });
           tx.update(stateRef, { dateRequests: reqs });
         });
       }).then(function () {
+        appendLog('admin', '관리자', '요청 요청함에서 숨김');
+        return refreshNow();
+      }).catch(function (err) {
+        modalNotice('오류', '숨기기에 실패했어요: ' + (err.message || err));
+      });
+    });
+  }
+  /* 완전 삭제 (모두에게서 제거) */
+  function purgeRequest(id, skipConfirm) {
+    var run = function () {
+      return db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).filter(function (r) { return r.id !== id; });
+          tx.update(stateRef, { dateRequests: reqs });
+        });
+      }).then(function () {
+        appendLog('admin', '관리자', '요청 완전 삭제');
         return refreshNow();
       }).catch(function (err) {
         modalNotice('오류', '삭제에 실패했어요: ' + (err.message || err));
       });
+    };
+    if (skipConfirm) return run();
+    modalConfirm('완전 삭제', '당사자들의 기록에서도 영구 삭제돼요. 계속할까요?', '완전 삭제').then(function (ok) {
+      if (ok) run();
     });
   }
+  /* 관리자 요청함에 다시 표시 */
+  function handleUnhideRequest(id) {
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var reqs = (s.dateRequests || []).map(function (r) {
+          if (r.id !== id) return r;
+          var c = JSON.parse(JSON.stringify(r)); c.adminHidden = false; return c;
+        });
+        tx.update(stateRef, { dateRequests: reqs });
+      });
+    }).then(function () { return refreshNow(); }).catch(function () {});
+  }
+  function handlePurgeRequest(id) { purgeRequest(id, false); }
 
   function handleRevealPhoto(id) {
     var el = document.querySelector('[data-action="reveal-photo"][data-id="' + id + '"]');
@@ -3218,6 +3296,8 @@
       else if (action === 'hold-request') handleHoldRequest(id);
       else if (action === 'reject-request') handleRejectRequest(id);
       else if (action === 'delete-request') handleDeleteRequest(id);
+      else if (action === 'unhide-request') handleUnhideRequest(id);
+      else if (action === 'purge-request') handlePurgeRequest(id);
       else if (action === 'reveal-photo') handleRevealPhoto(id);
       else if (action === 'gallery') handleGallery(id);
       else if (action === 'reveal-contact') handleRevealContact(id);
