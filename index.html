@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-35';
+  var APP_VERSION = '2026-09-05-36';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -693,6 +693,7 @@
   var listFilter = 'all';
   var listView = 'card'; /* 'card' | 'compact' */
   var activeTab = 'form';
+  var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
   var isAdminUnlocked = false;
   var adminPrivateKey = null;
   var decryptedContacts = {};
@@ -1539,8 +1540,7 @@
     return inc + out + msg;
   }
   function adminMsgUnread(state) {
-    var seen = state.adminMsgSeenAt || '';
-    return (state.messages || []).filter(function (m) { return m.from === 'user' && !m.hiddenByAdmin && (m.at || '') > seen; }).length;
+    return (state.messages || []).filter(function (m) { return m.from === 'user' && !m.hiddenByAdmin && !m.readByAdmin; }).length;
   }
   function markMineSeen() {
     if (!currentUser) return;
@@ -1555,10 +1555,21 @@
       });
     }).catch(function () {});
   }
-  function markAdminMsgSeen() {
+  /* 관리자가 특정 회원 대화를 펼치면 그 회원의 메시지를 읽음 처리 */
+  function markAdminUserRead(eid) {
     if (!isAdminUnlocked) return;
-    if (adminMsgUnread(currentState) <= 0) return;
-    stateRef.update({ adminMsgSeenAt: new Date().toISOString() }).catch(function () {});
+    var has = (currentState.messages || []).some(function (m) { return m.entryId === eid && m.from === 'user' && !m.hiddenByAdmin && !m.readByAdmin; });
+    if (!has) return;
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var msgs = (s.messages || []).map(function (m) {
+          if (m.entryId === eid && m.from === 'user' && !m.readByAdmin) { var c = JSON.parse(JSON.stringify(m)); c.readByAdmin = true; return c; }
+          return m;
+        });
+        tx.update(stateRef, { messages: msgs });
+      });
+    }).catch(function () {});
   }
   function touchLastSeen(entryId) {
     var now = new Date().toISOString();
@@ -1710,7 +1721,7 @@
           '<div class="pf-chips">' +
             '<span class="chip chip--gender-' + escapeHtml(entry.gender) + '">' + genderLabel(entry.gender) + '</span>' +
             '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
-            '<span class="chip chip--degree">' + escapeHtml(deg) + '</span>' +
+            (isAdminUnlocked ? '<span class="chip chip--degree">' + escapeHtml(deg) + '</span>' : '') +
           '</div>' +
           '<ul class="pf-meta">' +
             '<li>' + ICON_PIN + '<span>' + escapeHtml(entry.region) + '</span></li>' +
@@ -1783,7 +1794,7 @@
           '<div class="compact-chips">' +
             '<span class="chip chip--gender-' + escapeHtml(entry.gender) + '">' + genderLabel(entry.gender) + '</span>' +
             '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
-            '<span class="chip chip--degree">' + escapeHtml(deg) + '</span>' +
+            (isAdminUnlocked ? '<span class="chip chip--degree">' + escapeHtml(deg) + '</span>' : '') +
           '</div>' +
           '<div class="compact-meta">' + ICON_PIN + '<span>' + escapeHtml(entry.region || '-') + '</span>' +
             ICON_BRIEF + '<span>' + escapeHtml(entry.workplace || '-') + '</span></div>' +
@@ -1857,9 +1868,11 @@
             '<div class="row-2">' +
               '<div class="field"><label for="f-birthyear">생년 <span class="req">필수</span></label>' +
                 '<input type="number" id="f-birthyear" name="birthYear" min="1960" max="2010" placeholder="예: 1994" required></div>' +
-              '<div class="field"><label for="f-region">사는 곳 <span class="req">필수</span></label>' +
-                '<input type="text" id="f-region" name="region" maxlength="40" placeholder="예: 서울 마포구" required></div>' +
+              '<div class="field"><label for="f-height">키 (cm) <span class="req">필수</span></label>' +
+                '<input type="number" id="f-height" name="height" min="130" max="220" placeholder="예: 168" required></div>' +
             '</div>' +
+            '<div class="field"><label for="f-region">사는 곳 <span class="req">필수</span></label>' +
+              '<input type="text" id="f-region" name="region" maxlength="40" placeholder="예: 서울 마포구" required></div>' +
             '<div class="field"><label for="f-workplace">직장 위치 <span class="opt">(회사명/직업 공개는 자유)</span> <span class="req">필수</span></label>' +
               '<input type="text" id="f-workplace" name="workplace" maxlength="60" placeholder="예: 강남 (아모레/연구원)" required></div>' +
             '<div class="field"><label for="f-referrer">누구를 통해 알게 되셨나요? ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
@@ -1883,13 +1896,9 @@
                 '</label>' +
               '</div></div>' +
             '<div class="section-label">추가 정보</div>' +
-            '<div class="row-2">' +
-              '<div class="field"><label for="f-height">키 (cm) <span class="opt">(선택)</span></label>' +
-                '<input type="number" id="f-height" name="height" min="130" max="220" placeholder="예: 168"></div>' +
-              '<div class="field"><label for="f-pin">개인 PIN ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
-                '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="숫자 4~8자리" required') + '>' +
-                '<span class="hint">나중에 본인이 신청을 취소하거나 데이트를 신청할 때 필요해요.</span></div>' +
-            '</div>' +
+            '<div class="field"><label for="f-pin">개인 PIN ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
+              '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="숫자 4~8자리" required') + '>' +
+              '<span class="hint">나중에 본인이 신청을 취소하거나 데이트를 신청할 때 필요해요.</span></div>' +
             exampleTip +
             '<div class="field"><label for="f-intro">자기소개 <span class="opt">(선택)</span></label>' +
               '<span class="hint">정보가 자세할수록 매칭 성공률이 올라가요!</span>' +
@@ -2202,22 +2211,29 @@
     var adminMsgItems = msgEntryIds.map(function (eid) {
       var msgs = msgByEntry[eid].slice().sort(function (a, b) { return (a.at || '').localeCompare(b.at || ''); });
       var lines = msgs.map(function (m) { return msgLineHtml(m, true); }).join('');
-      return '<div style="margin-top:12px;border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--paper);">' +
-        '<div style="font-weight:700;margin-bottom:6px;">' + escapeHtml(uidOf(eid)) + ' ' + escapeHtml(nameOf(eid)) + ' <span class="count">' + msgs.length + '</span></div>' +
-        lines +
-        '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">' +
-          '<button type="button" class="card-btn primary" data-action="admin-msg-reply" data-id="' + escapeHtml(eid) + '" style="flex:none;">✍️ 답장</button>' +
-          '<button type="button" class="card-btn danger" data-action="admin-msg-delall" data-id="' + escapeHtml(eid) + '" style="flex:none;">전체 삭제</button>' +
+      var last = msgs[msgs.length - 1];
+      var preview = (last.from === 'admin' ? '나: ' : '') + (last.text || '');
+      var unreadHere = msgs.filter(function (m) { return m.from === 'user' && !m.readByAdmin; }).length;
+      var unreadBadge = unreadHere ? '<span style="display:inline-block;margin-left:6px;background:var(--accent);color:#fff;border-radius:999px;padding:1px 8px;font-size:0.72rem;vertical-align:middle;">NEW ' + unreadHere + '</span>' : '';
+      return '<details class="admin-msg-item" data-eid="' + escapeHtml(eid) + '" style="border:1px solid ' + (unreadHere ? 'var(--accent)' : 'var(--line)') + ';border-radius:12px;margin-top:10px;background:var(--paper);">' +
+        '<summary style="cursor:pointer;padding:12px 14px;">' +
+          '<b>' + escapeHtml(uidOf(eid)) + ' ' + escapeHtml(nameOf(eid)) + '</b>' +
+          '<span class="pending-count">' + msgs.length + '</span>' + unreadBadge +
+          '<div style="color:var(--muted);font-size:0.78rem;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(preview) + '</div>' +
+        '</summary>' +
+        '<div style="padding:2px 14px 14px;border-top:1px solid var(--line);">' +
+          '<div style="margin-top:8px;">' + lines + '</div>' +
+          '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">' +
+            '<button type="button" class="card-btn primary" data-action="admin-msg-reply" data-id="' + escapeHtml(eid) + '" style="flex:none;">✍️ 답장</button>' +
+            '<button type="button" class="card-btn danger" data-action="admin-msg-delall" data-id="' + escapeHtml(eid) + '" style="flex:none;">전체 삭제</button>' +
+          '</div>' +
         '</div>' +
-      '</div>';
-    }).join('');
-    var adminMsgUnreadN = adminMsgUnread(state);
-    var adminMsgSection =
-      '<details id="admin-msg-fold" style="margin-top:12px;">' +
-        '<summary style="cursor:pointer;font-weight:700;font-size:0.95rem;">💬 관리자 메시지 (' + msgEntryIds.length + ')' + (adminMsgUnreadN ? ' · <span style="color:var(--accent);">안읽음 ' + adminMsgUnreadN + '</span>' : '') + '</summary>' +
-        '<p class="sub" style="margin-top:8px;">회원이 보낸 Q&amp;A·문의와 주고받은 메시지예요. ✕ 로 개별 삭제, 전체 삭제도 돼요.</p>' +
-        (msgEntryIds.length ? adminMsgItems : '<p class="sub">아직 메시지가 없어요.</p>') +
       '</details>';
+    }).join('');
+    var adminMsgSection =
+      '<h2>💬 관리자 메시지<span class="pending-count">' + msgEntryIds.length + '</span></h2>' +
+      '<p class="sub">회원별로 한 줄씩 보여요. 눌러서 대화를 펼치고 답장할 수 있어요. (✕ 개별 삭제 / 전체 삭제)</p>' +
+      (msgEntryIds.length ? adminMsgItems : '<p class="sub">아직 메시지가 없어요.</p>');
 
     return (
       '<div class="admin-panel">' +
@@ -2333,6 +2349,7 @@
         '</div>' +
         (NOTIF_ENABLED
           ? '<div class="admin-bar-row">' +
+              (isStandalone() ? '' : '<button type="button" class="admin-link" id="add-home">&#128241; 홈 화면에 추가</button>') +
               '<button type="button" class="admin-link' + (notifOn() ? ' unlocked' : '') + '" id="notif-toggle">' +
                 (notifOn() ? '&#128276; 알림 켜짐' : '&#128276; 알림 켜기') + '</button>' +
               '<button type="button" class="admin-link" id="notif-help">&#128214; 알림 켜는 법</button>' +
@@ -2361,6 +2378,12 @@
   function paint(state) {
     currentState = state;
     document.getElementById('app').innerHTML = renderApp(state);
+    try {
+      var items = document.querySelectorAll('.admin-msg-item');
+      for (var i = 0; i < items.length; i++) {
+        if (openMsgFolds[items[i].getAttribute('data-eid')]) items[i].open = true;
+      }
+    } catch (e) {}
     maybeRestoreDraft();
   }
 
@@ -2625,6 +2648,7 @@
     if (!nickname) missing.push('닉네임');
     if (!gender) missing.push('성별');
     if (!birthYear) missing.push('생년');
+    if (!height) missing.push('키');
     if (!region) missing.push('사는 곳');
     if (!workplace) missing.push('직장 위치');
     if (!degreeChoice) missing.push('베니와의 관계');
@@ -3669,10 +3693,18 @@
       activeTab = tabBtn.getAttribute('data-tab');
       if (activeTab === 'form') exampleTipDismissed = false; /* 신청서 탭 재진입 시 예시 다시 표시 */
       if (activeTab === 'mine') markMineSeen();
-      if (activeTab === 'admin') markAdminMsgSeen();
       paint(currentState);
       window.scrollTo(0, 0); /* 탭 전환 시 맨 위로 */
       return;
+    }
+    var msgSummary = e.target.closest('.admin-msg-item > summary');
+    if (msgSummary) {
+      var msgDetails = msgSummary.parentElement;
+      var meid = msgDetails.getAttribute('data-eid');
+      var willOpen = !msgDetails.open; /* 네이티브 토글은 이 핸들러 뒤에 일어남 */
+      openMsgFolds[meid] = willOpen;
+      if (willOpen) markAdminUserRead(meid);
+      /* return 하지 않음 → details 기본 토글 진행 */
     }
     var filterBtn = e.target.closest('[data-filter]');
     if (filterBtn) {
