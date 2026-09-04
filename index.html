@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-31';
+  var APP_VERSION = '2026-09-05-32';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -3940,13 +3940,13 @@
   function registerAdminTokenIfNeeded() {
     if (!isAdminUnlocked) return;
     var token = ''; try { token = localStorage.getItem('notifToken') || ''; } catch (e) {}
-    if (!token) return;
-    try {
-      pushTokensRef.doc('admin').set({
-        tokens: firebase.firestore.FieldValue.arrayUnion(token),
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-    } catch (e) {}
+    var me = myEntryOrPending();
+    if (!token && !me) return;
+    var payload = { updatedAt: new Date().toISOString() };
+    if (token) payload.tokens = firebase.firestore.FieldValue.arrayUnion(token);
+    /* 관리자의 회원 엔트리 id 를 남겨두면, 그 계정의 모든 기기로 관리자 알림이 감 */
+    if (me) payload.entryId = me.id;
+    try { pushTokensRef.doc('admin').set(payload, { merge: true }); } catch (e) {}
   }
   /* 앱이 열려 있을 때 오는 메시지 */
   if (fcmMessaging) {

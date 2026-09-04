@@ -28,8 +28,7 @@ async function tokensFor(id) {
     return [];
   } catch (e) { return []; }
 }
-async function sendTo(id, title, body) {
-  const tokens = await tokensFor(id);
+async function sendToTokens(tokens, title, body, cleanupIds) {
   if (!tokens.length) return;
   try {
     /* data-only: 서비스워커가 직접 알림을 만들어 중복 표시를 막음 */
@@ -47,11 +46,37 @@ async function sendTo(id, title, body) {
             c === 'messaging/invalid-registration-token') bad.push(tokens[i]);
       }
     });
-    if (bad.length) {
-      await db.collection('pushTokens').doc(id)
-        .set({ tokens: admin.firestore.FieldValue.arrayRemove.apply(null, bad) }, { merge: true });
+    if (bad.length && cleanupIds && cleanupIds.length) {
+      for (const cid of cleanupIds) {
+        try {
+          await db.collection('pushTokens').doc(cid)
+            .set({ tokens: admin.firestore.FieldValue.arrayRemove.apply(null, bad) }, { merge: true });
+        } catch (e) {}
+      }
     }
   } catch (e) { console.error('push send failed', e); }
+}
+async function sendTo(id, title, body) {
+  const tokens = await tokensFor(id);
+  await sendToTokens(tokens, title, body, [id]);
+}
+/* 관리자에게: pushTokens/admin 의 토큰 + (있으면) 관리자 회원 엔트리의 모든 기기 토큰 */
+async function sendToAdmin(title, body) {
+  const ids = ['admin'];
+  const set = {};
+  try {
+    const a = await db.collection('pushTokens').doc('admin').get();
+    if (a.exists) {
+      const d = a.data() || {};
+      (Array.isArray(d.tokens) ? d.tokens : []).forEach((t) => { set[t] = 1; });
+      if (d.entryId) {
+        ids.push(d.entryId);
+        const e = await db.collection('pushTokens').doc(d.entryId).get();
+        if (e.exists) (Array.isArray(e.data().tokens) ? e.data().tokens : []).forEach((t) => { set[t] = 1; });
+      }
+    }
+  } catch (e) {}
+  await sendToTokens(Object.keys(set), title, body, ids);
 }
 
 exports.onStateChange = functions
@@ -89,7 +114,7 @@ exports.onStateChange = functions
     const beforePend = {};
     (before.pendingEntries || []).forEach((p) => { beforePend[p.id] = true; });
     (after.pendingEntries || []).forEach((p) => {
-      if (!beforePend[p.id]) jobs.push(sendTo('admin', '새 신청서 📝', (p.nickname || '누군가') + '님이 신청서를 냈어요 (승인 대기)'));
+      if (!beforePend[p.id]) jobs.push(sendToAdmin('새 신청서 📝', (p.nickname || '누군가') + '님이 신청서를 냈어요 (승인 대기)'));
     });
 
     await Promise.all(jobs);
