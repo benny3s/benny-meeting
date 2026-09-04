@@ -660,7 +660,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-18';
+  var APP_VERSION = '2026-09-04-19';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -1319,28 +1319,34 @@
   }
 
   /* ---- 새 버전 감지 → 새로고침 안내 (배포 후 캐시된 옛 화면 방지) ---- */
-  var VERSION_GRACE_MS = 60000;      /* 새 버전 감지 후 배너까지 여유 (서버 반영 대기) */
-  var RELOAD_SUPPRESS_MS = 180000;   /* 새로고침 시도 후 이 시간 동안은 다시 안 조름 (반영 지연) */
   function checkVersion(state) {
     if (!state) return;
     var sv = state.appVersion || '';
     if (sv && sv > APP_VERSION) {
-      /* 이미 이 버전으로 새로고침을 시도했는데 아직 옛 코드면 = 서버 반영이 아직임 → 조르지 않음 */
-      var attempt = null;
-      try { attempt = JSON.parse(sessionStorage.getItem('reloadAttempt') || 'null'); } catch (e) {}
-      if (attempt && attempt.v === sv && (Date.now() - (attempt.at || 0)) < RELOAD_SUPPRESS_MS) return;
+      /* 새 버전이 서버(state)에 기록됨 → CDN에 실제로 반영됐는지 확인한 뒤에만 배너를 띄움
+         (자동 새로고침은 하지 않음. 새로고침은 사용자가 직접 누름) */
       if (!reloadPrompted) {
         reloadPrompted = true;
-        /* 60초 뒤에도 여전히 최신이 아니면 배너 표시 (서버 반영 시간 확보) */
-        setTimeout(function () {
-          if (currentState && (currentState.appVersion || '') > APP_VERSION) showReloadBanner(sv);
-        }, VERSION_GRACE_MS);
+        verifyPropagation(sv, 0);
       }
     } else if (APP_VERSION >= sv) {
-      /* 내가 최신 → 시도 기록 정리, 서버에도 기록 */
-      try { sessionStorage.removeItem('reloadAttempt'); } catch (e) {}
       if (APP_VERSION > sv) stateRef.update({ appVersion: APP_VERSION }).catch(function () {});
     }
+  }
+  /* 현재 페이지를 캐시 우회로 다시 받아, 서버가 실제로 새 버전을 주는지 확인.
+     반영됐을 때만 배너를 띄운다(그래야 새로고침이 헛되지 않음). */
+  function verifyPropagation(sv, attempt) {
+    var url = location.pathname + '?vcheck=' + encodeURIComponent(sv) + '_' + Date.now();
+    fetch(url, { cache: 'no-store' }).then(function (res) { return res.text(); }).then(function (html) {
+      var m = html.match(/var APP_VERSION\s*=\s*'([^']+)'/);
+      var fetched = m ? m[1] : '';
+      if (fetched && fetched >= sv) { showReloadBanner(sv); return; }
+      if (attempt < 30) setTimeout(function () { verifyPropagation(sv, attempt + 1); }, 20000);
+      else showReloadBanner(sv); /* 너무 오래 걸리면(10분+) 그냥 안내 */
+    }).catch(function () {
+      if (attempt < 30) setTimeout(function () { verifyPropagation(sv, attempt + 1); }, 20000);
+      else showReloadBanner(sv);
+    });
   }
   function showReloadBanner(sv) {
     if (document.getElementById('update-bar')) return;
@@ -1351,8 +1357,7 @@
       '<button type="button" id="reload-now">지금 새로고침</button>';
     document.body.appendChild(bar);
     document.getElementById('reload-now').addEventListener('click', function () {
-      /* 새로고침 시도 기록 (반영 지연 시 재알림 억제용) + 캐시 우회 새로고침 */
-      try { sessionStorage.setItem('reloadAttempt', JSON.stringify({ v: sv, at: Date.now() })); } catch (e) {}
+      /* 캐시 우회 새로고침 (이미 반영 확인 후 뜬 배너라 반영된 새 버전을 받음) */
       location.replace(location.pathname + '?v=' + encodeURIComponent(sv));
     });
   }
