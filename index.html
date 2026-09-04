@@ -311,6 +311,15 @@
   .submit-btn:hover { background: var(--accent-deep); }
   .submit-btn:active { transform: scale(0.97); }
   .submit-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .cancel-btn {
+    background: var(--paper); color: var(--muted); border: 1px solid var(--line);
+    padding: 14px 30px; border-radius: 999px; font-size: 1rem; font-weight: 700;
+    cursor: pointer; transition: transform 0.1s ease, background 0.15s ease;
+  }
+  .cancel-btn:hover { background: var(--gold-soft); }
+  .cancel-btn:active { transform: scale(0.97); }
+  /* 수정 모드: '비우면 유지' 안내 placeholder 를 검정색으로 (직접 입력한 것처럼) */
+  .field input.keep-ph::placeholder, .field input.keep-ph::-webkit-input-placeholder { color: var(--ink); opacity: 1; }
   .status-msg { font-size: 0.86rem; color: var(--muted); }
   .status-msg.error { color: var(--accent); }
   .retry-btn {
@@ -676,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-27';
+  var APP_VERSION = '2026-09-05-28';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1678,11 +1687,11 @@
                 '<input type="text" id="f-nickname" name="nickname" maxlength="20" placeholder="예: 민지" required>' +
                 '<span class="hint">닉네임 사용 추천 (전 소개팅녀/소개팅남 모르게)</span></div>' +
               '<div class="field"><label for="f-realname">실명 ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
-                '<input type="text" id="f-realname" name="realName" maxlength="20" placeholder="예: 김민지"' + (isEdit ? '' : ' required') + '>' +
+                '<input type="text" id="f-realname" name="realName" maxlength="20"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 김민지" required') + '>' +
                 '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
             '</div>' +
             '<div class="field"><label for="f-contact">전화번호 ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
-              '<input type="tel" id="f-contact" name="contact" maxlength="11" inputmode="numeric" data-numeric placeholder="예: 01012345678"' + (isEdit ? '' : ' required') + '>' +
+              '<input type="tel" id="f-contact" name="contact" maxlength="11" inputmode="numeric" data-numeric' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 01012345678" required') + '>' +
               '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
             '<div class="field">' +
               '<label>성별 <span class="req">필수</span></label>' +
@@ -1700,7 +1709,7 @@
             '<div class="field"><label for="f-workplace">직장 위치 <span class="opt">(회사명/직업 공개는 자유)</span> <span class="req">필수</span></label>' +
               '<input type="text" id="f-workplace" name="workplace" maxlength="60" placeholder="예: 강남 (아모레/연구원)" required></div>' +
             '<div class="field"><label for="f-referrer">누구를 통해 알게 되셨나요? ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
-              '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 홍길동 (베니 친구), 김철수 (건너 건너)"' + (isEdit ? '' : ' required') + '>' +
+              '<input type="text" id="f-referrer" name="referrerText" maxlength="60"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 홍길동 (베니 친구), 김철수 (건너 건너)" required') + '>' +
               '<span class="hint">' + ICON_LOCK + ' 관리자(베니)가 추후 연락드리기 위해서입니다. 암호화되어 관리자만 볼 수 있어요.</span></div>' +
             '<div class="field"><label>베니와의 관계 <span class="req">필수</span></label>' +
               '<div class="degree-group">' +
@@ -1724,7 +1733,7 @@
               '<div class="field"><label for="f-height">키 (cm) <span class="opt">(선택)</span></label>' +
                 '<input type="number" id="f-height" name="height" min="130" max="220" placeholder="예: 168"></div>' +
               '<div class="field"><label for="f-pin">개인 PIN ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
-                '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8" placeholder="숫자 4~8자리"' + (isEdit ? '' : ' required') + '>' +
+                '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="숫자 4~8자리" required') + '>' +
                 '<span class="hint">나중에 본인이 신청을 취소하거나 데이트를 신청할 때 필요해요.</span></div>' +
             '</div>' +
             exampleTip +
@@ -1747,13 +1756,11 @@
                 '동의를 거부할 권리가 있으며, 거부 시 신청이 불가합니다.</p>' +
             '</div>' +
             '<div class="consent-box">' +
-              '<label class="consent-label"><input type="checkbox" id="f-notify-ack">' +
-                ' <span>알림 기능이 아직 준비 중임을 확인했습니다.</span></label>' +
-              '<p class="consent-detail">현재 자동 알림(카카오톡 등)이 없어요. 사진/번호 요청이 왔는지 확인하려면 ' +
-                '<b>가끔 직접 로그인해서 "신청 현황" 탭을 확인</b>해 주세요. 알림 기능은 준비되는 대로 추가할게요!</p>' +
+              '<p class="consent-detail" style="margin:0;">&#128276; <b>알림을 켜면</b> 사진/번호 요청과 승인 소식을 기기로 바로 받아볼 수 있어요. 신청 후 상단의 <b>&#128276; 알림 켜기</b> 를 눌러주세요! (켜는 법은 <b>&#10067;</b>)</p>' +
             '</div>') +
           '<div class="submit-row">' +
             '<button type="submit" class="submit-btn" id="submit-btn">' + (isEdit ? '수정 저장하기' : '도장 찍고 제출하기') + '</button>' +
+            (isEdit ? '<button type="button" class="cancel-btn" id="cancel-edit-bottom">수정 취소</button>' : '') +
             '<span class="status-msg" id="status-msg"></span>' +
           '</div>' +
         '</form>' +
@@ -2437,11 +2444,6 @@
         modalNotice('동의 필요', '개인정보 수집 및 이용에 동의해 주세요.');
         return;
       }
-      var notifyAck = document.getElementById('f-notify-ack');
-      if (!notifyAck || !notifyAck.checked) {
-        modalNotice('확인 필요', '알림 기능이 준비 중임을 확인란에 체크해 주세요. (가끔 직접 로그인해 확인이 필요해요)');
-        return;
-      }
     }
     if (pin && pin.length < 4) {
       modalNotice('입력 오류', 'PIN은 4자리 이상이어야 해요.');
@@ -2494,37 +2496,35 @@
       return photoWrite.then(function () {
         photoCache[entryId] = finalPhotos;
         if (isEdit && origEntry) {
-          var updated = {
-            id: origEntry.id,
-            nickname: nickname,
-            gender: gender,
-            birthYear: birthYear,
-            region: region,
-            workplace: workplace,
-            photoThumb: thumb,
-            photoCount: finalPhotos.length,
-            blurPhoto: blurPhoto && finalPhotos.length > 0,
-            height: height,
-            intro: intro,
-            idealType: idealType,
-            dealbreaker: dealbreaker,
-            realNameEnc: results[0] || origEntry.realNameEnc || null,
-            contactEnc: results[1] || origEntry.contactEnc || null,
-            referrerEnc: results[2] || origEntry.referrerEnc || null,
-            degreeChoice: degreeChoice,
-            contactSelfEnc: results[4] || origEntry.contactSelfEnc || null,
-            lastSeenAt: origEntry.lastSeenAt || null,
-            submittedAt: origEntry.submittedAt
-          };
-          /* PIN: 새로 입력했으면 신형(pinAuth)으로, 아니면 기존 형식 유지 (undefined 금지) */
-          if (results[3]) updated.pinAuth = results[3];
-          else if (origEntry.pinAuth) updated.pinAuth = origEntry.pinAuth;
-          else if (origEntry.pinHash) updated.pinHash = origEntry.pinHash;
-          if (origEntry.serial) updated.serial = origEntry.serial;
           return db.runTransaction(function (tx) {
             return tx.get(stateRef).then(function (doc) {
               var s = doc.data();
-              var newEntries = (s.entries || []).map(function (e) { return e.id === editingEntryId ? updated : e; });
+              var newEntries = (s.entries || []).map(function (e) {
+                if (e.id !== editingEntryId) return e;
+                /* 최신 저장본을 복사한 뒤 바뀐 항목만 덮어씀 → 다른(최신) 버전이 추가한 필드도 보존 */
+                var u = JSON.parse(JSON.stringify(e));
+                u.nickname = nickname;
+                u.gender = gender;
+                u.birthYear = birthYear;
+                u.region = region;
+                u.workplace = workplace;
+                u.photoThumb = thumb;
+                u.photoCount = finalPhotos.length;
+                u.blurPhoto = blurPhoto && finalPhotos.length > 0;
+                u.height = height;
+                u.intro = intro;
+                u.idealType = idealType;
+                u.dealbreaker = dealbreaker;
+                u.degreeChoice = degreeChoice;
+                /* 비운 항목은 기존 값 유지, 새로 입력한 항목만 덮어씀 */
+                if (results[0]) u.realNameEnc = results[0];
+                if (results[1]) u.contactEnc = results[1];
+                if (results[2]) u.referrerEnc = results[2];
+                if (results[4]) u.contactSelfEnc = results[4];
+                /* PIN: 새로 입력했으면 신형(pinAuth)으로 교체, 아니면 기존 형식 유지 */
+                if (results[3]) { u.pinAuth = results[3]; delete u.pinHash; }
+                return u;
+              });
               tx.update(stateRef, { entries: newEntries });
             });
           });
@@ -3525,9 +3525,10 @@
       handleChangeMyPin();
       return;
     }
-    if (e.target.id === 'cancel-edit') {
+    if (e.target.id === 'cancel-edit' || e.target.id === 'cancel-edit-bottom') {
       editingEntryId = null;
       photoDataUrls = [];
+      activeTab = 'list';
       paint(currentState);
       return;
     }
