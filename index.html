@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-30';
+  var APP_VERSION = '2026-09-05-31';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -2130,7 +2130,7 @@
       '<div class="admin-bar">' +
         '<div class="admin-bar-row">' +
           '<button type="button" class="admin-link" id="copy-url">&#128279; URL 복사</button>' +
-          (isStandalone() ? '' : '<button type="button" class="admin-link" id="add-home">&#128241; 바로가기 추가</button>') +
+          (isStandalone() ? '' : '<button type="button" class="admin-link" id="add-home">&#128241; 홈 화면에 추가</button>') +
           '<button type="button" class="admin-link" id="show-notice">&#128227; 공지사항</button>' +
           (NOTIF_ENABLED
             ? '<button type="button" class="admin-link' + (notifOn() ? ' unlocked' : '') + '" id="notif-toggle">' +
@@ -3814,7 +3814,8 @@
     if (!('Notification' in window)) { modalNotice('안내', '이 브라우저는 알림을 지원하지 않아요.'); return; }
     var icon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"%3E%3Crect width="48" height="48" fill="%23B23A48"/%3E%3Ctext x="24" y="34" font-size="26" text-anchor="middle" fill="white"%3E%E2%99%A5%3C/text%3E%3C/svg%3E';
     function fire() {
-      var opts = { body: '이 알림이 보이면 정상이에요! 실제 요청이 오면 이렇게 알려드려요.', icon: icon, tag: 'benchinso-test' };
+      /* 매번 새로 뜨도록 태그를 매번 다르게 (같은 태그면 조용히 교체돼서 두 번째부터 안 떠요) */
+      var opts = { body: '이 알림이 보이면 정상이에요! 실제 요청이 오면 이렇게 알려드려요.', icon: icon, tag: 'benchinso-test-' + Date.now(), renotify: true };
       if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
         navigator.serviceWorker.getRegistration().then(function (reg) {
           if (reg && reg.showNotification) { reg.showNotification('베친소 테스트 알림 🔔', opts); }
@@ -3852,6 +3853,7 @@
       '<button type="button" class="submit-btn" id="notif-test-btn" style="width:100%;box-sizing:border-box;margin:2px 0 12px;padding:11px;font-size:0.92rem;">🔔 테스트 알림 보내기</button>' +
       '<p class="modal-msg" style="margin-bottom:6px;">요청이 오거나 승인·거절되면 기기로 바로 알림을 받아요. 기기별로 켜는 방법이 조금 달라요.</p>' +
       sec('android', '🤖 안드로이드 (크롬)',
+        '<li>(선택) 상단 <b>📱 홈 화면에 추가</b> 로 앱을 설치하면 더 안정적이에요.</li>' +
         '<li>이 화면에서 <b>🔔 알림 켜기</b> 를 누르세요.</li>' +
         '<li>“알림을 허용하시겠어요?” 가 뜨면 <b>허용</b>.</li>' +
         '<li>끝! 앱을 꺼둬도 알림이 와요.</li>') +
@@ -3881,7 +3883,7 @@
     var ua = navigator.userAgent || '';
     var isIOS = /iPhone|iPad|iPod/i.test(ua);
     if (isIOS && !isStandalone()) {
-      modalNotice('아이폰 알림 안내', '아이폰은 먼저 "바로가기 추가"로 홈 화면에 추가한 뒤, 홈 화면 아이콘으로 열어서 알림을 켜주세요.');
+      modalNotice('아이폰 알림 안내', '아이폰은 먼저 "홈 화면에 추가"로 홈 화면에 아이콘을 만든 뒤, 그 아이콘으로 열어서 알림을 켜주세요.');
       return;
     }
     if (Notification.permission === 'denied') {
@@ -4038,7 +4040,7 @@
         '<button type="button" class="card-btn primary" id="do-install">📱 홈 화면에 추가</button></div>'
       : '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">확인</button></div>';
     var overlay = openModal(
-      '<h3>📱 바탕화면에 바로가기 추가</h3>' +
+      '<h3>📱 홈 화면에 추가</h3>' +
       '<div class="modal-msg" style="text-align:left;line-height:1.9;">' + intro + '</div>' +
       actions
     );
