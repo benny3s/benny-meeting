@@ -562,7 +562,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-03';
+  var APP_VERSION = '2026-09-04-04';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -1493,8 +1493,8 @@
               '<div class="field"><label for="f-region">사는 곳 <span class="req">필수</span></label>' +
                 '<input type="text" id="f-region" name="region" maxlength="40" placeholder="예: 서울 마포구" required></div>' +
             '</div>' +
-            '<div class="field"><label for="f-workplace">직장 위치 <span class="req">필수</span></label>' +
-              '<input type="text" id="f-workplace" name="workplace" maxlength="60" placeholder="예: 서울 강남구 (회사명 공개 자유)" required></div>' +
+            '<div class="field"><label for="f-workplace">직장 위치 <span class="opt">(회사명/직업 공개는 자유)</span> <span class="req">필수</span></label>' +
+              '<input type="text" id="f-workplace" name="workplace" maxlength="60" placeholder="예: 강남 (아모레/연구원)" required></div>' +
             '<div class="field"><label for="f-referrer">누구를 통해 알게 되셨나요? ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
               '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 홍길동 (베니 친구), 김철수 (건너 건너)"' + (isEdit ? '' : ' required') + '>' +
               '<span class="hint">' + ICON_LOCK + ' 관리자(베니)가 추후 연락드리기 위해서입니다. 암호화되어 관리자만 볼 수 있어요.</span></div>' +
