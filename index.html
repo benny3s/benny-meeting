@@ -562,7 +562,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-01';
+  var APP_VERSION = '2026-09-04-02';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -2031,14 +2031,12 @@
       if (!r) return;
       if (!/^[0-9]{4,8}$/.test(r.p1)) return modalNotice('입력 오류', 'PIN은 숫자 4~8자리예요.');
       if (r.p1 !== r.p2) return modalNotice('오류', 'PIN이 일치하지 않아요.');
-      var pub = currentState.adminAuth && currentState.adminAuth.publicKeyJwk;
       myContact().then(function (contact) {
         return Promise.all([
           makePinAuth(r.p1),
-          contact ? encryptForSelf(r.p1, contact) : Promise.resolve(null),
-          pub ? encryptForAdmin(pub, r.p1) : Promise.resolve(null)
+          contact ? encryptForSelf(r.p1, contact) : Promise.resolve(null)
         ]).then(function (res) {
-          var newAuth = res[0], newSelf = res[1], newEnc = res[2];
+          var newAuth = res[0], newSelf = res[1];
           return db.runTransaction(function (tx) {
             return tx.get(stateRef).then(function (doc) {
               var s = doc.data();
@@ -2047,8 +2045,8 @@
                 var c = JSON.parse(JSON.stringify(e));
                 c.pinAuth = newAuth;
                 delete c.pinHash;
+                delete c.pinEnc;
                 if (newSelf) c.contactSelfEnc = newSelf;
-                if (newEnc) c.pinEnc = newEnc;
                 return c;
               });
               tx.update(stateRef, { entries: entries });
@@ -2158,8 +2156,7 @@
       referrerText ? encryptForAdmin(pubJwk, referrerText) : Promise.resolve(null),
       pin ? makePinAuth(pin) : Promise.resolve(null),
       (contact && selfPin) ? encryptForSelf(selfPin, contact) : Promise.resolve(null),
-      finalPhotos.length ? resizeDataUrl(finalPhotos[0], THUMB_MAX, THUMB_MAX, THUMB_Q) : Promise.resolve(null),
-      pin ? encryptForAdmin(pubJwk, pin) : Promise.resolve(null)
+      finalPhotos.length ? resizeDataUrl(finalPhotos[0], THUMB_MAX, THUMB_MAX, THUMB_Q) : Promise.resolve(null)
     ];
     Promise.all(encPromises).then(function (results) {
       var thumb = results[5] || null;
@@ -2197,9 +2194,6 @@
           if (results[3]) updated.pinAuth = results[3];
           else if (origEntry.pinAuth) updated.pinAuth = origEntry.pinAuth;
           else if (origEntry.pinHash) updated.pinHash = origEntry.pinHash;
-          /* 관리자 열람용 암호화 PIN */
-          if (results[6]) updated.pinEnc = results[6];
-          else if (origEntry.pinEnc) updated.pinEnc = origEntry.pinEnc;
           if (origEntry.serial) updated.serial = origEntry.serial;
           return db.runTransaction(function (tx) {
             return tx.get(stateRef).then(function (doc) {
@@ -2229,7 +2223,6 @@
             degreeChoice: degreeChoice,
             pinAuth: results[3],
             contactSelfEnc: results[4],
-            pinEnc: results[6],
             submittedAt: new Date().toISOString()
           };
           return stateRef.update({
@@ -3019,18 +3012,11 @@
       if (msgEl) msgEl.innerHTML = rows;
     }
     if (isAdminUnlocked) {
-      var resetBtn = ' <button type="button" class="card-btn" data-action="reset-pin" data-id="' + escapeHtml(entry.id) + '" style="flex:none;padding:2px 10px;margin-left:6px;">재설정</button>';
       var pinEl = document.getElementById('detail-pin');
-      if (entry.pinEnc && adminPrivateKey) {
-        decryptWithAdmin(adminPrivateKey, entry.pinEnc).then(function (p) {
-          var el = document.getElementById('detail-pin');
-          if (el) el.innerHTML = '<b>' + escapeHtml(p) + '</b>' + resetBtn;
-        }).catch(function () {
-          var el = document.getElementById('detail-pin');
-          if (el) el.innerHTML = '(복호화 실패)' + resetBtn;
-        });
-      } else if (pinEl) {
-        pinEl.innerHTML = '<span style="color:var(--muted);">저장된 원본 없음</span>' + resetBtn;
+      /* 보안상 PIN 원본은 표시하지 않아요. 잊어버린 회원은 재설정만 가능. */
+      if (pinEl) {
+        pinEl.innerHTML = '<span style="color:var(--muted);">보안상 표시하지 않아요</span>' +
+          ' <button type="button" class="card-btn" data-action="reset-pin" data-id="' + escapeHtml(entry.id) + '" style="flex:none;padding:2px 10px;margin-left:6px;">PIN 재설정</button>';
       }
     }
   }
@@ -3044,13 +3030,11 @@
       if (!r) return;
       if (!/^[0-9]{4,8}$/.test(r.p1)) return modalNotice('입력 오류', 'PIN은 숫자 4~8자리예요.');
       if (r.p1 !== r.p2) return modalNotice('오류', 'PIN이 일치하지 않아요.');
-      var pub = currentState.adminAuth.publicKeyJwk;
       var contactP = entry.contactEnc ? decryptWithAdmin(adminPrivateKey, entry.contactEnc).catch(function () { return null; }) : Promise.resolve(null);
       contactP.then(function (contact) {
         return Promise.all([
           makePinAuth(r.p1),
-          contact ? encryptForSelf(r.p1, contact) : Promise.resolve(null),
-          encryptForAdmin(pub, r.p1)
+          contact ? encryptForSelf(r.p1, contact) : Promise.resolve(null)
         ]).then(function (res) {
           return db.runTransaction(function (tx) {
             return tx.get(stateRef).then(function (doc) {
@@ -3060,8 +3044,8 @@
                 var c = JSON.parse(JSON.stringify(e));
                 c.pinAuth = res[0];
                 delete c.pinHash;
+                delete c.pinEnc;
                 if (res[1]) c.contactSelfEnc = res[1];
-                c.pinEnc = res[2];
                 return c;
               });
               tx.update(stateRef, { entries: entries });
