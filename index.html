@@ -105,9 +105,15 @@
   .tabs {
     display: flex;
     gap: 8px;
-    margin-bottom: 28px;
+    margin-bottom: 0;
     border-bottom: 1px solid var(--line);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--paper);
+    flex-wrap: wrap;
   }
+  #tab-panel { padding-top: 24px; }
   .tab-btn {
     background: none;
     border: none;
@@ -263,6 +269,20 @@
     border: none; border-top: 2px dotted var(--line); margin: 28px 0;
   }
 
+  .example-tip {
+    position: relative; margin: 0 0 14px; padding: 14px 34px 14px 16px; border-radius: 12px;
+    background: var(--card); border: 1px solid var(--gold);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.10); font-size: 0.83rem; line-height: 1.6;
+  }
+  .example-tip .example-tip-title { font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+  .example-tip p { margin: 6px 0 0; color: var(--muted); }
+  .example-tip p b { color: var(--ink); }
+  .example-tip-x {
+    position: absolute; top: 8px; right: 8px; width: 24px; height: 24px;
+    border: none; background: var(--gold-soft); color: var(--ink); border-radius: 50%;
+    cursor: pointer; font-size: 1rem; line-height: 1; display: flex; align-items: center; justify-content: center;
+  }
+
   .consent-box { margin: 16px 0; padding: 14px 16px; border-radius: 10px; background: var(--gold-soft); border: 1px solid var(--border); }
   .consent-label { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 0.92rem; font-weight: 600; color: var(--ink); }
   .consent-label input[type="checkbox"] { margin-top: 3px; accent-color: var(--gold); }
@@ -406,12 +426,16 @@
   .admin-panel .sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 20px; }
   .request-item {
     border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px;
-    display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+    display: flex; flex-direction: column; align-items: stretch; gap: 10px;
   }
   .request-item .who { font-size: 0.94rem; }
   .request-item .who b { color: var(--accent); }
   .request-item .note { color: var(--muted); font-size: 0.82rem; margin-top: 4px; }
-  .request-item .when { color: var(--muted); font-size: 0.76rem; }
+  .request-item .when { color: var(--muted); font-size: 0.76rem; margin-right: auto; }
+  .request-item .req-foot {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding-top: 10px; border-top: 1px dashed var(--line);
+  }
 
   /* Pending count badge (matches tab count styling) */
   .pending-count {
@@ -562,7 +586,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-08';
+  var APP_VERSION = '2026-09-04-09';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -1457,6 +1481,15 @@
 
   function renderForm(state) {
     var isEdit = !!editingEntryId;
+    var showTip = true;
+    try { if (localStorage.getItem('hide-example-tip-v1')) showTip = false; } catch (e) {}
+    var exampleTip = (isEdit || !showTip) ? '' :
+      '<div class="example-tip" id="example-tip">' +
+        '<button type="button" class="example-tip-x" id="example-tip-close" aria-label="닫기">&times;</button>' +
+        '<div class="example-tip-title">✍️ 이렇게 써보세요 (예시)</div>' +
+        '<p><b>자기소개</b><br>ENTJ. 자기계발에 미쳐있는 사람이라 부지런히 사는 것을 좋아합니다. 추진력 왕! 저의 추진력을 따라와 주실 분 구해요. 디자이너라 아름다운 것을 좋아하고, 맛집·멋집 탐방 같이 다닐 분!</p>' +
+        '<p><b>원하는 이성 조건</b><br>선한 인상의 외모, 키 173 이상. 투자/재테크 좋아하시는 분 선호. 자기관리 잘하시고 담배 안 피우시는 분. 같은 종교면 더 좋아요. (본인 기독교)</p>' +
+      '</div>';
     var setupNote = (!state.adminAuth)
       ? '<div class="readonly-note">관리자 초기 설정이 아직 안 됐어요. 운영자라면 위의 "관리자" 버튼을 눌러 PIN을 먼저 설정해주세요.</div>'
       : '';
@@ -1526,6 +1559,7 @@
                 '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8" placeholder="숫자 4~8자리"' + (isEdit ? '' : ' required') + '>' +
                 '<span class="hint">나중에 본인이 신청을 취소하거나 데이트를 신청할 때 필요해요.</span></div>' +
             '</div>' +
+            exampleTip +
             '<div class="field"><label for="f-intro">자기소개 <span class="opt">(선택)</span></label>' +
               '<span class="hint">정보가 자세할수록 매칭 성공률이 올라가요!</span>' +
               '<textarea id="f-intro" name="intro" rows="5" maxlength="500" placeholder="예:\nMBTI: ENFP\n흡연 유무: 비흡연\n주량: 소주 1병\n종교: 무교\n취미: 요리, 카페 탐방, 등산"></textarea></div>' +
@@ -1748,7 +1782,7 @@
       return (
         '<div class="request-item">' +
           '<div>' + body + '</div>' +
-          '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
+          '<div class="req-foot">' +
             '<span class="when">' + new Date(r.submittedAt).toLocaleString('ko-KR') + '</span>' +
             actionBtns +
           '</div>' +
@@ -3174,6 +3208,7 @@
     if (tabBtn) {
       activeTab = tabBtn.getAttribute('data-tab');
       paint(currentState);
+      window.scrollTo(0, 0); /* 탭 전환 시 맨 위로 */
       return;
     }
     var filterBtn = e.target.closest('[data-filter]');
@@ -3332,6 +3367,12 @@
       photoDataUrls = [];
       editingEntryId = null;
       paint(currentState);
+      return;
+    }
+    if (e.target.id === 'example-tip-close') {
+      try { localStorage.setItem('hide-example-tip-v1', '1'); } catch (err) {}
+      var tip = document.getElementById('example-tip');
+      if (tip) tip.remove();
       return;
     }
   });
