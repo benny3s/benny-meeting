@@ -562,7 +562,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-05';
+  var APP_VERSION = '2026-09-04-06';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -1697,7 +1697,7 @@
       var e = allEntries.find(function (x) { return x.id === eid; });
       return e ? (formatUid(e) || 'No.—') : '???';
     };
-    var reqs = state.dateRequests || [];
+    var reqs = (state.dateRequests || []).filter(function (r) { return !r.adminHidden; });
     var nameOf = function (eid) {
       var e = allEntries.find(function (x) { return x.id === eid; });
       return e ? e.nickname : '(알 수 없음)';
@@ -1858,7 +1858,7 @@
   function renderApp(state) {
     var entries = state.entries || [];
     var pendingCount = (state.pendingEntries || []).length;
-    var reqCount = (state.dateRequests || []).length;
+    var reqCount = (state.dateRequests || []).filter(function (r) { return !r.adminHidden; }).length;
     var tabs =
       '<button type="button" class="tab-btn" data-tab="form" role="tab" aria-selected="' + (activeTab === 'form') + '">신청서 작성</button>' +
       '<button type="button" class="tab-btn" data-tab="list" role="tab" aria-selected="' + (activeTab === 'list') + '">명단 보기<span class="count">' + entries.length + '</span></button>';
@@ -2876,9 +2876,9 @@
             var hidden = c.hiddenBy || [];
             if (hidden.indexOf(me.id) < 0) hidden.push(me.id);
             c.hiddenBy = hidden;
-            /* 양쪽(요청자+수신자) 모두 숨겼으면 레코드 완전 삭제 */
-            var bothHid = hidden.indexOf(c.fromId) >= 0 && hidden.indexOf(c.toId) >= 0;
-            if (!bothHid) reqs.push(c);
+            /* 요청자·수신자·관리자 모두 숨겼을 때만 레코드 완전 삭제 */
+            var allHid = hidden.indexOf(c.fromId) >= 0 && hidden.indexOf(c.toId) >= 0 && c.adminHidden;
+            if (!allHid) reqs.push(c);
           });
           tx.update(stateRef, { dateRequests: reqs });
         });
@@ -2891,14 +2891,28 @@
   }
 
   function handleDeleteRequest(id) {
-    db.runTransaction(function (tx) {
-      return tx.get(stateRef).then(function (doc) {
-        var state = doc.data();
-        var newRequests = (state.dateRequests || []).filter(function (r) { return r.id !== id; });
-        tx.update(stateRef, { dateRequests: newRequests });
+    modalConfirm('요청함에서 삭제', '관리자 요청함에서만 숨겨요. 당사자들의 "신청 현황" 기록은 그대로 남아요.').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var state = doc.data();
+          var reqs = [];
+          (state.dateRequests || []).forEach(function (r) {
+            if (r.id !== id) { reqs.push(r); return; }
+            var c = JSON.parse(JSON.stringify(r));
+            c.adminHidden = true;
+            /* 요청자·수신자·관리자 모두 숨겼을 때만 완전 삭제 */
+            var hidden = c.hiddenBy || [];
+            var allHid = hidden.indexOf(c.fromId) >= 0 && hidden.indexOf(c.toId) >= 0 && c.adminHidden;
+            if (!allHid) reqs.push(c);
+          });
+          tx.update(stateRef, { dateRequests: reqs });
+        });
+      }).then(function () {
+        return refreshNow();
+      }).catch(function (err) {
+        modalNotice('오류', '삭제에 실패했어요: ' + (err.message || err));
       });
-    }).catch(function (err) {
-      modalNotice('오류', '삭제에 실패했어요: ' + (err.message || err));
     });
   }
 
