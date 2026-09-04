@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-36';
+  var APP_VERSION = '2026-09-05-37';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -4299,6 +4299,13 @@
       var tc = document.createElement('meta'); tc.name = 'theme-color'; tc.content = '#B23A48';
       document.head.appendChild(tc);
     } catch (e) {}
+    /* 서비스워커를 미리 등록 → 크롬이 "앱 설치"(beforeinstallprompt)를 띄울 수 있게 (알림을 안 켜도 설치 가능) */
+    try {
+      if ('serviceWorker' in navigator) {
+        var swPath = location.pathname.replace(/[^/]*$/, '') + 'firebase-messaging-sw.js';
+        navigator.serviceWorker.register(swPath).catch(function () {});
+      }
+    } catch (e) {}
   }
   function handleCopyUrl() {
     var url = location.origin + location.pathname.replace(/index\.html$/, '');
@@ -4333,9 +4340,12 @@
   function handleAddToHome() {
     var ua = navigator.userAgent || '';
     var isIOS = /iPhone|iPad|iPod/i.test(ua);
+    var isAndroid = /Android/i.test(ua);
     var steps = isIOS
       ? '<b>아이폰 (Safari)</b><br>1. 아래 <b>공유 버튼</b> (□↑) 을 누르세요<br>2. <b>"홈 화면에 추가"</b> 를 선택하세요<br>3. 오른쪽 위 <b>"추가"</b> 를 누르면 끝!'
-      : '<b>안드로이드 (Chrome)</b><br>1. 오른쪽 위 <b>⋮ 메뉴</b> 를 누르세요<br>2. <b>"홈 화면에 추가"</b> 또는 <b>"앱 설치"</b> 를 선택하세요<br>3. <b>"추가"</b> 를 누르면 끝!';
+      : isAndroid
+        ? '<b>안드로이드 (Chrome)</b><br>1. 오른쪽 위 <b>⋮ 메뉴</b> 를 누르세요<br>2. <b>"홈 화면에 추가"</b> 또는 <b>"앱 설치"</b> 를 선택하세요<br>3. <b>"추가"</b> 를 누르면 끝!'
+        : '<b>PC (Chrome · Edge)</b><br>1. 주소창 <b>오른쪽 끝의 설치 아이콘</b> (⊕ 또는 모니터 모양) 을 클릭<br>&nbsp;&nbsp;&nbsp;또는 <b>⋮ 메뉴 → "앱 설치"</b> (없으면 "바로가기 만들기")<br>2. <b>"설치"</b> 를 누르면 끝!';
     var canInstall = !!deferredInstallPrompt;
     var intro = canInstall
       ? '홈 화면에 아이콘을 추가하면 앱처럼 바로 열 수 있어요. 아래 <b>홈 화면에 추가</b> 를 누르면 바로 추가돼요!'
