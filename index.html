@@ -558,6 +558,7 @@
   var decryptedRequests = {};
   var currentState = null;
   var photoDataUrls = [];
+  var formPhotosReady = true; /* 수정 시 원본 사진 로드 완료 여부 */
   var editingEntryId = null;
   var currentUser = null;
 
@@ -1253,20 +1254,68 @@
   }
 
   /* ---- rendering ---- */
-  function getPhotos(entry) {
+  /* ---- 사진: 목록은 썸네일, 원본은 photos/{id} 문서에서 필요할 때 로드 ---- */
+  var FULL_MAX = 800, FULL_Q = 0.72;   /* 원본(고화질) */
+  var THUMB_MAX = 220, THUMB_Q = 0.5;  /* 목록 썸네일(초경량) */
+  var photoCache = {};                 /* entryId -> [dataUrl] */
+  var photosRef = db.collection('photos');
+
+  function inlinePhotos(entry) {
+    if (!entry) return [];
     if (entry.photos && entry.photos.length) return entry.photos;
     if (entry.photo) return [entry.photo];
     return [];
   }
+  /* 하위호환용 별칭 (마이그레이션/폴백에서 사용) */
+  function getPhotos(entry) { return inlinePhotos(entry); }
+  function photoCountOf(entry) {
+    if (entry && typeof entry.photoCount === 'number') return entry.photoCount;
+    return inlinePhotos(entry).length;
+  }
+  function cardThumb(entry) {
+    return (entry && entry.photoThumb) || inlinePhotos(entry)[0] || null;
+  }
+  /* 원본 사진 로드: photos/{id} 우선, 없으면 inline(마이그레이션 전) 폴백 */
+  function loadPhotos(entry) {
+    var id = entry.id;
+    if (photoCache[id]) return Promise.resolve(photoCache[id]);
+    return photosRef.doc(id).get().then(function (doc) {
+      var arr;
+      if (doc.exists && doc.data() && doc.data().photos && doc.data().photos.length) arr = doc.data().photos;
+      else arr = inlinePhotos(entry);
+      photoCache[id] = arr;
+      return arr;
+    }).catch(function () { return inlinePhotos(entry); });
+  }
+  /* 기존 dataURL을 원하는 크기로 다시 인코딩 (썸네일/재압축용) */
+  function resizeDataUrl(dataUrl, maxW, maxH, quality) {
+    return new Promise(function (resolve) {
+      var img = new Image();
+      img.onload = function () {
+        var w = img.width, h = img.height;
+        if (w > maxW || h > maxH) {
+          var r = Math.min(maxW / w, maxH / h);
+          w = Math.round(w * r); h = Math.round(h * r);
+        }
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = function () { resolve(dataUrl); };
+      img.src = dataUrl;
+    });
+  }
 
   function cardHtml(entry, num, state) {
     var displayName = entry.nickname || entry.name || '';
-    var photos = getPhotos(entry);
+    var thumb = cardThumb(entry);
+    var pCount = photoCountOf(entry);
     var photo;
-    if (photos.length > 0) {
-      var countBadge = photos.length > 1 ? '<span class="pf-photos-count">' + photos.length + '장</span>' : '';
+    if (thumb) {
+      var countBadge = pCount > 1 ? '<span class="pf-photos-count">' + pCount + '장</span>' : '';
       photo = '<div class="pf-photos' + (entry.blurPhoto ? ' blurred' : '') + '"' + (entry.blurPhoto ? ' data-action="reveal-photo" data-id="' + escapeHtml(entry.id) + '"' : ' data-action="gallery" data-id="' + escapeHtml(entry.id) + '"') + '>' +
-        '<img src="' + photos[0] + '" alt="' + escapeHtml(displayName) + ' 사진" loading="lazy">' +
+        '<img src="' + thumb + '" alt="' + escapeHtml(displayName) + ' 사진" loading="lazy">' +
         countBadge + '</div>';
     } else {
       photo = '<div class="pf-photo pf-photo--empty" style="background:' + avatarColor(entry.id) + '">' + escapeHtml(initials(displayName)) + '</div>';
@@ -1687,14 +1736,17 @@
     return (n / 1024 / 1024).toFixed(2) + ' MB';
   }
   function capacityHtml(state) {
+    /* 사진은 photos/{id} 별도 문서로 분리됨. 이 표는 1MB 한계가 걸리는
+       메인 문서(app/state = 회원 텍스트+썸네일+요청+로그)만 측정 */
     var total = byteLen(state);
-    var photoBytes = 0, photoCount = 0;
+    var thumbBytes = 0, thumbCount = 0;
     (state.entries || []).concat(state.pendingEntries || []).forEach(function (e) {
-      getPhotos(e).forEach(function (p) { photoBytes += byteLen(p); photoCount++; });
+      if (e.photoThumb) { thumbBytes += byteLen(e.photoThumb); thumbCount++; }
+      getPhotos(e).forEach(function (p) { thumbBytes += byteLen(p); }); /* 아직 마이그레이션 안 된 inline */
     });
     var logBytes = byteLen(state.logs || []);
     var reqBytes = byteLen(state.dateRequests || []);
-    var otherBytes = Math.max(0, total - photoBytes - logBytes - reqBytes);
+    var otherBytes = Math.max(0, total - thumbBytes - logBytes - reqBytes);
     var pct = Math.min(100, (total / DOC_LIMIT) * 100);
     var barColor = pct > 85 ? '#c5221f' : pct > 60 ? '#E08A2E' : '#3F8C6E';
     var people = (state.entries || []).length + (state.pendingEntries || []).length;
@@ -1702,21 +1754,21 @@
     var roomLeft = DOC_LIMIT - total;
     var morePeople = avgPerPerson ? Math.floor(roomLeft / avgPerPerson) : '-';
     var warn = '';
-    if (pct > 85) warn = '<p class="sub" style="color:#c5221f;margin-top:10px;">⚠️ 용량이 거의 찼어요. 오래된 사진이나 활동 기록을 정리해주세요.</p>';
-    else if (pct > 60) warn = '<p class="sub" style="color:#b06000;margin-top:10px;">사용량이 절반을 넘었어요. 사진 장수를 줄이면 여유가 생겨요.</p>';
+    if (pct > 85) warn = '<p class="sub" style="color:#c5221f;margin-top:10px;">⚠️ 메인 문서가 거의 찼어요. 회원 텍스트를 버킷으로 나눌 때가 됐어요.</p>';
+    else if (pct > 60) warn = '<p class="sub" style="color:#b06000;margin-top:10px;">메인 문서 사용량이 절반을 넘었어요.</p>';
     return (
-      '<h2>💾 서버 용량</h2>' +
-      '<p class="sub">모든 데이터가 Firestore 문서 1개에 저장돼요. 한 문서의 최대 크기는 1MB예요.</p>' +
+      '<h2>💾 서버 용량 (메인 문서)</h2>' +
+      '<p class="sub">사진은 회원별 문서로 분리 저장돼요. 이 표는 1MB 한계가 걸리는 메인 문서(회원 텍스트·썸네일·요청·로그)만 표시해요.</p>' +
       '<div class="cap-bar"><div class="cap-fill" style="width:' + pct.toFixed(1) + '%;background:' + barColor + ';"></div></div>' +
       '<div class="cap-total">' + fmtBytes(total) + ' / 1 MB 사용 중 <b>(' + pct.toFixed(1) + '%)</b> · 남은 용량 ' + fmtBytes(roomLeft) + '</div>' +
       '<table class="seen-table" style="margin-top:12px;">' +
         '<tbody>' +
-          '<tr><td>📷 사진 ' + photoCount + '장</td><td class="seen-date">' + fmtBytes(photoBytes) + '</td></tr>' +
+          '<tr><td>🖼️ 썸네일/inline 사진 ' + thumbCount + '개</td><td class="seen-date">' + fmtBytes(thumbBytes) + '</td></tr>' +
           '<tr><td>📬 요청 ' + (state.dateRequests || []).length + '건</td><td class="seen-date">' + fmtBytes(reqBytes) + '</td></tr>' +
           '<tr><td>📜 활동 기록 ' + (state.logs || []).length + '건</td><td class="seen-date">' + fmtBytes(logBytes) + '</td></tr>' +
-          '<tr><td>그 외 (프로필 정보 등)</td><td class="seen-date">' + fmtBytes(otherBytes) + '</td></tr>' +
+          '<tr><td>그 외 (프로필 텍스트 등)</td><td class="seen-date">' + fmtBytes(otherBytes) + '</td></tr>' +
           '<tr><td><b>1인당 평균</b></td><td class="seen-date"><b>' + fmtBytes(avgPerPerson) + '</b></td></tr>' +
-          '<tr><td><b>더 받을 수 있는 인원 (추정)</b></td><td class="seen-date"><b>약 ' + morePeople + '명</b></td></tr>' +
+          '<tr><td><b>메인 문서에 더 담을 수 있는 인원 (추정)</b></td><td class="seen-date"><b>약 ' + morePeople + '명</b></td></tr>' +
         '</tbody>' +
       '</table>' +
       warn
@@ -1944,6 +1996,10 @@
       modalNotice('닉네임 중복', '이미 사용 중인 닉네임이에요. 다른 닉네임을 사용해주세요.');
       return;
     }
+    if (isEdit && !formPhotosReady) {
+      modalNotice('안내', '사진을 불러오는 중이에요. 잠시 후 다시 시도해주세요.');
+      return;
+    }
 
     var btn = document.getElementById('submit-btn');
     var msg = document.getElementById('status-msg');
@@ -1953,7 +2009,7 @@
 
     var pubJwk = state.adminAuth.publicKeyJwk;
     var entryId = (isEdit && origEntry) ? origEntry.id : genId();
-    var finalPhotos = photoDataUrls.length ? photoDataUrls.slice() : (isEdit ? getPhotos(origEntry) : []);
+    var finalPhotos = photoDataUrls.slice();
 
     var selfPin = pin || (currentUser && currentUser.id === entryId ? currentUser.pin : null);
     var encPromises = [
@@ -1961,69 +2017,81 @@
       contact ? encryptForAdmin(pubJwk, contact) : Promise.resolve(null),
       referrerText ? encryptForAdmin(pubJwk, referrerText) : Promise.resolve(null),
       pin ? makePinAuth(pin) : Promise.resolve(null),
-      (contact && selfPin) ? encryptForSelf(selfPin, contact) : Promise.resolve(null)
+      (contact && selfPin) ? encryptForSelf(selfPin, contact) : Promise.resolve(null),
+      finalPhotos.length ? resizeDataUrl(finalPhotos[0], THUMB_MAX, THUMB_MAX, THUMB_Q) : Promise.resolve(null)
     ];
     Promise.all(encPromises).then(function (results) {
-      if (isEdit && origEntry) {
-        var updated = {
-          id: origEntry.id,
-          nickname: nickname,
-          gender: gender,
-          birthYear: birthYear,
-          region: region,
-          workplace: workplace,
-          photos: finalPhotos,
-          blurPhoto: blurPhoto && finalPhotos.length > 0,
-          height: height,
-          intro: intro,
-          idealType: idealType,
-          dealbreaker: dealbreaker,
-          realNameEnc: results[0] || origEntry.realNameEnc || null,
-          contactEnc: results[1] || origEntry.contactEnc || null,
-          referrerEnc: results[2] || origEntry.referrerEnc || null,
-          degreeChoice: degreeChoice,
-          contactSelfEnc: results[4] || origEntry.contactSelfEnc || null,
-          lastSeenAt: origEntry.lastSeenAt || null,
-          submittedAt: origEntry.submittedAt
-        };
-        /* PIN: 새로 입력했으면 신형(pinAuth)으로, 아니면 기존 형식 유지 (undefined 금지) */
-        if (results[3]) updated.pinAuth = results[3];
-        else if (origEntry.pinAuth) updated.pinAuth = origEntry.pinAuth;
-        else if (origEntry.pinHash) updated.pinHash = origEntry.pinHash;
-        if (origEntry.serial) updated.serial = origEntry.serial;
-        return db.runTransaction(function (tx) {
-          return tx.get(stateRef).then(function (doc) {
-            var s = doc.data();
-            var newEntries = (s.entries || []).map(function (e) { return e.id === editingEntryId ? updated : e; });
-            tx.update(stateRef, { entries: newEntries });
+      var thumb = results[5] || null;
+      /* 원본 사진은 photos/{id} 별도 문서로 저장 (app/state는 썸네일만) */
+      var photoWrite;
+      if (finalPhotos.length) photoWrite = photosRef.doc(entryId).set({ photos: finalPhotos });
+      else if (isEdit) photoWrite = photosRef.doc(entryId).delete().catch(function () {});
+      else photoWrite = Promise.resolve();
+      return photoWrite.then(function () {
+        photoCache[entryId] = finalPhotos;
+        if (isEdit && origEntry) {
+          var updated = {
+            id: origEntry.id,
+            nickname: nickname,
+            gender: gender,
+            birthYear: birthYear,
+            region: region,
+            workplace: workplace,
+            photoThumb: thumb,
+            photoCount: finalPhotos.length,
+            blurPhoto: blurPhoto && finalPhotos.length > 0,
+            height: height,
+            intro: intro,
+            idealType: idealType,
+            dealbreaker: dealbreaker,
+            realNameEnc: results[0] || origEntry.realNameEnc || null,
+            contactEnc: results[1] || origEntry.contactEnc || null,
+            referrerEnc: results[2] || origEntry.referrerEnc || null,
+            degreeChoice: degreeChoice,
+            contactSelfEnc: results[4] || origEntry.contactSelfEnc || null,
+            lastSeenAt: origEntry.lastSeenAt || null,
+            submittedAt: origEntry.submittedAt
+          };
+          /* PIN: 새로 입력했으면 신형(pinAuth)으로, 아니면 기존 형식 유지 (undefined 금지) */
+          if (results[3]) updated.pinAuth = results[3];
+          else if (origEntry.pinAuth) updated.pinAuth = origEntry.pinAuth;
+          else if (origEntry.pinHash) updated.pinHash = origEntry.pinHash;
+          if (origEntry.serial) updated.serial = origEntry.serial;
+          return db.runTransaction(function (tx) {
+            return tx.get(stateRef).then(function (doc) {
+              var s = doc.data();
+              var newEntries = (s.entries || []).map(function (e) { return e.id === editingEntryId ? updated : e; });
+              tx.update(stateRef, { entries: newEntries });
+            });
           });
-        });
-      } else {
-        var entry = {
-          id: entryId,
-          nickname: nickname,
-          gender: gender,
-          birthYear: birthYear,
-          region: region,
-          workplace: workplace,
-          photos: finalPhotos,
-          blurPhoto: blurPhoto && finalPhotos.length > 0,
-          height: height,
-          intro: intro,
-          idealType: idealType,
-          dealbreaker: dealbreaker,
-          realNameEnc: results[0],
-          contactEnc: results[1],
-          referrerEnc: results[2],
-          degreeChoice: degreeChoice,
-          pinAuth: results[3],
-          contactSelfEnc: results[4],
-          submittedAt: new Date().toISOString()
-        };
-        return stateRef.update({
-          pendingEntries: firebase.firestore.FieldValue.arrayUnion(entry)
-        });
-      }
+        } else {
+          var entry = {
+            id: entryId,
+            nickname: nickname,
+            gender: gender,
+            birthYear: birthYear,
+            region: region,
+            workplace: workplace,
+            photoThumb: thumb,
+            photoCount: finalPhotos.length,
+            blurPhoto: blurPhoto && finalPhotos.length > 0,
+            height: height,
+            intro: intro,
+            idealType: idealType,
+            dealbreaker: dealbreaker,
+            realNameEnc: results[0],
+            contactEnc: results[1],
+            referrerEnc: results[2],
+            degreeChoice: degreeChoice,
+            pinAuth: results[3],
+            contactSelfEnc: results[4],
+            submittedAt: new Date().toISOString()
+          };
+          return stateRef.update({
+            pendingEntries: firebase.firestore.FieldValue.arrayUnion(entry)
+          });
+        }
+      });
     }).then(function () {
       photoDataUrls = [];
       if (isEdit) {
@@ -2091,7 +2159,14 @@
 
   function startEditing(entry) {
     editingEntryId = entry.id;
-    photoDataUrls = getPhotos(entry).slice();
+    photoDataUrls = [];
+    formPhotosReady = false;
+    /* 원본 사진(고화질)을 photos/{id}에서 불러와 편집기에 채움 */
+    loadPhotos(entry).then(function (arr) {
+      photoDataUrls = (arr || []).slice();
+      formPhotosReady = true;
+      renderPhotoThumbs();
+    });
     activeTab = 'form';
     paint(currentState);
     setTimeout(function () {
@@ -2155,6 +2230,8 @@
           tx.update(stateRef, { entries: newEntries, dateRequests: newRequests });
         });
       }).then(function () {
+        photosRef.doc(id).delete().catch(function () {});
+        delete photoCache[id];
         modalNotice('완료', '명단에서 삭제되었어요.');
       }).catch(function (err) {
         modalNotice('오류', '삭제에 실패했어요: ' + (err.message || err));
@@ -2273,6 +2350,8 @@
         tx.update(stateRef, { pendingEntries: newPending });
       });
     }).then(function () {
+      photosRef.doc(id).delete().catch(function () {});
+      delete photoCache[id];
       appendLog('admin', '관리자', '신청 거절 · ' + nick);
       return refreshNow();
     }).catch(function (err) {
@@ -2625,9 +2704,10 @@
     var state = currentState;
     var entry = state.entries.find(function (e) { return e.id === id; });
     if (!entry) return;
-    var photos = getPhotos(entry);
-    if (!photos.length) return;
-    openGallery(photos, 0);
+    loadPhotos(entry).then(function (photos) {
+      if (!photos.length) return;
+      openGallery(photos, 0);
+    });
   }
 
   function handleRevealContact(id) {
@@ -2656,15 +2736,7 @@
     var state = currentState;
     var entry = (state.pendingEntries || []).find(function (e) { return e.id === id; });
     if (!entry) return;
-    var photos = getPhotos(entry);
-    var photoHtml = '';
-    if (photos.length) {
-      photoHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;">';
-      photos.forEach(function (p) {
-        photoHtml += '<img src="' + p + '" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">';
-      });
-      photoHtml += '</div>';
-    }
+    var photoHtml = '<div id="detail-photos" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;"></div>';
     var rows = '<div class="detail-grid">';
     rows += '<div class="detail-row"><div class="detail-label">고유번호</div><div class="detail-value">' + escapeHtml(formatUid(entry) || '—') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">닉네임</div><div class="detail-value">' + escapeHtml(entry.nickname) + '</div></div>';
@@ -2681,7 +2753,7 @@
     if (entry.idealType) rows += '<div class="detail-row"><div class="detail-label">선호 조건</div><div class="detail-value" style="white-space:pre-wrap;">' + escapeHtml(entry.idealType) + '</div></div>';
     if (entry.dealbreaker) rows += '<div class="detail-row"><div class="detail-label">비선호</div><div class="detail-value" style="white-space:pre-wrap;">' + escapeHtml(entry.dealbreaker) + '</div></div>';
     rows += '</div>';
-    if (photoHtml) rows = photoHtml + rows;
+    rows = photoHtml + rows;
     rows += '<div style="text-align:right;font-size:0.78rem;color:var(--muted);margin-top:8px;">' + new Date(entry.submittedAt).toLocaleString('ko-KR') + ' 접수</div>';
     modalNotice(escapeHtml(entry.nickname) + ' 상세 정보', '').then(function () {});
     var box = document.querySelector('.modal-box');
@@ -2689,6 +2761,12 @@
       var msgEl = box.querySelector('.modal-msg');
       if (msgEl) msgEl.innerHTML = rows;
     }
+    loadPhotos(entry).then(function (photos) {
+      var el = document.getElementById('detail-photos');
+      if (!el) return;
+      if (!photos.length) { el.style.display = 'none'; return; }
+      el.innerHTML = photos.map(function (p) { return '<img src="' + p + '" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">'; }).join('');
+    });
     if (adminPrivateKey && entry.realNameEnc) {
       decryptWithAdmin(adminPrivateKey, entry.realNameEnc).then(function (name) {
         var el = document.getElementById('detail-realname');
@@ -2875,7 +2953,7 @@
       var toRead = Math.min(files.length, remaining);
       for (var i = 0; i < toRead; i++) {
         (function (file) {
-          resizeImage(file, 400, 400, 0.5, function (dataUrl) {
+          resizeImage(file, FULL_MAX, FULL_MAX, FULL_Q, function (dataUrl) {
             photoDataUrls.push(dataUrl);
             renderPhotoThumbs();
           });
