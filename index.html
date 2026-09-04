@@ -668,13 +668,16 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 
 <script id="app-logic">
 (function () {
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-25';
+  var APP_VERSION = '2026-09-04-26';
+  var NOTIF_ENABLED = false; /* 발송 함수 배포 후 true로 (그 전엔 알림 버튼 숨김) */
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -719,8 +722,15 @@
     appId: "1:925758544707:web:a0c55e596ae0b15e7fadf6"
   };
   firebase.initializeApp(firebaseConfig);
+  /* App Check (reCAPTCHA v3) — 봇/DoS 차단. 콘솔에서 '강제(enforce)'는 검증 후에 켜세요 */
+  var RECAPTCHA_SITE_KEY = '6LcXXaktAAAAAAEVQHqK7mqctPxxj-OaD_Gf8svA';
+  try { firebase.appCheck().activate(RECAPTCHA_SITE_KEY, true); } catch (e) { try { console.warn('appCheck', e); } catch (e2) {} }
   var db = firebase.firestore();
   var stateRef = db.collection('app').doc('state');
+  var pushTokensRef = db.collection('pushTokens');
+  var VAPID_KEY = 'BNtmOVQDK3AV0s-mJJdO9spG0AHInihNOnx2im0q-XDViqBMi2N-kz1y8IN1gv64uGqO0ASvtPMKNr3tqbZsHPY';
+  var fcmMessaging = null;
+  try { if (firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported()) fcmMessaging = firebase.messaging(); } catch (e) {}
 
   /* ---- utils ---- */
   function escapeHtml(str) {
@@ -2115,6 +2125,10 @@
           '<button type="button" class="admin-link" id="copy-url">&#128279; URL 복사</button>' +
           (isStandalone() ? '' : '<button type="button" class="admin-link" id="add-home">&#128241; 바로가기 추가</button>') +
           '<button type="button" class="admin-link" id="show-notice">&#128227; 공지사항</button>' +
+          (NOTIF_ENABLED
+            ? '<button type="button" class="admin-link' + (notifOn() ? ' unlocked' : '') + '" id="notif-toggle">' +
+              (notifOn() ? '&#128276; 알림 켜짐' : '&#128276; 알림 켜기') + '</button>'
+            : '') +
         '</div>' +
         '<div class="admin-bar-row">' +
           (currentUser
@@ -3478,6 +3492,10 @@
       handleCopyUrl();
       return;
     }
+    if (e.target.closest('#notif-toggle')) {
+      handleNotifToggle();
+      return;
+    }
     if (e.target.closest('#add-home')) {
       handleAddToHome();
       return;
@@ -3776,6 +3794,81 @@
       return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
     } catch (e) { return false; }
   }
+
+  /* ---- 폰 알림 (FCM 웹 푸시) ---- */
+  function notifOn() { try { return !!localStorage.getItem('notifToken'); } catch (e) { return false; } }
+  function notifSupported() {
+    return !!fcmMessaging && ('Notification' in window) && ('serviceWorker' in navigator);
+  }
+  function myEntryOrPending() {
+    return findMyEntry(currentState) || findMyPending(currentState);
+  }
+  function handleNotifToggle() {
+    if (!currentUser) { modalNotice('로그인 필요', '알림은 로그인한 뒤 켤 수 있어요. 먼저 로그인해주세요.'); return; }
+    if (!notifSupported()) { modalNotice('안내', '이 브라우저에서는 알림을 지원하지 않아요. 크롬(안드로이드/PC)이나 홈 화면에 추가한 아이폰(사파리)에서 사용해주세요.'); return; }
+    var ua = navigator.userAgent || '';
+    var isIOS = /iPhone|iPad|iPod/i.test(ua);
+    if (isIOS && !isStandalone()) {
+      modalNotice('아이폰 알림 안내', '아이폰은 먼저 "바로가기 추가"로 홈 화면에 추가한 뒤, 홈 화면 아이콘으로 열어서 알림을 켜주세요.');
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      modalNotice('알림 차단됨', '브라우저 설정에서 이 사이트의 알림을 "허용"으로 바꿔주세요. (주소창 왼쪽 자물쇠 → 알림)');
+      return;
+    }
+    if (notifOn()) { disableNotif(); } else { enableNotif(); }
+  }
+  function enableNotif() {
+    Notification.requestPermission().then(function (perm) {
+      if (perm !== 'granted') { modalNotice('알림 미허용', '알림을 받으려면 "허용"을 눌러주세요.'); return; }
+      var swPath = location.pathname.replace(/[^/]*$/, '') + 'firebase-messaging-sw.js';
+      navigator.serviceWorker.register(swPath).then(function (reg) {
+        return fcmMessaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+      }).then(function (token) {
+        if (!token) throw new Error('토큰을 받지 못했어요');
+        var me = myEntryOrPending();
+        var uid = me ? me.id : currentUser.id;
+        return pushTokensRef.doc(uid).set({
+          tokens: firebase.firestore.FieldValue.arrayUnion(token),
+          nickname: (me && me.nickname) || currentUser.nickname || '',
+          updatedAt: new Date().toISOString()
+        }, { merge: true }).then(function () {
+          try { localStorage.setItem('notifToken', token); } catch (e) {}
+        });
+      }).then(function () {
+        paint(currentState);
+        modalNotice('알림 켜짐 🔔', '이제 요청이 오면 이 기기로 알림을 받아요! (앱을 꺼둬도 와요)');
+      }).catch(function (err) {
+        modalNotice('오류', '알림을 켜지 못했어요: ' + (err.message || err));
+      });
+    }).catch(function (err) {
+      modalNotice('오류', '알림 권한 요청에 실패했어요: ' + (err.message || err));
+    });
+  }
+  function disableNotif() {
+    var token = ''; try { token = localStorage.getItem('notifToken') || ''; } catch (e) {}
+    var me = myEntryOrPending();
+    var uid = me ? me.id : (currentUser && currentUser.id);
+    var p = (token && uid)
+      ? pushTokensRef.doc(uid).set({ tokens: firebase.firestore.FieldValue.arrayRemove(token) }, { merge: true })
+      : Promise.resolve();
+    if (fcmMessaging && token) { try { fcmMessaging.deleteToken().catch(function () {}); } catch (e) {} }
+    p.catch(function () {}).then(function () {
+      try { localStorage.removeItem('notifToken'); } catch (e) {}
+      paint(currentState);
+      modalNotice('알림 꺼짐', '이 기기로는 더 이상 알림이 오지 않아요.');
+    });
+  }
+  /* 앱이 열려 있을 때 오는 메시지 */
+  if (fcmMessaging) {
+    try {
+      fcmMessaging.onMessage(function (payload) {
+        var n = (payload && payload.notification) || {};
+        modalNotice(n.title || '새 알림', n.body || '');
+      });
+    } catch (e) {}
+  }
+
   var deferredInstallPrompt = null;
   window.addEventListener('beforeinstallprompt', function (e) {
     e.preventDefault();
