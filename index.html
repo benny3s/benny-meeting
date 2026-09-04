@@ -1,8 +1,9 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light">
 <title>인연 접수처</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap">
 <style id="page-style">
@@ -530,6 +531,12 @@
   .mine-status-box h3 { font-size: 1.05rem; margin-bottom: 8px; }
   .mine-status-box .sub { margin-bottom: 0; }
 
+  .my-uid {
+    display: inline-block; margin: 6px 0 4px; padding: 4px 12px; border-radius: 999px;
+    background: var(--gold-soft); color: var(--gold); font-weight: 700;
+    font-variant-numeric: tabular-nums; font-size: 0.9rem;
+  }
+
   /* ---------- 관리자 활동 로그 ---------- */
   .log-list { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; }
   .log-row {
@@ -653,7 +660,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-16';
+  var APP_VERSION = '2026-09-04-17';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -1828,7 +1835,8 @@
           '<h2 style="margin:0;">신청 현황</h2>' +
           '<button type="button" class="card-btn" id="change-my-pin" style="flex:none;">🔑 PIN 변경</button>' +
         '</div>' +
-        '<p class="sub">' + escapeHtml(me.nickname) + '님 (고유번호 ' + escapeHtml(formatUid(me) || '—') + '), 반가워요! 받은 요청은 직접 승인하거나 거절할 수 있어요.</p>' +
+        '<div class="my-uid">고유번호 ' + escapeHtml(formatUid(me) || '—') + '</div>' +
+        '<p class="sub">' + escapeHtml(me.nickname) + '님, 반가워요! 받은 요청은 직접 승인하거나 거절할 수 있어요.</p>' +
         sections +
       '</div>'
     );
