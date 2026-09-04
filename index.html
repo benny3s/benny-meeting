@@ -660,7 +660,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-17';
+  var APP_VERSION = '2026-09-04-18';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -1319,14 +1319,27 @@
   }
 
   /* ---- 새 버전 감지 → 새로고침 안내 (배포 후 캐시된 옛 화면 방지) ---- */
+  var VERSION_GRACE_MS = 60000;      /* 새 버전 감지 후 배너까지 여유 (서버 반영 대기) */
+  var RELOAD_SUPPRESS_MS = 180000;   /* 새로고침 시도 후 이 시간 동안은 다시 안 조름 (반영 지연) */
   function checkVersion(state) {
     if (!state) return;
     var sv = state.appVersion || '';
     if (sv && sv > APP_VERSION) {
-      if (!reloadPrompted) { reloadPrompted = true; showReloadBanner(sv); }
-    } else if (APP_VERSION > sv) {
-      /* 내가 최신이면 기록 (다른 열린 탭들이 감지) */
-      stateRef.update({ appVersion: APP_VERSION }).catch(function () {});
+      /* 이미 이 버전으로 새로고침을 시도했는데 아직 옛 코드면 = 서버 반영이 아직임 → 조르지 않음 */
+      var attempt = null;
+      try { attempt = JSON.parse(sessionStorage.getItem('reloadAttempt') || 'null'); } catch (e) {}
+      if (attempt && attempt.v === sv && (Date.now() - (attempt.at || 0)) < RELOAD_SUPPRESS_MS) return;
+      if (!reloadPrompted) {
+        reloadPrompted = true;
+        /* 60초 뒤에도 여전히 최신이 아니면 배너 표시 (서버 반영 시간 확보) */
+        setTimeout(function () {
+          if (currentState && (currentState.appVersion || '') > APP_VERSION) showReloadBanner(sv);
+        }, VERSION_GRACE_MS);
+      }
+    } else if (APP_VERSION >= sv) {
+      /* 내가 최신 → 시도 기록 정리, 서버에도 기록 */
+      try { sessionStorage.removeItem('reloadAttempt'); } catch (e) {}
+      if (APP_VERSION > sv) stateRef.update({ appVersion: APP_VERSION }).catch(function () {});
     }
   }
   function showReloadBanner(sv) {
@@ -1338,7 +1351,8 @@
       '<button type="button" id="reload-now">지금 새로고침</button>';
     document.body.appendChild(bar);
     document.getElementById('reload-now').addEventListener('click', function () {
-      /* 쿼리스트링으로 캐시 우회 새로고침 */
+      /* 새로고침 시도 기록 (반영 지연 시 재알림 억제용) + 캐시 우회 새로고침 */
+      try { sessionStorage.setItem('reloadAttempt', JSON.stringify({ v: sv, at: Date.now() })); } catch (e) {}
       location.replace(location.pathname + '?v=' + encodeURIComponent(sv));
     });
   }
