@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-38';
+  var APP_VERSION = '2026-09-05-39';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1698,7 +1698,6 @@
     var ageStr = entry.birthYear ? (String(entry.birthYear).slice(2) + '년생') : '-';
     var deg = degreeLabel(entry.degreeChoice || entry.degree);
     var extras = '';
-    if (entry.height) extras += '<div class="pf-extra"><b>키</b> ' + escapeHtml(entry.height) + 'cm</div>';
     if (entry.intro) extras += '<div class="pf-extra"><b>소개</b> ' + escapeHtml(entry.intro) + '</div>';
     if (entry.idealType) extras += '<div class="pf-extra"><b>선호</b> ' + escapeHtml(entry.idealType) + '</div>';
     if (entry.dealbreaker) extras += '<div class="pf-extra"><b>비선호</b> ' + escapeHtml(entry.dealbreaker) + '</div>';
@@ -1721,7 +1720,7 @@
           '<div class="pf-chips">' +
             '<span class="chip chip--gender-' + escapeHtml(entry.gender) + '">' + genderLabel(entry.gender) + '</span>' +
             '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
-            (isAdminUnlocked ? '<span class="chip chip--degree">' + escapeHtml(deg) + '</span>' : '') +
+            (entry.height ? '<span class="chip">' + escapeHtml(entry.height) + 'cm</span>' : '') +
           '</div>' +
           '<ul class="pf-meta">' +
             '<li>' + ICON_PIN + '<span>' + escapeHtml(entry.region) + '</span></li>' +
@@ -1794,7 +1793,7 @@
           '<div class="compact-chips">' +
             '<span class="chip chip--gender-' + escapeHtml(entry.gender) + '">' + genderLabel(entry.gender) + '</span>' +
             '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
-            (isAdminUnlocked ? '<span class="chip chip--degree">' + escapeHtml(deg) + '</span>' : '') +
+            (entry.height ? '<span class="chip">' + escapeHtml(entry.height) + 'cm</span>' : '') +
           '</div>' +
           '<div class="compact-meta">' + ICON_PIN + '<span>' + escapeHtml(entry.region || '-') + '</span>' +
             ICON_BRIEF + '<span>' + escapeHtml(entry.workplace || '-') + '</span></div>' +
