@@ -587,9 +587,11 @@
   .update-bar {
     position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
     z-index: 80; background: var(--ink); color: var(--paper);
-    padding: 10px 14px; border-radius: 999px; box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-    display: flex; align-items: center; gap: 12px; font-size: 0.86rem; max-width: 92vw;
+    padding: 12px 18px; border-radius: 999px; box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    display: flex; align-items: center; gap: 14px; font-size: 0.9rem;
+    width: max-content; max-width: 94vw; white-space: nowrap;
   }
+  .update-bar span { white-space: nowrap; }
   .update-bar button {
     border: none; background: var(--accent); color: #fff; font-weight: 700;
     padding: 7px 14px; border-radius: 999px; cursor: pointer; font-size: 0.84rem; white-space: nowrap;
@@ -613,6 +615,22 @@
   .combo-item b { font-variant-numeric: tabular-nums; color: var(--accent); }
   .combo-empty { padding: 12px 13px; font-size: 0.85rem; color: var(--muted); }
 
+  /* 로그인 모달: 목록을 인라인으로, 그 영역만 스크롤 */
+  .modal-overlay.login-modal .modal-box {
+    display: flex; flex-direction: column; max-height: 88vh; max-width: 380px; overflow: hidden;
+  }
+  .login-list {
+    flex: 1 1 auto; min-height: 150px; overflow-y: auto; margin-top: 8px;
+    border: 1px solid var(--line); border-radius: 10px; -webkit-overflow-scrolling: touch;
+  }
+  .login-item {
+    padding: 12px 14px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 0.94rem;
+  }
+  .login-item:last-child { border-bottom: none; }
+  .login-item:hover { background: var(--gold-soft); }
+  .login-item.sel { background: var(--gold-soft); box-shadow: inset 3px 0 0 var(--accent); }
+  .login-item b { color: var(--accent); font-variant-numeric: tabular-nums; }
+
   /* Detail modal */
   .detail-grid { display: grid; gap: 10px; margin-top: 12px; }
   .detail-row { display: flex; gap: 8px; }
@@ -635,7 +653,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-15';
+  var APP_VERSION = '2026-09-04-16';
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -1119,17 +1137,16 @@
     return new Promise(function (resolve) {
       var overlay = openModal(
         '<h3>로그인</h3>' +
-        '<p class="modal-msg">고유번호 또는 닉네임을 입력해 본인을 찾고, 개인 PIN을 입력해주세요.</p>' +
-        '<div class="combo" id="login-combo">' +
-          '<input type="text" class="modal-input" id="modal-login-search" placeholder="고유번호 또는 닉네임 검색" autocomplete="off">' +
-          '<div class="combo-list" id="modal-login-list"></div>' +
-        '</div>' +
-        '<input type="text" inputmode="numeric" class="modal-input" id="modal-login-pin" data-numeric placeholder="개인 PIN" style="margin-top:8px;">' +
+        '<p class="modal-msg">본인을 선택하고 개인 PIN을 입력해주세요. (위 칸에서 검색 가능)</p>' +
+        '<input type="text" class="modal-input" id="modal-login-search" placeholder="🔍 고유번호 또는 닉네임 검색" autocomplete="off">' +
+        '<div class="login-list" id="modal-login-list"></div>' +
+        '<input type="text" inputmode="numeric" class="modal-input" id="modal-login-pin" data-numeric placeholder="개인 PIN" style="margin-top:10px;">' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
           '<button type="button" class="card-btn primary" id="modal-ok">로그인</button>' +
         '</div>'
       );
+      overlay.classList.add('login-modal');
       var searchInput = overlay.querySelector('#modal-login-search');
       var listEl = overlay.querySelector('#modal-login-list');
       var pinInput = overlay.querySelector('#modal-login-pin');
@@ -1137,37 +1154,29 @@
 
       function renderList() {
         var q = searchInput.value.trim().toLowerCase();
-        var matches = all.filter(function (o) { return !q || o.search.indexOf(q) >= 0; }).slice(0, 30);
+        var matches = all.filter(function (o) { return !q || o.search.indexOf(q) >= 0; });
         if (!matches.length) {
           listEl.innerHTML = '<div class="combo-empty">검색 결과가 없어요</div>';
         } else {
           listEl.innerHTML = matches.map(function (o) {
-            return '<div class="combo-item" data-cid="' + escapeHtml(o.id) + '">' +
+            return '<div class="login-item' + (o.id === selectedId ? ' sel' : '') + '" data-cid="' + escapeHtml(o.id) + '">' +
               '<b>' + escapeHtml(o.uid || '승인대기') + '</b> ' + escapeHtml(o.nickname) + '</div>';
           }).join('');
         }
-        listEl.classList.add('open');
       }
-      function pick(o) {
-        selectedId = o.id;
-        searchInput.value = o.label;
-        listEl.classList.remove('open');
-        pinInput.focus();
-      }
-      searchInput.addEventListener('focus', renderList);
-      searchInput.addEventListener('input', function () { selectedId = ''; renderList(); });
+      searchInput.addEventListener('input', renderList);
       listEl.addEventListener('click', function (e) {
         var item = e.target.closest('[data-cid]');
         if (!item) return;
-        var o = all.find(function (x) { return x.id === item.getAttribute('data-cid'); });
-        if (o) pick(o);
+        selectedId = item.getAttribute('data-cid');
+        renderList();
+        pinInput.focus();
       });
 
-      /* 목록은 바로 보여주되 포커스는 안 줌 — 모바일에서 열자마자 키보드가 올라오지 않도록 */
+      /* 목록은 바로 보여주되 포커스는 안 줌 — 열자마자 키보드가 올라오지 않도록 */
       renderList();
       function currentId() {
         if (selectedId) return selectedId;
-        /* 정확히 하나만 매칭되면 그것으로 간주 */
         var q = searchInput.value.trim().toLowerCase();
         var matches = all.filter(function (o) { return o.search.indexOf(q) >= 0; });
         return matches.length === 1 ? matches[0].id : '';
