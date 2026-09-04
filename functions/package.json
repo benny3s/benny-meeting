@@ -2,7 +2,7 @@
   "name": "benny-meeting-functions",
   "description": "인연 접수처 알림 함수",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {

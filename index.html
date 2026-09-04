@@ -676,8 +676,8 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-04-26';
-  var NOTIF_ENABLED = false; /* 발송 함수 배포 후 true로 (그 전엔 알림 버튼 숨김) */
+  var APP_VERSION = '2026-09-05-27';
+  var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
   var ROOT_NAME = '베니';
@@ -2141,7 +2141,7 @@
         '</div>' +
       '</div></div>' +
       '<div class="notice-bar">' +
-        '<span class="notice-icon">&#128227;</span> 신청서 작성 또는 사진/번호 요청 후, 관리자에게 알려주세요! (알림 기능 준비 중)' +
+        '<span class="notice-icon">&#128227;</span> 요청이 오거나 승인·거절되면 알림으로 바로 알려드려요. 위 <b>&#128276; 알림 켜기</b> 를 눌러 켜보세요! (켜는 법은 <b>&#10067;</b>)' +
       '</div>' +
       '<div class="page">' +
         '<div class="tabs" role="tablist">' + tabs + '</div>' +

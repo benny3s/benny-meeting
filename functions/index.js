@@ -55,6 +55,7 @@ async function sendTo(id, title, body) {
 }
 
 exports.onStateChange = functions
+  .region('asia-northeast3')
   .runWith({ maxInstances: 10, timeoutSeconds: 30, memory: '256MB' })
   .firestore.document('app/state')
   .onUpdate(async (change) => {
