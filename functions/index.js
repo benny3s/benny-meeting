@@ -60,6 +60,19 @@ async function sendTo(id, title, body) {
   const tokens = await tokensFor(id);
   await sendToTokens(tokens, title, body, [id]);
 }
+function entryById(entries, id) {
+  return (entries || []).find((x) => x.id === id) || null;
+}
+/* 수신자에게 알림. 대리 등록(주선자 관리) 프로필이면 주선자에게 대신 보냄. */
+async function notifyRecipient(entries, id, title, body) {
+  const e = entryById(entries, id);
+  if (e && e.managedBy) {
+    /* 소개 대상 본인은 앱에 없을 수 있음 → 주선자에게 전달 */
+    await sendTo(e.managedBy, title, '[소개: ' + (e.nickname || '') + '] ' + body);
+  } else {
+    await sendTo(id, title, body);
+  }
+}
 /* 관리자에게: pushTokens/admin 에 등록된 기기들 (관리자 페이지의 알림 토글로 기기별 관리) */
 async function sendToAdmin(title, body) {
   const tokens = await tokensFor('admin');
@@ -82,12 +95,12 @@ exports.onStateChange = functions
       const prev = beforeMap[r.id];
       const type = (r.type || 'contact') === 'photo' ? '사진' : '번호';
       if (!prev) {
-        /* 새 요청 → 받는 사람에게 */
-        jobs.push(sendTo(r.toId, '새 ' + type + ' 요청', nameOf(entries, r.fromId) + '님이 ' + type + ' 요청을 보냈어요'));
+        /* 새 요청 → 받는 사람에게 (대리 프로필이면 주선자에게) */
+        jobs.push(notifyRecipient(entries, r.toId, '새 ' + type + ' 요청', nameOf(entries, r.fromId) + '님이 ' + type + ' 요청을 보냈어요'));
       } else {
         /* 요청자가 자기 사진을 공개함 → 받는 사람에게 */
         if (!prev.fromRevealed && r.fromRevealed) {
-          jobs.push(sendTo(r.toId, '📷 사진 공개', nameOf(entries, r.fromId) + '님이 자기 사진을 공개했어요'));
+          jobs.push(notifyRecipient(entries, r.toId, '📷 사진 공개', nameOf(entries, r.fromId) + '님이 자기 사진을 공개했어요'));
         }
         const ps = reqStatus(prev), ns = reqStatus(r);
         if (ps === ns) return;
@@ -97,7 +110,7 @@ exports.onStateChange = functions
         if (isApproved && !wasApproved) jobs.push(sendTo(r.fromId, type + ' 요청 승인 🎉', nameOf(entries, r.toId) + '님이 요청을 승인했어요'));
         else if (ns === 'held' && ps !== 'held') jobs.push(sendTo(r.fromId, type + ' 요청 보류', nameOf(entries, r.toId) + '님이 요청을 보류했어요'));
         else if (ns === 'rejected' && ps !== 'rejected') jobs.push(sendTo(r.fromId, type + ' 요청 거절', nameOf(entries, r.toId) + '님이 요청을 거절했어요'));
-        else if (ns === 'pending' && (ps === 'held' || ps === 'rejected')) jobs.push(sendTo(r.toId, type + ' 재요청', nameOf(entries, r.fromId) + '님이 정보를 담아 다시 요청했어요'));
+        else if (ns === 'pending' && (ps === 'held' || ps === 'rejected')) jobs.push(notifyRecipient(entries, r.toId, type + ' 재요청', nameOf(entries, r.fromId) + '님이 정보를 담아 다시 요청했어요'));
       }
     });
 

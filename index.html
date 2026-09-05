@@ -605,6 +605,21 @@
   .pf-ai-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 0.82rem; }
   .pf-ai-label { color: var(--muted); font-weight: 600; white-space: nowrap; }
   .pf-ai-val { text-align: right; font-variant-numeric: tabular-nums; }
+  /* 주선자 프로필 전환 바 */
+  .profile-switch {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--gold-soft); border: 1px solid var(--gold);
+    border-radius: 12px; padding: 8px 12px; margin: 10px 0 4px;
+  }
+  .profile-switch .ps-label { font-size: 0.8rem; font-weight: 700; color: var(--gold); white-space: nowrap; }
+  .profile-switch .ps-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pf-switch-chip {
+    border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+    border-radius: 999px; padding: 5px 12px; font-size: 0.82rem; cursor: pointer;
+    font-family: inherit; transition: all 0.15s;
+  }
+  .pf-switch-chip:hover { border-color: var(--gold); }
+  .pf-switch-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
   .cap-bar {
     height: 12px; border-radius: 999px; background: var(--line);
     overflow: hidden; margin-top: 4px;
@@ -715,7 +730,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-54';
+  var APP_VERSION = '2026-09-05-55';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -741,6 +756,8 @@
   var photoDataUrls = [];
   var formPhotosReady = true; /* 수정 시 원본 사진 로드 완료 여부 */
   var editingEntryId = null;
+  var proxyRegisterMode = false; /* 친구 대신 소개(대리 등록) 폼 모드 */
+  var actingAs = null;           /* 주선자가 지금 활동 중인 프로필 id (null = 내 프로필). 새로고침 시 초기화 */
   var currentUser = null;
   var exampleTipDismissed = false; /* 이번 폼 진입 동안만 닫힘 (새로고침·탭 재진입 시 초기화) */
 
@@ -1199,13 +1216,58 @@
   }
 
   /* ---- login / session ---- */
-  function findMyEntry(state) {
+  /* 로그인한 주선자 본인(인증 주체)의 엔트리 — 알림 토큰/관리자 메시지 등은 항상 이걸 씀 */
+  function myAuthEntry(state) {
     if (!currentUser) return null;
     return (state.entries || []).find(function (e) { return e.id === currentUser.id; }) || null;
+  }
+  /* "지금 활동 중인 프로필" — 내 프로필이거나, 내가 소개한 대리(sub) 프로필.
+     요청 보내기/받은 요청 처리/명단 필터 등 대부분의 흐름이 이걸 기준으로 동작. */
+  function findMyEntry(state) {
+    if (!currentUser) return null;
+    var entries = state.entries || [];
+    if (actingAs && actingAs !== currentUser.id) {
+      var sub = entries.find(function (e) { return e.id === actingAs && e.managedBy === currentUser.id; });
+      if (sub) return sub;
+      actingAs = null; /* 권한 없거나 삭제됨 → 내 프로필로 복귀 */
+    }
+    return entries.find(function (e) { return e.id === currentUser.id; }) || null;
   }
   function findMyPending(state) {
     if (!currentUser) return null;
     return (state.pendingEntries || []).find(function (e) { return e.id === currentUser.id; }) || null;
+  }
+  /* ---- 주선자(대리 등록) 헬퍼 ---- */
+  function isProxyEntry(e) { return !!(e && e.managedBy); }
+  /* 내가(로그인한 회원이) 소개하는 대리 프로필 목록 */
+  function entriesManagedByMe(state) {
+    if (!currentUser) return [];
+    return (state.entries || []).filter(function (e) { return e.managedBy === currentUser.id; });
+  }
+  /* 이 요청의 수신자를 내가 대리 관리하는가? (주선자 권한 확인) */
+  function iManageTarget(state, targetId) {
+    if (!currentUser) return false;
+    var t = (state.entries || []).find(function (e) { return e.id === targetId; });
+    return !!(t && t.managedBy === currentUser.id);
+  }
+  /* 대리 프로필의 주선자 닉네임 */
+  function managerNickOf(state, e) {
+    if (!e || !e.managedBy) return '';
+    var m = (state.entries || []).find(function (x) { return x.id === e.managedBy; });
+    return m ? m.nickname : '주선자';
+  }
+  /* 프로필 전환 (내 프로필 ↔ 내가 소개한 sub 프로필) */
+  function handleSwitchProfile(id) {
+    if (!currentUser) return;
+    if (!id || id === currentUser.id) {
+      actingAs = null;
+    } else {
+      var sub = ((currentState && currentState.entries) || []).find(function (e) { return e.id === id && e.managedBy === currentUser.id; });
+      actingAs = sub ? id : null;
+    }
+    activeTab = 'mine';
+    paint(currentState);
+    window.scrollTo(0, 0);
   }
   /* 로그인 유지: localStorage에 저장해 기기에서 오래 유지 (로그아웃 전까지) */
   function saveSession() {
@@ -1228,6 +1290,7 @@
   }
   function logoutUser() {
     currentUser = null;
+    actingAs = null;
     saveSession();
     if (activeTab === 'mine') activeTab = 'form';
     paint(currentState);
@@ -1243,6 +1306,7 @@
     var showTest = showTestInList(); /* 테스트 계정은 관리자가 "테스트 표시"를 켰거나 본인이 테스트 계정일 때만 노출 */
     var sortedEntries = (state.entries || []).slice().sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
     var all = sortedEntries.concat(state.pendingEntries || []).filter(function (e) {
+      if (e.managedBy) return false; /* 대리 프로필은 PIN이 없어 로그인 불가 → 목록에서 제외 */
       return !e.testAccount || showTest;
     }).map(function (e) {
       var uid = formatUid(e);
@@ -1326,6 +1390,7 @@
         if (!ok) return modalNotice('오류', 'PIN이 올바르지 않아요.');
         maybeUpgradePin(entry, r.pin);
         currentUser = { id: entry.id, nickname: entry.nickname, pin: r.pin };
+        actingAs = null;
         saveSession();
         activeTab = 'mine';
         touchLastSeen(entry.id);
@@ -1810,6 +1875,7 @@
             '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
             (entry.height ? '<span class="chip">' + escapeHtml(entry.height) + 'cm</span>' : '') +
             (entry.testAccount && isAdminUnlocked ? '<span class="chip" style="background:#e8eaed;color:#5f6368;">🧪 테스트</span>' : '') +
+            (isProxyEntry(entry) ? '<span class="chip" style="background:var(--gold-soft);color:var(--gold);border-color:var(--gold);">🤝 ' + escapeHtml(managerNickOf(state, entry)) + '님이 소개</span>' : '') +
           '</div>' +
           '<ul class="pf-meta">' +
             '<li>' + ICON_PIN + '<span>' + escapeHtml(entry.region) + '</span></li>' +
@@ -1907,6 +1973,7 @@
             '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
             (entry.height ? '<span class="chip">' + escapeHtml(entry.height) + 'cm</span>' : '') +
             (entry.testAccount && isAdminUnlocked ? '<span class="chip" style="background:#e8eaed;color:#5f6368;">🧪 테스트</span>' : '') +
+            (isProxyEntry(entry) ? '<span class="chip" style="background:var(--gold-soft);color:var(--gold);border-color:var(--gold);">🤝 소개</span>' : '') +
           '</div>' +
           '<div class="compact-meta">' + ICON_PIN + '<span>' + escapeHtml(entry.region || '-') + '</span>' +
             ICON_BRIEF + '<span>' + escapeHtml(entry.workplace || '-') + '</span></div>' +
@@ -1960,6 +2027,7 @@
 
   function renderForm(state) {
     var isEdit = !!editingEntryId;
+    var proxy = proxyRegisterMode && !isEdit; /* 친구 대신 소개(대리 등록) 모드 */
     var exampleTip = exampleTipDismissed ? '' :
       '<div class="example-tip" id="example-tip">' +
         '<button type="button" class="example-tip-x" id="example-tip-close" aria-label="닫기">&times;</button>' +
@@ -1973,12 +2041,15 @@
     var editNote = isEdit
       ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">프로필 수정 모드입니다. 실명·연락처·소개자·PIN은 비워두면 기존 값이 유지돼요. <button type="button" class="card-btn" id="cancel-edit" style="margin-left:8px;padding:4px 12px;">수정 취소</button></div>'
       : '';
+    var proxyNote = proxy
+      ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">🤝 <b>친구 대신 소개하기</b> — 아래는 <b>소개할 친구의 정보</b>예요. 친구는 앱에 가입하지 않아도 되고, 요청·승인은 주선자(' + escapeHtml((currentUser && currentUser.nickname) || '나') + ')님이 대신 처리해요. <button type="button" class="card-btn" id="cancel-proxy" style="margin-left:8px;padding:4px 12px;">일반 신청으로</button></div>'
+      : '';
     return (
-      setupNote + editNote +
+      setupNote + editNote + proxyNote +
       '<div class="form-card">' +
         '<div class="form-lede">' +
-          '<h2>' + (isEdit ? '프로필 수정' : '좋은 사람, 소개해 주세요') + '</h2>' +
-          '<p>' + (isEdit ? '수정할 항목을 변경한 뒤 저장하세요.' : '아래 정보를 채워서 제출하면 관리자 승인 후 명단에 올라가요.') + '</p>' +
+          '<h2>' + (isEdit ? '프로필 수정' : (proxy ? '🤝 친구를 소개해 주세요' : '좋은 사람, 소개해 주세요')) + '</h2>' +
+          '<p>' + (isEdit ? '수정할 항목을 변경한 뒤 저장하세요.' : (proxy ? '소개할 친구의 정보를 채워주세요. 관리자 승인 후 명단에 올라가요.' : '아래 정보를 채워서 제출하면 관리자 승인 후 명단에 올라가요.')) + '</p>' +
         '</div>' +
         '<form id="entry-form" novalidate>' +
           '<div class="field-group">' +
@@ -2010,9 +2081,13 @@
               '<input type="text" id="f-region" name="region" maxlength="40" placeholder="예: 서울 마포구" required></div>' +
             '<div class="field"><label for="f-workplace">직장 위치 <span class="opt">(회사명/직업 공개는 자유)</span> <span class="req">필수</span></label>' +
               '<input type="text" id="f-workplace" name="workplace" maxlength="60" placeholder="예: 강남 (아모레/연구원)" required></div>' +
-            '<div class="field"><label for="f-referrer">누구를 통해 알게 되셨나요? ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
-              '<input type="text" id="f-referrer" name="referrerText" maxlength="60"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 홍길동 (관리자 친구 통해)" required') + '>' +
-              '<span class="hint">예: <span class="ex">홍길동 (관리자 친구)</span> · <span class="ex">김철수 (소개한 친구)</span> · <span class="ex">우연히·SNS</span><br>' + ICON_LOCK + ' 연락용이며, 암호화되어 관리자만 볼 수 있어요.</span></div>' +
+            (proxy
+              ? '<div class="field"><label for="f-referrer">소개 대상과의 관계 <span class="opt">(선택)</span></label>' +
+                  '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 대학 후배 / 회사 동료">' +
+                  '<span class="hint">' + ICON_LOCK + ' 주선자(나)와 소개 대상의 관계예요. 관리자만 볼 수 있어요.</span></div>'
+              : '<div class="field"><label for="f-referrer">누구를 통해 알게 되셨나요? ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
+                  '<input type="text" id="f-referrer" name="referrerText" maxlength="60"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 홍길동 (관리자 친구 통해)" required') + '>' +
+                  '<span class="hint">예: <span class="ex">홍길동 (관리자 친구)</span> · <span class="ex">김철수 (소개한 친구)</span> · <span class="ex">우연히·SNS</span><br>' + ICON_LOCK + ' 연락용이며, 암호화되어 관리자만 볼 수 있어요.</span></div>') +
             '<div class="field"><label>사진 <span class="opt">(선택, 최대 3장)</span></label>' +
               '<span class="hint">기본은 <b class="ex">흐리게(비공개)</b> — 요청을 승인한 사람에게만 보여요. 아래 체크를 풀면 <b class="ex">전체 공개</b>가 됩니다.</span>' +
               '<div class="photo-upload-area" id="photo-upload-area"></div>' +
@@ -2023,9 +2098,11 @@
                 '</label>' +
               '</div></div>' +
             '<div class="section-label">추가 정보</div>' +
-            '<div class="field"><label for="f-pin">개인 PIN ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
-              '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="숫자 4~8자리" required') + '>' +
-              '<span class="hint">나중에 본인이 신청을 취소하거나 데이트를 신청할 때 필요해요.</span></div>' +
+            (proxy
+              ? '<input type="hidden" id="f-pin" name="pin" value="">'
+              : '<div class="field"><label for="f-pin">개인 PIN ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
+                  '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="숫자 4~8자리" required') + '>' +
+                  '<span class="hint">나중에 본인이 신청을 취소하거나 데이트를 신청할 때 필요해요.</span></div>') +
             exampleTip +
             '<div class="field"><label for="f-intro">자기소개 <span class="opt">(선택)</span></label>' +
               '<span class="hint">정보가 자세할수록 매칭 성공률이 올라가요!</span>' +
@@ -2036,20 +2113,28 @@
               '<textarea id="f-dealbreaker" name="dealbreaker" rows="3" maxlength="300" placeholder="예: 흡연자, 종교 강요, 연락 안 되는 사람"></textarea></div>' +
           '</div>' +
           '<hr class="perforation">' +
-          (isEdit ? '' :
-            '<div class="consent-box">' +
-              '<label class="consent-label"><input type="checkbox" id="f-consent">' +
-                ' <span>개인정보 수집 및 이용에 동의합니다.</span></label>' +
-              '<p class="consent-detail">수집 항목: 닉네임, 실명, 연락처, 소개자, 성별, 생년, 지역, 직장, 사진, 자기소개 등<br>' +
-                '수집 목적: 소개팅 매칭 및 관리자 연락<br>' +
-                '보유 기간: 서비스 이용 종료 시 즉시 삭제<br>' +
-                '동의를 거부할 권리가 있으며, 거부 시 신청이 불가합니다.</p>' +
-            '</div>' +
-            '<div class="consent-box">' +
-              '<p class="consent-detail" style="margin:0;">&#128276; <b>알림을 켜면</b> 사진/번호 요청과 승인 소식을 기기로 바로 받아볼 수 있어요. 신청 후 상단의 <b>&#128276; 알림 켜기</b> 를 눌러주세요! (켜는 법은 <b>&#128214; 알림 켜는 법</b>)</p>' +
-            '</div>') +
+          (isEdit ? '' : (proxy
+            ? '<div class="consent-box">' +
+                '<label class="consent-label"><input type="checkbox" id="f-consent">' +
+                  ' <span><b>소개 대상 본인에게 등록 동의를 받았습니다.</b></span></label>' +
+                '<p class="consent-detail">주선자는 소개 대상 본인의 동의를 받아 대신 등록해요.<br>' +
+                  '수집 항목: 닉네임, 실명, 연락처, 성별, 생년, 지역, 직장, 사진, 자기소개 등<br>' +
+                  '요청·승인은 주선자(나)가 대신 처리하고, 번호는 매칭 성사 시에만 공개돼요.<br>' +
+                  '동의 없이 타인의 정보를 등록하면 삭제될 수 있어요.</p>' +
+              '</div>'
+            : '<div class="consent-box">' +
+                '<label class="consent-label"><input type="checkbox" id="f-consent">' +
+                  ' <span>개인정보 수집 및 이용에 동의합니다.</span></label>' +
+                '<p class="consent-detail">수집 항목: 닉네임, 실명, 연락처, 소개자, 성별, 생년, 지역, 직장, 사진, 자기소개 등<br>' +
+                  '수집 목적: 소개팅 매칭 및 관리자 연락<br>' +
+                  '보유 기간: 서비스 이용 종료 시 즉시 삭제<br>' +
+                  '동의를 거부할 권리가 있으며, 거부 시 신청이 불가합니다.</p>' +
+              '</div>' +
+              '<div class="consent-box">' +
+                '<p class="consent-detail" style="margin:0;">&#128276; <b>알림을 켜면</b> 사진/번호 요청과 승인 소식을 기기로 바로 받아볼 수 있어요. 신청 후 상단의 <b>&#128276; 알림 켜기</b> 를 눌러주세요! (켜는 법은 <b>&#128214; 알림 켜는 법</b>)</p>' +
+              '</div>')) +
           '<div class="submit-row">' +
-            '<button type="submit" class="submit-btn" id="submit-btn">' + (isEdit ? '수정 저장하기' : '도장 찍고 제출하기') + '</button>' +
+            '<button type="submit" class="submit-btn" id="submit-btn">' + (isEdit ? '수정 저장하기' : (proxy ? '🤝 친구 소개 제출하기' : '도장 찍고 제출하기')) + '</button>' +
             (isEdit ? '<button type="button" class="cancel-btn" id="cancel-edit-bottom">수정 취소</button>' : '') +
             '<span class="status-msg" id="status-msg"></span>' +
           '</div>' +
@@ -2204,16 +2289,23 @@
           (thread.length ? '<button type="button" class="card-btn" id="member-msg-delall" style="flex:none;">전체 삭제</button>' : '') +
         '</div>' +
       '</div>';
+    var actingSub = isProxyEntry(me); /* 지금 대리(sub) 프로필로 활동 중인가 */
+    var actingBanner = actingSub
+      ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">🤝 지금 <b>' + escapeHtml(me.nickname) + '</b>님(내가 소개한 친구)으로 활동 중이에요. 위 프로필 전환에서 <b>내 프로필</b>로 돌아갈 수 있어요.</div>'
+      : '';
+    var pinBtn = actingSub ? '' : '<button type="button" class="card-btn" id="change-my-pin" style="flex:none;">🔑 PIN 변경</button>';
+    var proxyBtn = actingSub ? '' : '<button type="button" class="card-btn" id="start-proxy" style="margin-bottom:6px;">🤝 친구 대신 소개하기</button>';
     return (
       '<div class="admin-panel">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
-          '<h2 style="margin:0;">메시지함</h2>' +
-          '<button type="button" class="card-btn" id="change-my-pin" style="flex:none;">🔑 PIN 변경</button>' +
+          '<h2 style="margin:0;">메시지함</h2>' + pinBtn +
         '</div>' +
-        '<div class="my-uid">고유번호 ' + escapeHtml(formatUid(me) || '—') + '</div>' +
+        '<div class="my-uid">고유번호 ' + escapeHtml(formatUid(me) || '—') + (actingSub ? ' · 🤝 대리' : '') + '</div>' +
+        actingBanner +
         '<p class="sub">' + escapeHtml(me.nickname) + '님, 반가워요! 받은 요청은 직접 승인하거나 거절할 수 있어요.</p>' +
+        proxyBtn +
         sections +
-        msgSection +
+        (actingSub ? '' : msgSection) +
       '</div>'
     );
   }
@@ -2573,6 +2665,20 @@
         '<span class="count" title="요청">요청 ' + reqCount + '</span>' +
         '<span class="count' + (msgUnread >= 1 ? ' blink' : '') + '" title="안 읽은 Q&A">Q&A ' + msgUnread + '</span></button>';
     }
+    /* 주선자 프로필 전환 바 (내가 소개한 대리 프로필이 1개 이상일 때) */
+    var switcher = '';
+    if (currentUser) {
+      var mySubs = entriesManagedByMe(state);
+      if (mySubs.length) {
+        var selfActive = !actingAs || actingAs === currentUser.id;
+        var chips = '<button type="button" class="pf-switch-chip' + (selfActive ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(currentUser.id) + '">' + escapeHtml(currentUser.nickname) + ' (나)</button>';
+        chips += mySubs.map(function (s) {
+          var on = actingAs === s.id;
+          return '<button type="button" class="pf-switch-chip' + (on ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '">🤝 ' + escapeHtml(s.nickname) + '</button>';
+        }).join('');
+        switcher = '<div class="profile-switch"><span class="ps-label">🔄 활동 중 프로필</span><div class="ps-chips">' + chips + '</div></div>';
+      }
+    }
     var panel;
     if (activeTab === 'list') panel = renderList(state);
     else if (activeTab === 'mine' && currentUser) panel = renderMine(state);
@@ -2611,6 +2717,7 @@
       '</div>' +
       '<div class="page">' +
         '<div class="tabs" role="tablist">' + tabs + '</div>' +
+        switcher +
         '<div id="tab-panel">' + panel + '</div>' +
       '</div>'
     );
@@ -2650,7 +2757,7 @@
   /* ---- 신청서 임시 저장 (새로고침/이동/오류로도 안 날아가게) ---- */
   var DRAFT_KEY = 'form-draft-v1';
   function saveDraft() {
-    if (editingEntryId) return; /* 신규 작성만 */
+    if (editingEntryId || proxyRegisterMode) return; /* 신규 본인 작성만 (수정·대리등록 제외) */
     var form = document.getElementById('entry-form');
     if (!form) return;
     try {
@@ -2675,7 +2782,7 @@
       d.gender || d.degreeChoice || (d.photos && d.photos.length)));
   }
   function maybeRestoreDraft() {
-    if (editingEntryId) return;
+    if (editingEntryId || proxyRegisterMode) return;
     var form = document.getElementById('entry-form');
     if (!form) return;
     var nick = form.querySelector('[name="nickname"]');
@@ -2885,6 +2992,7 @@
     var blurPhoto = form.querySelector('#f-blur') ? form.querySelector('#f-blur').checked : false;
 
     var isEdit = !!editingEntryId;
+    var proxy = proxyRegisterMode && !isEdit; /* 친구 대신 소개(대리 등록) */
     var origEntry = isEdit ? (state.entries || []).find(function (e) { return e.id === editingEntryId; }) : null;
 
     var missing = [];
@@ -2897,20 +3005,25 @@
     if (!isEdit) {
       if (!realName) missing.push('실명');
       if (!contact) missing.push('전화번호');
-      if (!referrerText) missing.push('소개자');
-      if (!pin) missing.push('개인 PIN');
+      if (!proxy && !referrerText) missing.push('소개자'); /* 대리 등록은 소개자 선택 */
+      if (!proxy && !pin) missing.push('개인 PIN');       /* 대리 프로필은 PIN 없음 */
     }
     if (missing.length > 0) {
       modalNotice('입력 오류', '다음 항목을 채워주세요: ' + missing.join(', '));
       return;
     }
+    if (proxy && !(currentUser && currentUser.id)) {
+      modalNotice('로그인 필요', '친구 대신 소개하려면 먼저 로그인해주세요.');
+      return;
+    }
     if (!isEdit) {
       var consent = document.getElementById('f-consent');
       if (!consent || !consent.checked) {
-        modalNotice('동의 필요', '개인정보 수집 및 이용에 동의해 주세요.');
+        modalNotice('동의 필요', proxy ? '소개 대상 본인의 등록 동의를 확인해 주세요.' : '개인정보 수집 및 이용에 동의해 주세요.');
         return;
       }
     }
+    if (proxy && !referrerText) referrerText = '주선자: ' + ((currentUser && currentUser.nickname) || '');
     if (pin && pin.length < 4) {
       modalNotice('입력 오류', 'PIN은 4자리 이상이어야 해요.');
       return;
@@ -2944,6 +3057,7 @@
     var finalPhotos = photoDataUrls.slice();
 
     var selfPin = pin || (currentUser && currentUser.id === entryId ? currentUser.pin : null);
+    if (proxy && currentUser) selfPin = currentUser.pin; /* 대리 프로필 번호를 주선자 PIN으로 암호화 → sub 전환 시 번호 사용 가능 */
     var encPromises = [
       realName ? encryptForAdmin(pubJwk, realName) : Promise.resolve(null),
       contact ? encryptForAdmin(pubJwk, contact) : Promise.resolve(null),
@@ -3017,6 +3131,11 @@
             contactSelfEnc: results[4],
             submittedAt: new Date().toISOString()
           };
+          if (proxy) {
+            entry.managedBy = currentUser.id;      /* 이 프로필을 관리하는 주선자 */
+            entry.isProxy = true;
+            entry.proxyConsentAt = new Date().toISOString();
+          }
           return stateRef.update({
             pendingEntries: firebase.firestore.FieldValue.arrayUnion(entry)
           });
@@ -3031,6 +3150,16 @@
         notifyAdmin('프로필 수정', nickname + '님이 프로필을 수정했어요.');
         modalNotice('완료', '프로필이 수정되었어요.');
         activeTab = 'list';
+        paint(currentState);
+      } else if (proxy) {
+        /* 대리 등록: 주선자는 로그인 유지, 새 프로필로 바꾸지 않음 */
+        editingEntryId = null;
+        proxyRegisterMode = false;
+        var mgrNick = (currentUser && currentUser.nickname) || '주선자';
+        appendLog('signup', mgrNick, '친구 대신 소개 신청: ' + nickname);
+        notifyAdmin('새 신청서 📝 (대리)', mgrNick + '님이 ' + nickname + '님을 대신 소개했어요 (승인 대기).');
+        modalNotice('접수 완료 🤝', nickname + '님을 대신 소개했어요! 관리자 승인 후 명단에 올라가요. 승인되면 상단 "🔄 활동 중 프로필"에서 그 친구로 전환해 요청을 대신 승인·관리할 수 있어요.');
+        activeTab = 'mine';
         paint(currentState);
       } else {
         editingEntryId = null;
@@ -3076,6 +3205,10 @@
       return;
     }
     if (currentUser && currentUser.id === id) {
+      startEditing(entry);
+      return;
+    }
+    if (iManageTarget(state, id)) { /* 내가 소개한 대리(sub) 프로필은 PIN 없이 수정 가능 */
       startEditing(entry);
       return;
     }
@@ -3950,6 +4083,7 @@
     var rows = '<div class="detail-grid">';
     rows += '<div class="detail-row"><div class="detail-label">고유번호</div><div class="detail-value">' + escapeHtml(formatUid(entry) || '—') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">닉네임</div><div class="detail-value">' + escapeHtml(entry.nickname) + '</div></div>';
+    if (isProxyEntry(entry)) rows += '<div class="detail-row"><div class="detail-label">등록 형태</div><div class="detail-value">🤝 대리 등록 (주선자: ' + escapeHtml(managerNickOf(state, entry)) + ')' + (entry.proxyConsentAt ? ' · 본인 동의 확인' : '') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">실명</div><div class="detail-value" id="detail-realname">복호화 중...</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">연락처</div><div class="detail-value" id="detail-contact">복호화 중...</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">소개자</div><div class="detail-value" id="detail-referrer">복호화 중...</div></div>';
@@ -4100,7 +4234,7 @@
     var tabBtn = e.target.closest('[data-tab]');
     if (tabBtn) {
       activeTab = tabBtn.getAttribute('data-tab');
-      if (activeTab === 'form') exampleTipDismissed = false; /* 신청서 탭 재진입 시 예시 다시 표시 */
+      if (activeTab === 'form') { exampleTipDismissed = false; proxyRegisterMode = false; } /* 탭으로 들어오면 일반 신청서 */
       if (activeTab === 'mine') markMineSeen();
       paint(currentState);
       window.scrollTo(0, 0); /* 탭 전환 시 맨 위로 */
@@ -4200,6 +4334,22 @@
       paint(currentState);
       return;
     }
+    if (e.target.closest('#start-proxy')) {
+      if (!currentUser) { modalNotice('로그인 필요', '친구 대신 소개하려면 먼저 로그인해주세요.'); return; }
+      proxyRegisterMode = true;
+      editingEntryId = null;
+      photoDataUrls = [];
+      activeTab = 'form';
+      paint(currentState);
+      return;
+    }
+    if (e.target.closest('#cancel-proxy')) {
+      proxyRegisterMode = false;
+      photoDataUrls = [];
+      activeTab = 'list';
+      paint(currentState);
+      return;
+    }
     var actionBtn = e.target.closest('[data-action]');
     if (actionBtn) {
       var action = actionBtn.getAttribute('data-action');
@@ -4224,6 +4374,7 @@
       else if (action === 'user-approve') handleUserApproveRequest(id);
       else if (action === 'user-hold') handleUserHoldRequest(id);
       else if (action === 'user-reject') handleUserRejectRequest(id);
+      else if (action === 'switch-profile') handleSwitchProfile(id);
       else if (action === 'reveal-mine') handleRevealMine(id);
       else if (action === 'revoke-approve') handleRevokeApprove(id);
       else if (action === 'perm-photo') { if (isAdminUnlocked) openPermPopup(id, 'photo'); }
@@ -4563,12 +4714,12 @@
         }, { merge: true }));
       }
       if (notifOn()) {
-        var me = myEntryOrPending();
-        var uid = me ? me.id : (currentUser && currentUser.id);
+        /* 알림 토큰은 항상 로그인 본인(주선자) 기기에 저장 — sub로 활동 중이어도 currentUser 기준 */
+        var uid = (currentUser && currentUser.id);
         if (uid) {
           jobs.push(pushTokensRef.doc(uid).set({
             tokens: firebase.firestore.FieldValue.arrayUnion(token),
-            nickname: (me && me.nickname) || (currentUser && currentUser.nickname) || '',
+            nickname: (currentUser && currentUser.nickname) || '',
             updatedAt: new Date().toISOString()
           }, { merge: true }));
         }
@@ -4666,11 +4817,10 @@
   }
   function enableNotif() {
     ensureFcmToken().then(function (token) {
-      var me = myEntryOrPending();
-      var uid = me ? me.id : currentUser.id;
+      var uid = currentUser && currentUser.id; /* 항상 로그인 본인(주선자) 기기 기준 */
       return pushTokensRef.doc(uid).set({
         tokens: firebase.firestore.FieldValue.arrayUnion(token),
-        nickname: (me && me.nickname) || currentUser.nickname || '',
+        nickname: (currentUser && currentUser.nickname) || '',
         updatedAt: new Date().toISOString()
       }, { merge: true });
     }).then(function () {
@@ -4683,8 +4833,7 @@
   }
   function disableNotif() {
     var token = ''; try { token = localStorage.getItem('notifToken') || ''; } catch (e) {}
-    var me = myEntryOrPending();
-    var uid = me ? me.id : (currentUser && currentUser.id);
+    var uid = currentUser && currentUser.id; /* 항상 로그인 본인(주선자) 기기 기준 */
     var p = (token && uid)
       ? pushTokensRef.doc(uid).set({ tokens: firebase.firestore.FieldValue.arrayRemove(token) }, { merge: true })
       : Promise.resolve();
