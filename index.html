@@ -755,7 +755,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-06-64';
+  var APP_VERSION = '2026-09-06-65';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1297,9 +1297,11 @@
   function isProxyEntry(e) { return !!(e && e.managedBy); }
   function isMatchmakerEntry(e) { return !!(e && e.isMatchmaker); } /* 매니저 전용 계정(명단 비노출) */
   /* 회원 등급(내부 구분용, 화면 비노출):
+     Lv0=sub(대리 프로필, 본인 로그인 없음 — 임시 PIN 있으면 Lv1처럼 셀프 로그인 가능하나 구조상은 Lv0)
      Lv1=일반 회원 · Lv2=주선자(본인 없이 친구만 등록) · Lv3=일반 회원+친구 등록 */
   function memberLevel(entry, state) {
-    if (!entry) return 0;
+    if (!entry) return -1;
+    if (entry.managedBy) return 0;   /* sub (대리 프로필) — 권한은 Lv1과 동일, 자기 PIN만 없음 */
     if (entry.isMatchmaker) return 2;
     var hasSubs = (state && state.entries || []).some(function (e) { return e.managedBy === entry.id; });
     return hasSubs ? 3 : 1;
