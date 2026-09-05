@@ -755,7 +755,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-06-69';
+  var APP_VERSION = '2026-09-06-70';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -3527,18 +3527,11 @@
       startEditing(entry);
       return;
     }
-    if (iManageTarget(state, id)) { /* 내가 소개한 대리(sub) 프로필은 PIN 없이 수정 가능 */
+    if (iManageTarget(state, id)) { /* 내가 소개한 대리(sub) 프로필은 수정 가능 */
       startEditing(entry);
       return;
     }
-    modalPin('본인 확인', '등록 시 설정한 개인 PIN을 입력하세요.').then(function (pin) {
-      if (!pin) return;
-      verifyPin(pin, entry).then(function (ok) {
-        if (!ok) return modalNotice('오류', 'PIN이 올바르지 않아요.');
-        maybeUpgradePin(entry, pin);
-        startEditing(entry);
-      });
-    });
+    modalNotice('로그인 필요', '수정은 로그인한 뒤 본인 프로필(또는 내가 소개한 친구)만 할 수 있어요. 상단에서 로그인해 주세요.');
   }
 
   function startEditing(entry) {
@@ -5279,10 +5272,20 @@
     try {
       fcmMessaging.onMessage(function (payload) {
         var n = (payload && payload.notification) || (payload && payload.data) || {};
+        try { if (!isEditingForm()) refreshNow(); } catch (e) {} /* 알림 오면 화면도 즉시 최신화 (폼 작성 중이면 제외) */
         modalNotice(n.title || '새 알림', n.body || '');
       });
     } catch (e) {}
   }
+  /* 앱이 백그라운드→포그라운드로 돌아오면 최신 상태로 새로고침 (모바일 PWA에서 실시간 갱신이 멈추는 문제 방지) */
+  function refreshOnResume() {
+    if (!appStarted) return;
+    try { if (!isEditingForm()) refreshNow(); } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') refreshOnResume();
+  });
+  window.addEventListener('focus', refreshOnResume);
 
   var deferredInstallPrompt = null;
   window.addEventListener('beforeinstallprompt', function (e) {
