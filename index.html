@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-45';
+  var APP_VERSION = '2026-09-05-46';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -695,6 +695,9 @@
   var activeTab = 'form';
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
   function testAccountsShown() { try { return localStorage.getItem('showTestAccounts') === '1'; } catch (e) { return false; } }
+  /* 테스트 계정끼리는 서로 보이게 (관리자 표시 스위치와 별개) → 테스트 계정으로 로그인 시 명단에서 다른 테스트 계정도 보여 요청 가능 */
+  function meIsTest() { var me = currentUser && findMyEntry(currentState); return !!(me && me.testAccount); }
+  function showTestInList() { return (isAdminUnlocked && testAccountsShown()) || meIsTest(); }
   var isAdminUnlocked = false;
   var adminPrivateKey = null;
   var decryptedContacts = {};
@@ -1744,7 +1747,7 @@
   }
 
   function renderList(state) {
-    var showTest = isAdminUnlocked && testAccountsShown();
+    var showTest = showTestInList();
     var entries = (state.entries || []).filter(function (e) { return !e.testAccount || showTest; });
     var maleCount = entries.filter(function (e) { return e.gender === 'male'; }).length;
     var femaleCount = entries.filter(function (e) { return e.gender === 'female'; }).length;
@@ -2009,9 +2012,11 @@
         ? '<div class="mine-note" style="color:#137333;">📷 내 사진을 상대에게 공개했어요.</div>'
         : '<div class="mine-actions"><button type="button" class="card-btn" data-action="reveal-mine" data-id="' + escapeHtml(r.id) + '">📷 내 사진 공개</button></div>';
     }
+    var needAction = incoming && (st === 'pending' || st === 'held');
     return (
-      '<div class="mine-item">' +
+      '<div class="mine-item"' + (needAction ? ' style="border:2px solid var(--accent);background:var(--gold-soft);"' : '') + '>' +
         '<div class="mine-head">' + typeBadge + '<b>' + escapeHtml(otherLabel) + '</b>' + statusChip(st) +
+          (needAction ? '<span class="chip" style="background:var(--accent);color:#fff;">👉 처리 필요</span>' : '') +
           '<span class="mine-date">' + fmtDate(r.submittedAt) + '</span></div>' +
         (note ? '<div class="mine-note">"' + escapeHtml(note) + '"</div>' : '') +
         replyMsg +
@@ -2190,7 +2195,7 @@
     var seenRows = allEntries.slice().sort(function (a, b) {
       return (b.lastSeenAt || '').localeCompare(a.lastSeenAt || '');
     }).map(function (e) {
-      return '<tr><td><b style="font-variant-numeric:tabular-nums;">' + escapeHtml(formatUid(e) || '—') + '</b> ' + escapeHtml(e.nickname) + '</td>' +
+      return '<tr><td data-action="card-detail" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer;"><b style="font-variant-numeric:tabular-nums;">' + escapeHtml(formatUid(e) || '—') + '</b> <span style="text-decoration:underline dotted;">' + escapeHtml(e.nickname) + '</span>' + (e.testAccount ? ' 🧪' : '') + '</td>' +
         '<td class="seen-date">' + (e.lastSeenAt ? new Date(e.lastSeenAt).toLocaleString('ko-KR') : '기록 없음') + '</td></tr>';
     }).join('');
     var seenSection =
@@ -2203,8 +2208,16 @@
     /* 서버 용량 */
     var capSection = capacityHtml(state);
 
-    /* 활동 로그 */
-    var logs = (state.logs || []).slice().reverse();
+    /* 활동 로그 (테스트 계정 관련 로그는 숨김) */
+    var testNicks = (state.entries || []).filter(function (e) { return e.testAccount; }).map(function (e) { return e.nickname; });
+    function isTestLog(l) {
+      var a = l.actor || '', d = l.detail || '';
+      for (var i = 0; i < testNicks.length; i++) {
+        if (testNicks[i] && (a === testNicks[i] || d.indexOf(testNicks[i]) >= 0)) return true;
+      }
+      return false;
+    }
+    var logs = (state.logs || []).filter(function (l) { return !isTestLog(l); }).slice().reverse();
     var logRows = logs.map(function (l) {
       return '<div class="log-row">' +
         '<span class="log-time">' + fmtDate(l.at) + '</span>' +
@@ -2345,7 +2358,7 @@
   }
 
   function renderApp(state) {
-    var showTestList = isAdminUnlocked && testAccountsShown();
+    var showTestList = showTestInList();
     var entries = (state.entries || []).filter(function (e) { return !e.testAccount || showTestList; });
     var pendingCount = (state.pendingEntries || []).length;
     var reqCount = (state.dateRequests || []).filter(function (r) {
