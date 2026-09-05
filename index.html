@@ -755,7 +755,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-06-68';
+  var APP_VERSION = '2026-09-06-69';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1517,9 +1517,9 @@
     });
   }
 
-  function handleLogin() {
+  function handleLogin(opts) {
     var state = currentState;
-    modalLogin().then(function (r) {
+    modalLogin(opts).then(function (r) {
       if (!r) return;
       if (!r.id) return modalNotice('안내', '목록에서 본인을 선택해주세요.');
       var all = (state.entries || []).concat(state.pendingEntries || []);
@@ -4580,7 +4580,7 @@
     }
     if (e.target.closest('#mm-new-btn')) { formRole = 'mm-new'; photoDataUrls = []; paint(currentState); return; }
     if (e.target.closest('#mm-back')) { formRole = 'matchmaker'; paint(currentState); return; }
-    if (e.target.closest('#mm-login')) { modalLogin({ matchmakerOnly: true }); return; }
+    if (e.target.closest('#mm-login')) { handleLogin({ matchmakerOnly: true }); return; }
     var tabBtn = e.target.closest('[data-tab]');
     if (tabBtn) {
       activeTab = tabBtn.getAttribute('data-tab');
