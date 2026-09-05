@@ -687,7 +687,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-52';
+  var APP_VERSION = '2026-09-05-53';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1179,8 +1179,11 @@
 
   function modalLogin() {
     var state = currentState || {};
+    var showTest = showTestInList(); /* 테스트 계정은 관리자가 "테스트 표시"를 켰거나 본인이 테스트 계정일 때만 노출 */
     var sortedEntries = (state.entries || []).slice().sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
-    var all = sortedEntries.concat(state.pendingEntries || []).map(function (e) {
+    var all = sortedEntries.concat(state.pendingEntries || []).filter(function (e) {
+      return !e.testAccount || showTest;
+    }).map(function (e) {
       var uid = formatUid(e);
       return {
         id: e.id,
