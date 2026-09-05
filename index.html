@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-43';
+  var APP_VERSION = '2026-09-05-44';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1167,7 +1167,8 @@
 
   function modalLogin() {
     var state = currentState || {};
-    var all = (state.entries || []).concat(state.pendingEntries || []).map(function (e) {
+    var sortedEntries = (state.entries || []).slice().sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
+    var all = sortedEntries.concat(state.pendingEntries || []).map(function (e) {
       var uid = formatUid(e);
       return {
         id: e.id,
@@ -1710,8 +1711,7 @@
     }
     var adminBtn = isAdminUnlocked
       ? '<button type="button" class="card-btn admin-detail-btn" data-action="detail" data-id="' + escapeHtml(entry.id) + '">🔍 상세</button>' +
-        '<button type="button" class="card-btn" data-action="admin-msg" data-id="' + escapeHtml(entry.id) + '">💬 메시지</button>' +
-        '<button type="button" class="card-btn" data-action="toggle-test" data-id="' + escapeHtml(entry.id) + '">' + (entry.testAccount ? '🧪 테스트 해제' : '🧪 테스트 지정') + '</button>'
+        '<button type="button" class="card-btn" data-action="admin-msg" data-id="' + escapeHtml(entry.id) + '">💬 메시지</button>'
       : '';
     return (
       '<article class="pf-card" data-id="' + escapeHtml(entry.id) + '">' +
@@ -2268,10 +2268,19 @@
         '<hr class="perforation">' +
         logSection +
         '<hr class="perforation">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">' +
-          '<div><b style="font-size:0.9rem;">🧪 테스트 계정 표시</b>' +
-            '<div class="sub" style="margin:2px 0 0;">켜면 테스트로 지정한 계정이 명단에 보여요 (관리자 전용). 일반 회원에겐 항상 숨겨져요. 카드의 <b>🧪 테스트 지정</b> 버튼으로 계정을 지정하세요.</div></div>' +
+        '<h2>🧪 테스트 계정</h2>' +
+        '<p class="sub">체크한 계정은 테스트 계정이 돼요. 일반 회원 명단에서는 숨겨지고, 아래 "테스트 계정 표시"를 켜야 관리자 명단에 보여요.</p>' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">' +
+          '<b style="font-size:0.9rem;">테스트 계정 표시 (관리자 명단)</b>' +
           '<button type="button" class="card-btn' + (testAccountsShown() ? ' approve' : '') + '" id="toggle-show-test" style="flex:none;">' + (testAccountsShown() ? '켜짐' : '꺼짐') + '</button>' +
+        '</div>' +
+        '<div class="test-acct-list" style="border:1px solid var(--line);border-radius:12px;overflow:hidden;">' +
+          (allEntries.slice().sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); }).map(function (e) {
+            return '<label style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);cursor:pointer;">' +
+              '<input type="checkbox" data-testtoggle="' + escapeHtml(e.id) + '"' + (e.testAccount ? ' checked' : '') + ' style="width:17px;height:17px;accent-color:var(--accent);flex:none;">' +
+              '<span style="font-variant-numeric:tabular-nums;"><b>' + escapeHtml(formatUid(e) || '—') + '</b> ' + escapeHtml(e.nickname) + (e.testAccount ? ' <span class="chip" style="background:#e8eaed;color:#5f6368;">🧪</span>' : '') + '</span>' +
+            '</label>';
+          }).join('') || '<p class="sub" style="padding:12px 14px;margin:0;">등록된 계정이 없어요.</p>') +
         '</div>' +
       '</div>'
     );
@@ -3224,12 +3233,11 @@
       }).catch(function (err) { modalNotice('오류', '공개에 실패했어요: ' + (err.message || err)); });
     });
   }
-  /* 관리자: 회원을 테스트 계정으로 지정/해제 (일반 회원 명단에서 숨김) */
-  function handleToggleTest(id) {
+  /* 관리자: 체크박스로 테스트 계정 지정/해제 (조용히 저장) */
+  function handleSetTest(id, makeTest) {
     if (!isAdminUnlocked) return;
     var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
-    if (!entry) return;
-    var makeTest = !entry.testAccount;
+    if (!entry || !!entry.testAccount === !!makeTest) return;
     db.runTransaction(function (tx) {
       return tx.get(stateRef).then(function (doc) {
         var s = doc.data();
@@ -3243,12 +3251,7 @@
       });
     }).then(function () {
       appendLog('admin', '관리자', (makeTest ? '테스트 계정 지정 · ' : '테스트 계정 해제 · ') + entry.nickname);
-      return refreshNow();
-    }).then(function () {
-      modalNotice('완료', escapeHtml(entry.nickname) + (makeTest
-        ? '님을 <b>테스트 계정</b>으로 지정했어요. 일반 회원 명단에서는 안 보여요. (관리자는 아래 "테스트 계정 표시"를 켜면 볼 수 있어요)'
-        : '님의 테스트 계정 지정을 해제했어요.'));
-    }).catch(function (err) { modalNotice('오류', '변경 실패: ' + (err.message || err)); });
+    }).catch(function () {});
   }
   /* ---- user (recipient) decisions on incoming requests ---- */
   /* 승인 모달: 사진 요청이면 "승인 + 나도 요청"(상호 공개) 버튼도 제공. null=취소, 아니면 {reciprocal, message} */
@@ -3944,7 +3947,6 @@
       else if (action === 'user-hold') handleUserHoldRequest(id);
       else if (action === 'user-reject') handleUserRejectRequest(id);
       else if (action === 'reveal-mine') handleRevealMine(id);
-      else if (action === 'toggle-test') handleToggleTest(id);
       else if (action === 'cancel-sent') handleCancelSent(id);
       else if (action === 'reapply') handleReapplyRequest(id);
       else if (action === 'hide-request') handleHideRequest(id);
@@ -4006,6 +4008,8 @@
   }
 
   document.body.addEventListener('change', function (e) {
+    var testCb = e.target.closest && e.target.closest('[data-testtoggle]');
+    if (testCb) { handleSetTest(testCb.getAttribute('data-testtoggle'), testCb.checked); return; }
     if (e.target.id === 'f-photo') {
       var files = e.target.files;
       if (!files || !files.length) return;
