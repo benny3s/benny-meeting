@@ -755,7 +755,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-06-62';
+  var APP_VERSION = '2026-09-06-63';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1327,6 +1327,56 @@
     paint(currentState);
     window.scrollTo(0, 0);
   }
+  /* 주선자가 sub 친구에게 임시 로그인 PIN 발급 (친구가 직접 후보를 보게) */
+  function handleIssueSubPin(subId) {
+    if (!currentUser) return;
+    var sub = ((currentState && currentState.entries) || []).find(function (e) { return e.id === subId && e.managedBy === currentUser.id; });
+    if (!sub) return modalNotice('안내', '내가 소개한 친구만 임시 PIN을 발급할 수 있어요.');
+    modalNumericPinSetup('🔑 임시 로그인 PIN 발급', sub.nickname + '님이 직접 로그인해 후보를 보고 반응할 수 있는 임시 PIN을 정해주세요.').then(function (r) {
+      if (!r) return;
+      if (!/^[0-9]{4,8}$/.test(r.p1)) return modalNotice('입력 오류', 'PIN은 숫자 4~8자리예요.');
+      if (r.p1 !== r.p2) return modalNotice('오류', 'PIN이 일치하지 않아요.');
+      makePinAuth(r.p1).then(function (auth) {
+        return db.runTransaction(function (tx) {
+          return tx.get(stateRef).then(function (doc) {
+            var s = doc.data();
+            var entries = (s.entries || []).map(function (e) {
+              if (e.id !== subId) return e;
+              var c = JSON.parse(JSON.stringify(e)); c.pinAuth = auth; return c;
+            });
+            tx.update(stateRef, { entries: entries });
+          });
+        });
+      }).then(function () {
+        appendLog('request', currentUser.nickname, '(대리) ' + sub.nickname + ' 임시 로그인 PIN 발급');
+        return refreshNow();
+      }).then(function () {
+        modalNotice('임시 PIN 발급 완료 🔑', sub.nickname + '님에게 이렇게 알려주세요 — "로그인에서 닉네임 ' + sub.nickname + ', PIN ' + r.p1 + ' 입력". 친구가 직접 후보를 보고 반응·요청할 수 있어요. 언제든 "PIN 회수"로 끊을 수 있어요.');
+      }).catch(function (err) { modalNotice('오류', '발급 실패: ' + (err.message || err)); });
+    });
+  }
+  function handleRevokeSubPin(subId) {
+    if (!currentUser) return;
+    var sub = ((currentState && currentState.entries) || []).find(function (e) { return e.id === subId && e.managedBy === currentUser.id; });
+    if (!sub) return;
+    modalConfirm('임시 PIN 회수', sub.nickname + '님의 임시 로그인 PIN을 회수할까요? 새로 로그인할 수 없게 돼요. (이미 로그인 중이면 앱을 닫을 때까지 유지될 수 있어요)', '회수', 'danger').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var entries = (s.entries || []).map(function (e) {
+            if (e.id !== subId) return e;
+            var c = JSON.parse(JSON.stringify(e)); delete c.pinAuth; return c;
+          });
+          tx.update(stateRef, { entries: entries });
+        });
+      }).then(function () {
+        appendLog('request', currentUser.nickname, '(대리) ' + sub.nickname + ' 임시 PIN 회수');
+        return refreshNow();
+      }).then(function () { modalNotice('회수 완료', sub.nickname + '님은 더 이상 새로 로그인할 수 없어요.'); })
+        .catch(function (err) { modalNotice('오류', '회수 실패: ' + (err.message || err)); });
+    });
+  }
   /* 로그인 유지: localStorage에 저장해 기기에서 오래 유지 (로그아웃 전까지) */
   function saveSession() {
     try {
@@ -1367,7 +1417,7 @@
     var showTest = testAccountsShown() || meIsTest();
     var sortedEntries = (state.entries || []).slice().sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
     var all = sortedEntries.concat(state.pendingEntries || []).filter(function (e) {
-      if (e.managedBy) return false; /* 대리 프로필은 PIN이 없어 로그인 불가 → 목록에서 제외 */
+      if (e.managedBy && !e.pinAuth) return false; /* 대리 프로필은 로그인 목록서 제외 (단, 임시 PIN 발급되면 노출) */
       return !e.testAccount || showTest;
     }).map(function (e) {
       var uid = formatUid(e);
@@ -2437,7 +2487,16 @@
       var subList = (subs.length || subPend.length)
         ? subs.map(function (s) {
             var pend = (state.dateRequests || []).filter(function (r) { return r.toId === s.id && (function(x){return x==='pending'||x==='held';})(reqStatus(r)); }).length;
-            return '<div style="border:1px solid ' + (pend ? 'var(--accent)' : 'var(--line)') + ';border-radius:10px;padding:10px 12px;margin-top:8px;">🤝 <b>' + escapeHtml(s.nickname) + '</b> <span style="color:var(--muted);font-size:0.8rem;">' + escapeHtml(formatUid(s) || '') + '</span>' + (pend ? '<span class="count">받은요청 ' + pend + '</span>' : '') + ' <button type="button" class="card-btn" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;margin-left:6px;">이 친구로 전환</button></div>';
+            var pinBadge = s.pinAuth ? '<span class="chip" style="background:#e6f4ea;color:#137333;">🔑 임시로그인 ON</span>' : '';
+            var pinBtns = s.pinAuth
+              ? '<button type="button" class="card-btn danger" data-action="sub-pin-revoke" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">🔑 PIN 회수</button>'
+              : '<button type="button" class="card-btn" data-action="sub-pin-issue" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">🔑 임시 PIN 발급</button>';
+            return '<div style="border:1px solid ' + (pend ? 'var(--accent)' : 'var(--line)') + ';border-radius:10px;padding:10px 12px;margin-top:8px;">' +
+              '🤝 <b>' + escapeHtml(s.nickname) + '</b> <span style="color:var(--muted);font-size:0.8rem;">' + escapeHtml(formatUid(s) || '') + '</span>' + (pend ? '<span class="count">받은요청 ' + pend + '</span>' : '') + ' ' + pinBadge +
+              '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">' +
+                '<button type="button" class="card-btn" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">이 친구로 전환</button>' +
+                pinBtns +
+              '</div></div>';
           }).join('') +
           subPend.map(function (s) { return '<div style="border:1px dashed var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;color:var(--muted);">⏳ <b>' + escapeHtml(s.nickname) + '</b> — 관리자 승인 대기</div>'; }).join('')
         : '<p class="sub" style="margin:0;">아직 소개한 친구가 없어요. 아래 버튼으로 시작해보세요.</p>';
@@ -2494,23 +2553,24 @@
           (thread.length ? '<button type="button" class="card-btn" id="member-msg-delall" style="flex:none;">전체 삭제</button>' : '') +
         '</div>' +
       '</div>';
-    var actingSub = isProxyEntry(me); /* 지금 대리(sub) 프로필로 활동 중인가 */
-    var actingBanner = actingSub
+    var isSubProfile = isProxyEntry(me); /* me가 대리(sub) 프로필인가 */
+    var viaMatchmaker = !!actingAs && actingAs !== currentUser.id; /* 주선자가 전환해서 보는 중 */
+    var actingBanner = viaMatchmaker
       ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">🤝 지금 <b>' + escapeHtml(me.nickname) + '</b>님(내가 소개한 친구)으로 활동 중이에요. 위 프로필 전환에서 <b>내 프로필</b>로 돌아갈 수 있어요.</div>'
-      : '';
-    var pinBtn = actingSub ? '' : '<button type="button" class="card-btn" id="change-my-pin" style="flex:none;">🔑 PIN 변경</button>';
-    var proxyBtn = actingSub ? '' : '<button type="button" class="card-btn" id="start-proxy" style="margin-bottom:6px;">🤝 친구 대신 소개하기</button>';
+      : (isSubProfile ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">🤝 <b>' + escapeHtml(me.nickname) + '</b>님, 주선자가 소개해 준 후보들을 둘러보고 마음에 드는 분께 요청을 보내보세요.</div>' : '');
+    var pinBtn = isSubProfile ? '' : '<button type="button" class="card-btn" id="change-my-pin" style="flex:none;">🔑 PIN 변경</button>';
+    var proxyBtn = isSubProfile ? '' : '<button type="button" class="card-btn" id="start-proxy" style="margin-bottom:6px;">🤝 친구 대신 소개하기</button>';
     return (
       '<div class="admin-panel">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
           '<h2 style="margin:0;">메시지함</h2>' + pinBtn +
         '</div>' +
-        '<div class="my-uid">고유번호 ' + escapeHtml(formatUid(me) || '—') + (actingSub ? ' · 🤝 대리' : '') + '</div>' +
+        '<div class="my-uid">고유번호 ' + escapeHtml(formatUid(me) || '—') + (isSubProfile ? ' · 🤝 대리' : '') + '</div>' +
         actingBanner +
         '<p class="sub">' + escapeHtml(me.nickname) + '님, 반가워요! 받은 요청은 직접 승인하거나 거절할 수 있어요.</p>' +
         proxyBtn +
         sections +
-        (actingSub ? '' : msgSection) +
+        (isSubProfile ? '' : msgSection) +
       '</div>'
     );
   }
@@ -4636,6 +4696,8 @@
       else if (action === 'user-hold') handleUserHoldRequest(id);
       else if (action === 'user-reject') handleUserRejectRequest(id);
       else if (action === 'switch-profile') handleSwitchProfile(id);
+      else if (action === 'sub-pin-issue') handleIssueSubPin(id);
+      else if (action === 'sub-pin-revoke') handleRevokeSubPin(id);
       else if (action === 'switch-add') {
         if (!currentUser) { modalNotice('로그인 필요', '먼저 로그인해주세요.'); return; }
         proxyRegisterMode = true; formRole = 'matchmaker'; editingEntryId = null; photoDataUrls = []; actingAs = null; activeTab = 'form'; paint(currentState);
