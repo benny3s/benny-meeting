@@ -755,7 +755,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-06-63';
+  var APP_VERSION = '2026-09-06-64';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1296,6 +1296,16 @@
   /* ---- 주선자(대리 등록) 헬퍼 ---- */
   function isProxyEntry(e) { return !!(e && e.managedBy); }
   function isMatchmakerEntry(e) { return !!(e && e.isMatchmaker); } /* 매니저 전용 계정(명단 비노출) */
+  /* 회원 등급(내부 구분용, 화면 비노출):
+     Lv1=일반 회원 · Lv2=주선자(본인 없이 친구만 등록) · Lv3=일반 회원+친구 등록 */
+  function memberLevel(entry, state) {
+    if (!entry) return 0;
+    if (entry.isMatchmaker) return 2;
+    var hasSubs = (state && state.entries || []).some(function (e) { return e.managedBy === entry.id; });
+    return hasSubs ? 3 : 1;
+  }
+  /* 주선자 역할(친구를 대신 등록·관리하는 계정) = Lv2 또는 Lv3 */
+  function isMatchmakerRole(entry, state) { var lv = memberLevel(entry, state); return lv === 2 || lv === 3; }
   function meIsMatchmaker() { var me = currentUser && (findMyEntry(currentState) || findMyPending(currentState)); return isMatchmakerEntry(me); }
   /* 내가(로그인한 회원이) 소개하는 대리 프로필 목록 */
   function entriesManagedByMe(state) {
@@ -1410,14 +1420,16 @@
   function getAdminPin() { try { return localStorage.getItem('adminPin') || sessionStorage.getItem('adminPin'); } catch (e) { return null; } }
   function clearAdminPin() { try { localStorage.removeItem('adminPin'); sessionStorage.removeItem('adminPin'); } catch (e) {} }
 
-  function modalLogin() {
+  function modalLogin(opts) {
     var state = currentState || {};
+    var mmOnly = !!(opts && opts.matchmakerOnly); /* 주선자(Lv2/Lv3)만 표시 */
     /* 로그인창: "테스트 계정 표시" 토글이 켜져 있으면(관리자 기기) 로그인 목록에도 노출.
        (관리자 잠금 여부와 무관 — 토글은 관리자만 켤 수 있어 일반 회원 기기엔 안 뜸) */
     var showTest = testAccountsShown() || meIsTest();
     var sortedEntries = (state.entries || []).slice().sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
     var all = sortedEntries.concat(state.pendingEntries || []).filter(function (e) {
       if (e.managedBy && !e.pinAuth) return false; /* 대리 프로필은 로그인 목록서 제외 (단, 임시 PIN 발급되면 노출) */
+      if (mmOnly && !isMatchmakerRole(e, state)) return false; /* 주선자 로그인: Lv2/Lv3만 */
       return !e.testAccount || showTest;
     }).map(function (e) {
       var uid = formatUid(e);
@@ -1431,8 +1443,8 @@
     });
     return new Promise(function (resolve) {
       var overlay = openModal(
-        '<h3>로그인</h3>' +
-        '<p class="modal-msg">본인을 선택하고 개인 PIN을 입력해주세요. (위 칸에서 검색 가능)</p>' +
+        '<h3>' + (mmOnly ? '🤝 주선자 로그인' : '로그인') + '</h3>' +
+        '<p class="modal-msg">' + (mmOnly ? '주선자 계정을 선택하고 PIN을 입력해주세요.' : '본인을 선택하고 개인 PIN을 입력해주세요.') + ' (위 칸에서 검색 가능)</p>' +
         '<input type="text" class="modal-input" id="modal-login-search" placeholder="🔍 고유번호 또는 닉네임 검색" autocomplete="off">' +
         '<div class="login-list" id="modal-login-list"></div>' +
         '<input type="text" inputmode="numeric" class="modal-input" id="modal-login-pin" data-numeric placeholder="개인 PIN" style="margin-top:10px;">' +
@@ -3600,16 +3612,16 @@
       });
       return;
     }
-    modalPin('본인 확인', '등록 시 설정한 개인 PIN을 입력하세요.').then(function (pin) {
-      if (!pin) return;
-      verifyPin(pin, entry).then(function (ok) {
-        if (!ok) return modalNotice('오류', 'PIN이 올바르지 않아요.');
-        maybeUpgradePin(entry, pin);
-        doDelete();
-      }).catch(function (err) {
-        modalNotice('오류', 'PIN 확인 중 오류가 발생했어요.');
-      });
-    });
+    /* 로그인한 본인, 또는 내가 소개한 친구(sub)만 삭제 가능 (로그인 필수) */
+    if (currentUser && currentUser.id === id) {
+      modalConfirm('삭제', '내 프로필을 명단에서 삭제할까요? 되돌릴 수 없어요.').then(function (ok) { if (ok) doDelete(); });
+      return;
+    }
+    if (currentUser && iManageTarget(state, id)) {
+      modalConfirm('삭제', escapeHtml(entry.nickname) + '님(내가 소개한 친구)을 명단에서 삭제할까요?').then(function (ok) { if (ok) doDelete(); });
+      return;
+    }
+    modalNotice('로그인 필요', '삭제는 로그인한 뒤 본인 프로필(또는 내가 소개한 친구)만 할 수 있어요. 상단에서 로그인해 주세요.');
   }
 
   function handleRequest(toId, type) {
@@ -4549,7 +4561,7 @@
     }
     if (e.target.closest('#mm-new-btn')) { formRole = 'mm-new'; photoDataUrls = []; paint(currentState); return; }
     if (e.target.closest('#mm-back')) { formRole = 'matchmaker'; paint(currentState); return; }
-    if (e.target.closest('#mm-login')) { modalLogin(); return; }
+    if (e.target.closest('#mm-login')) { modalLogin({ matchmakerOnly: true }); return; }
     var tabBtn = e.target.closest('[data-tab]');
     if (tabBtn) {
       activeTab = tabBtn.getAttribute('data-tab');
