@@ -183,7 +183,9 @@
     resize: vertical;
   }
   .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
-  .field .hint { font-size: 0.78rem; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+  .field .hint { font-size: 0.78rem; color: var(--muted); line-height: 1.55; }
+  .field .hint svg { vertical-align: -2px; margin-right: 2px; }
+  .field .hint .ex { white-space: nowrap; }
 
   .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 520px) { .row-2 { grid-template-columns: 1fr; } }
@@ -685,7 +687,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-51';
+  var APP_VERSION = '2026-09-05-52';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1912,9 +1914,9 @@
               '<input type="text" id="f-workplace" name="workplace" maxlength="60" placeholder="예: 강남 (아모레/연구원)" required></div>' +
             '<div class="field"><label for="f-referrer">누구를 통해 알게 되셨나요? ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
               '<input type="text" id="f-referrer" name="referrerText" maxlength="60"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 홍길동 (관리자 친구 통해)" required') + '>' +
-              '<span class="hint">예시 · <b>홍길동 (관리자 친구 통해)</b> · <b>김철수 (소개해준 친구 이름)</b> · <b>우연히 알게 됨, SNS</b> 등<br>' + ICON_LOCK + ' 관리자(베니)가 추후 연락드리기 위해서예요. 암호화되어 관리자만 볼 수 있어요.</span></div>' +
+              '<span class="hint">예: <span class="ex">홍길동 (관리자 친구)</span> · <span class="ex">김철수 (소개한 친구)</span> · <span class="ex">우연히·SNS</span><br>' + ICON_LOCK + ' 연락용이며, 암호화되어 관리자만 볼 수 있어요.</span></div>' +
             '<div class="field"><label>사진 <span class="opt">(선택, 최대 3장)</span></label>' +
-              '<span class="hint">기본은 <b>흐리게(비공개)</b> 처리돼요 — 사진 요청을 승인한 사람에게만 보여요. 아래 체크를 해제하면 <b>전체 공개</b>가 됩니다.</span>' +
+              '<span class="hint">기본은 <b class="ex">흐리게(비공개)</b> — 요청을 승인한 사람에게만 보여요. 아래 체크를 풀면 <b class="ex">전체 공개</b>가 됩니다.</span>' +
               '<div class="photo-upload-area" id="photo-upload-area"></div>' +
               '<div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap;">' +
                 '<label class="photo-pick">사진 추가<input type="file" id="f-photo" accept="image/*" multiple></label>' +
