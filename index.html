@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-49';
+  var APP_VERSION = '2026-09-05-50';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -813,12 +813,14 @@
   }
 
   function degreeLabel(d) {
+    /* 촌수는 더 이상 신청서에서 받지 않음 — 값이 없으면 빈 문자열(표시 안 함) */
+    if (d == null || d === '') return '';
     if (d === '1' || d === 1) return '1촌 · ' + ROOT_NAME + '의 친구';
     if (d === '2' || d === 2) return '2촌 · ' + ROOT_NAME + '의 두 다리 건너';
     if (d === '3' || d === 3) return '3촌 · ' + ROOT_NAME + '의 세 다리 건너';
     if (d === 'other') return '그 외';
-    var n = parseInt(d, 10) || 1;
-    if (n <= 1) return '1촌 · ' + ROOT_NAME + '의 친구';
+    var n = parseInt(d, 10);
+    if (!n || n <= 1) return '';
     var bridge = '';
     for (var i = 0; i < n - 1; i++) bridge += '건너';
     return n + '촌 · ' + bridge + ' 친구';
@@ -1702,7 +1704,6 @@
       photo = '<div class="pf-photo pf-photo--empty" style="background:' + avatarColor(entry.id) + '">' + escapeHtml(initials(displayName)) + '</div>';
     }
     var ageStr = entry.birthYear ? (String(entry.birthYear).slice(2) + '년생') : '-';
-    var deg = degreeLabel(entry.degreeChoice || entry.degree);
     var extras = '';
     if (entry.intro) extras += '<div class="pf-extra"><b>소개</b> ' + escapeHtml(entry.intro) + '</div>';
     if (entry.idealType) extras += '<div class="pf-extra"><b>선호</b> ' + escapeHtml(entry.idealType) + '</div>';
@@ -1814,7 +1815,6 @@
       ? '<div class="compact-thumb' + (entry.blurPhoto ? ' blurred' : '') + '"><img src="' + thumb + '" alt="" loading="lazy"></div>'
       : '<div class="compact-thumb compact-thumb--empty" style="background:' + avatarColor(entry.id) + '">' + escapeHtml(initials(displayName)) + '</div>';
     var ageStr = entry.birthYear ? (String(entry.birthYear).slice(2) + '년생') : '-';
-    var deg = degreeLabel(entry.degreeChoice || entry.degree);
     return (
       '<div class="compact-row" data-action="card-detail" data-id="' + escapeHtml(entry.id) + '">' +
         photo +
@@ -3801,7 +3801,8 @@
     rows += '<div class="detail-row"><div class="detail-label">지역</div><div class="detail-value">' + escapeHtml(entry.region || '-') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">직장</div><div class="detail-value">' + escapeHtml(entry.workplace || '-') + '</div></div>';
     if (entry.height) rows += '<div class="detail-row"><div class="detail-label">키</div><div class="detail-value">' + escapeHtml(entry.height) + 'cm</div></div>';
-    rows += '<div class="detail-row"><div class="detail-label">관계</div><div class="detail-value">' + escapeHtml(degreeLabel(entry.degreeChoice || entry.degree)) + '</div></div>';
+    var degTxt = degreeLabel(entry.degreeChoice || entry.degree);
+    if (degTxt) rows += '<div class="detail-row"><div class="detail-label">관계</div><div class="detail-value">' + escapeHtml(degTxt) + '</div></div>';
     if (entry.intro) rows += '<div class="detail-row"><div class="detail-label">자기소개</div><div class="detail-value" style="white-space:pre-wrap;">' + escapeHtml(entry.intro) + '</div></div>';
     if (entry.idealType) rows += '<div class="detail-row"><div class="detail-label">선호 조건</div><div class="detail-value" style="white-space:pre-wrap;">' + escapeHtml(entry.idealType) + '</div></div>';
     if (entry.dealbreaker) rows += '<div class="detail-row"><div class="detail-label">비선호</div><div class="detail-value" style="white-space:pre-wrap;">' + escapeHtml(entry.dealbreaker) + '</div></div>';

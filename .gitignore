@@ -1,0 +1,14 @@
+# 회원 개인정보 백업/스냅샷 — 공개 저장소에 절대 올리지 않음
+state_backup.json
+*_backup.json
+*.backup.json
+
+# 작업용 임시/병합 파일
+index-merged.html
+*.tmp
+*.bak
+
+# 로컬 firebase/노드 산출물
+functions/node_modules/
+.firebase/
+*.log
