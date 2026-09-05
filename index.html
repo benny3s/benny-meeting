@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-46';
+  var APP_VERSION = '2026-09-05-47';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1354,6 +1354,7 @@
       if (!Array.isArray(s.dateRequests)) s.dateRequests = [];
       if (!Array.isArray(s.approvedPairs)) s.approvedPairs = [];
       if (!Array.isArray(s.logs)) s.logs = [];
+      if (!Array.isArray(s.messages)) s.messages = [];
       paint(s);
     }).catch(function () {});
   }
@@ -1496,7 +1497,7 @@
         });
         tx.update(stateRef, { messages: msgs });
       });
-    }).then(function () { paint(currentState); });
+    }).then(function () { return refreshNow(); });
   }
   function handleAdminMessageCompose(entryId) {
     var nick = nickForEntry(currentState, entryId);
@@ -1519,7 +1520,7 @@
         });
         tx.update(stateRef, { messages: msgs });
       });
-    }).then(function () { paint(currentState); });
+    }).then(function () { return refreshNow(); });
   }
   /* 관리자: 특정 회원과의 메시지 전체 삭제 (내 화면) */
   function deleteAdminThread(entryId) {
@@ -1532,7 +1533,7 @@
         });
         tx.update(stateRef, { messages: msgs });
       });
-    }).then(function () { paint(currentState); });
+    }).then(function () { return refreshNow(); });
   }
   /* ---- 안 읽음(unread) 계산: 마지막으로 본 시각 이후의 이벤트 수 ---- */
   function userUnread(state, me) {
@@ -2012,11 +2013,11 @@
         ? '<div class="mine-note" style="color:#137333;">📷 내 사진을 상대에게 공개했어요.</div>'
         : '<div class="mine-actions"><button type="button" class="card-btn" data-action="reveal-mine" data-id="' + escapeHtml(r.id) + '">📷 내 사진 공개</button></div>';
     }
-    var needAction = incoming && (st === 'pending' || st === 'held');
+    /* 주의가 필요한 항목 강조: 받은 대기/보류(응답 필요), 보낸 보류/거절(다시 요청 가능) */
+    var needAction = (incoming && (st === 'pending' || st === 'held')) || (!incoming && (st === 'held' || st === 'rejected'));
     return (
       '<div class="mine-item"' + (needAction ? ' style="border:2px solid var(--accent);background:var(--gold-soft);"' : '') + '>' +
-        '<div class="mine-head">' + typeBadge + '<b>' + escapeHtml(otherLabel) + '</b>' + statusChip(st) +
-          (needAction ? '<span class="chip" style="background:var(--accent);color:#fff;">👉 처리 필요</span>' : '') +
+        '<div class="mine-head">' + typeBadge + '<b data-action="card-detail" data-id="' + escapeHtml(otherId) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(otherLabel) + '</b>' + statusChip(st) +
           '<span class="mine-date">' + fmtDate(r.submittedAt) + '</span></div>' +
         (note ? '<div class="mine-note">"' + escapeHtml(note) + '"</div>' : '') +
         replyMsg +
@@ -2146,9 +2147,9 @@
       var body =
         '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + typeBadge +
         '<div class="who" style="display:inline;">' +
-          '<button type="button" class="card-btn" data-action="detail" data-id="' + escapeHtml(fromId || '') + '" style="flex:none;display:inline-flex;padding:4px 10px;">' + escapeHtml(uidOf(fromId)) + ' ' + escapeHtml(fromName) + '</button>' +
+          '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(fromId || '') + '" style="flex:none;display:inline-flex;padding:4px 10px;">' + escapeHtml(uidOf(fromId)) + ' ' + escapeHtml(fromName) + '</button>' +
           ' → ' +
-          '<button type="button" class="card-btn" data-action="detail" data-id="' + escapeHtml(toId || '') + '" style="flex:none;display:inline-flex;padding:4px 10px;">' + escapeHtml(uidOf(toId)) + ' ' + escapeHtml(toName) + '</button>' +
+          '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(toId || '') + '" style="flex:none;display:inline-flex;padding:4px 10px;">' + escapeHtml(uidOf(toId)) + ' ' + escapeHtml(toName) + '</button>' +
         '</div></div>' +
         (needsDecrypt ? '<div class="note">복호화 중...</div>' : (note ? '<div class="note">"' + escapeHtml(note) + '"</div>' : '')) +
         (r.approveMessage ? '<div class="note" style="color:#137333;">답장: ' + escapeHtml(r.approveMessage) + '</div>' : '') +
@@ -2195,7 +2196,10 @@
     var seenRows = allEntries.slice().sort(function (a, b) {
       return (b.lastSeenAt || '').localeCompare(a.lastSeenAt || '');
     }).map(function (e) {
-      return '<tr><td data-action="card-detail" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer;"><b style="font-variant-numeric:tabular-nums;">' + escapeHtml(formatUid(e) || '—') + '</b> <span style="text-decoration:underline dotted;">' + escapeHtml(e.nickname) + '</span>' + (e.testAccount ? ' 🧪' : '') + '</td>' +
+      return '<tr><td data-action="card-detail" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer;">' +
+        '<div style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(e) || '—') + (e.testAccount ? ' 🧪' : '') + '</div>' +
+        '<div style="text-decoration:underline dotted;">' + escapeHtml(e.nickname) + '</div>' +
+        '</td>' +
         '<td class="seen-date">' + (e.lastSeenAt ? new Date(e.lastSeenAt).toLocaleString('ko-KR') : '기록 없음') + '</td></tr>';
     }).join('');
     var seenSection =
@@ -2219,10 +2223,16 @@
     }
     var logs = (state.logs || []).filter(function (l) { return !isTestLog(l); }).slice().reverse();
     var logRows = logs.map(function (l) {
-      return '<div class="log-row">' +
-        '<span class="log-time">' + fmtDate(l.at) + '</span>' +
-        '<span class="log-actor">' + escapeHtml(l.actor || '-') + '</span>' +
-        '<span class="log-detail">' + escapeHtml(l.detail || '') + '</span>' +
+      var le = (state.entries || []).find(function (x) { return x.nickname === l.actor; });
+      var actorHtml = le
+        ? '<span data-action="card-detail" data-id="' + escapeHtml(le.id) + '" style="cursor:pointer;"><b style="font-variant-numeric:tabular-nums;">' + escapeHtml(formatUid(le) || '—') + '</b> <span style="text-decoration:underline dotted;">' + escapeHtml(l.actor) + '</span></span>'
+        : '<b>' + escapeHtml(l.actor || '-') + '</b>';
+      return '<div style="padding:8px 0;border-bottom:1px dashed var(--line);">' +
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">' +
+          '<span style="font-size:0.86rem;">' + actorHtml + '</span>' +
+          '<span style="color:var(--muted);font-size:0.74rem;white-space:nowrap;">' + fmtDate(l.at) + '</span>' +
+        '</div>' +
+        '<div style="margin-top:2px;font-size:0.86rem;color:var(--ink);">' + escapeHtml(l.detail || '') + '</div>' +
       '</div>';
     }).join('');
     var logSection =
@@ -2833,7 +2843,8 @@
       photoDataUrls = [];
       if (isEdit) {
         editingEntryId = null;
-        appendLog('edit', nickname, '프로필 수정');
+        if (origEntry && origEntry.nickname !== nickname) appendLog('edit', nickname, '닉네임 변경: ' + origEntry.nickname + ' → ' + nickname);
+        else appendLog('edit', nickname, '프로필 수정');
         notifyAdmin('프로필 수정', nickname + '님이 프로필을 수정했어요.');
         modalNotice('완료', '프로필이 수정되었어요.');
         activeTab = 'list';
