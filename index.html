@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-41';
+  var APP_VERSION = '2026-09-05-42';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -785,7 +785,7 @@
     } catch (e) { return '0000'; }
   }
   function formatUid(entry) {
-    if (!entry || !entry.serial) return '';
+    if (!entry || entry.serial == null) return '';
     return serialYM(entry.submittedAt) + '-' + String(entry.serial).padStart(3, '0');
   }
   function nextSerial(state) {
@@ -799,7 +799,7 @@
     (state.entries || []).forEach(function (e) { if (e.serial && e.serial > max) max = e.serial; });
     var next = max + 1, changed = false;
     (state.entries || []).forEach(function (e) {
-      if (!e.serial) { e.serial = next++; changed = true; }
+      if (e.serial == null) { e.serial = next++; changed = true; }
     });
     return changed;
   }
