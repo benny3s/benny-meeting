@@ -755,7 +755,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-06-65';
+  var APP_VERSION = '2026-09-06-66';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1308,6 +1308,19 @@
   }
   /* 주선자 역할(친구를 대신 등록·관리하는 계정) = Lv2 또는 Lv3 */
   function isMatchmakerRole(entry, state) { var lv = memberLevel(entry, state); return lv === 2 || lv === 3; }
+  /* sub 임시 로그인 PIN 유효기간(1일) */
+  var SUB_PIN_TTL_MS = 24 * 60 * 60 * 1000;
+  function subPinExpired(e) {
+    if (!e || !e.pinExpiresAt) return false; /* 만료시각 없으면(구버전 발급 등) 만료 취급 안 함 */
+    return Date.now() > new Date(e.pinExpiresAt).getTime();
+  }
+  function subPinRemainText(e) {
+    if (!e || !e.pinExpiresAt) return '';
+    var ms = new Date(e.pinExpiresAt).getTime() - Date.now();
+    if (ms <= 0) return '만료됨';
+    var h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+    return (h > 0 ? h + '시간 ' : '') + m + '분 남음';
+  }
   function meIsMatchmaker() { var me = currentUser && (findMyEntry(currentState) || findMyPending(currentState)); return isMatchmakerEntry(me); }
   /* 내가(로그인한 회원이) 소개하는 대리 프로필 목록 */
   function entriesManagedByMe(state) {
@@ -1348,22 +1361,23 @@
       if (!r) return;
       if (!/^[0-9]{4,8}$/.test(r.p1)) return modalNotice('입력 오류', 'PIN은 숫자 4~8자리예요.');
       if (r.p1 !== r.p2) return modalNotice('오류', 'PIN이 일치하지 않아요.');
+      var expiresAt = new Date(Date.now() + SUB_PIN_TTL_MS).toISOString();
       makePinAuth(r.p1).then(function (auth) {
         return db.runTransaction(function (tx) {
           return tx.get(stateRef).then(function (doc) {
             var s = doc.data();
             var entries = (s.entries || []).map(function (e) {
               if (e.id !== subId) return e;
-              var c = JSON.parse(JSON.stringify(e)); c.pinAuth = auth; return c;
+              var c = JSON.parse(JSON.stringify(e)); c.pinAuth = auth; c.pinExpiresAt = expiresAt; return c;
             });
             tx.update(stateRef, { entries: entries });
           });
         });
       }).then(function () {
-        appendLog('request', currentUser.nickname, '(대리) ' + sub.nickname + ' 임시 로그인 PIN 발급');
+        appendLog('request', currentUser.nickname, '(대리) ' + sub.nickname + ' 임시 로그인 PIN 발급(1일)');
         return refreshNow();
       }).then(function () {
-        modalNotice('임시 PIN 발급 완료 🔑', sub.nickname + '님에게 이렇게 알려주세요 — "로그인에서 닉네임 ' + sub.nickname + ', PIN ' + r.p1 + ' 입력". 친구가 직접 후보를 보고 반응·요청할 수 있어요. 언제든 "PIN 회수"로 끊을 수 있어요.');
+        modalNotice('임시 PIN 발급 완료 🔑', sub.nickname + '님에게 알려주세요 — "로그인에서 닉네임 ' + sub.nickname + ', PIN ' + r.p1 + ' 입력". 친구가 직접 후보를 보고 반응·요청할 수 있어요. 유효기간 24시간, 만료되면 다시 발급하면 돼요. (언제든 "PIN 회수"로 끊을 수 있어요)');
       }).catch(function (err) { modalNotice('오류', '발급 실패: ' + (err.message || err)); });
     });
   }
@@ -1378,7 +1392,7 @@
           var s = doc.data();
           var entries = (s.entries || []).map(function (e) {
             if (e.id !== subId) return e;
-            var c = JSON.parse(JSON.stringify(e)); delete c.pinAuth; return c;
+            var c = JSON.parse(JSON.stringify(e)); delete c.pinAuth; delete c.pinExpiresAt; return c;
           });
           tx.update(stateRef, { entries: entries });
         });
@@ -1430,7 +1444,7 @@
     var showTest = testAccountsShown() || meIsTest();
     var sortedEntries = (state.entries || []).slice().sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
     var all = sortedEntries.concat(state.pendingEntries || []).filter(function (e) {
-      if (e.managedBy && !e.pinAuth) return false; /* 대리 프로필은 로그인 목록서 제외 (단, 임시 PIN 발급되면 노출) */
+      if (e.managedBy && (!e.pinAuth || subPinExpired(e))) return false; /* 대리 프로필은 로그인 목록서 제외 (유효한 임시 PIN 있을 때만 노출) */
       if (mmOnly && !isMatchmakerRole(e, state)) return false; /* 주선자 로그인: Lv2/Lv3만 */
       return !e.testAccount || showTest;
     }).map(function (e) {
@@ -2501,10 +2515,13 @@
       var subList = (subs.length || subPend.length)
         ? subs.map(function (s) {
             var pend = (state.dateRequests || []).filter(function (r) { return r.toId === s.id && (function(x){return x==='pending'||x==='held';})(reqStatus(r)); }).length;
-            var pinBadge = s.pinAuth ? '<span class="chip" style="background:#e6f4ea;color:#137333;">🔑 임시로그인 ON</span>' : '';
-            var pinBtns = s.pinAuth
+            var pinActive = s.pinAuth && !subPinExpired(s);
+            var pinExpiredNow = s.pinAuth && subPinExpired(s);
+            var pinBadge = pinActive ? '<span class="chip" style="background:#e6f4ea;color:#137333;">🔑 임시로그인 ON · ' + escapeHtml(subPinRemainText(s)) + '</span>'
+              : (pinExpiredNow ? '<span class="chip" style="background:#f1f1f1;color:#888;">🔑 임시로그인 만료됨</span>' : '');
+            var pinBtns = pinActive
               ? '<button type="button" class="card-btn danger" data-action="sub-pin-revoke" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">🔑 PIN 회수</button>'
-              : '<button type="button" class="card-btn" data-action="sub-pin-issue" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">🔑 임시 PIN 발급</button>';
+              : '<button type="button" class="card-btn" data-action="sub-pin-issue" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">🔑 ' + (pinExpiredNow ? '임시 PIN 다시 발급' : '임시 PIN 발급') + '</button>';
             return '<div style="border:1px solid ' + (pend ? 'var(--accent)' : 'var(--line)') + ';border-radius:10px;padding:10px 12px;margin-top:8px;">' +
               '🤝 <b>' + escapeHtml(s.nickname) + '</b> <span style="color:var(--muted);font-size:0.8rem;">' + escapeHtml(formatUid(s) || '') + '</span>' + (pend ? '<span class="count">받은요청 ' + pend + '</span>' : '') + ' ' + pinBadge +
               '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">' +
@@ -4958,7 +4975,7 @@
     });
   }
 
-  var ANNOUNCE_KEY = 'announce-v4'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
+  var ANNOUNCE_KEY = 'announce-v5'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
   function showAnnouncement(force) {
     if (!force) {
       try {
@@ -4977,12 +4994,29 @@
           '<span style="color:var(--muted);">(아이폰은 먼저 "홈 화면에 추가" 후 그 아이콘으로 열어서 켜주세요.)</span>' +
         '</div>' +
 
-        /* 2) 기능 */
-        '<p><b>&#10024; 새로 추가된 기능</b></p>' +
+        /* 2) 주선자(대신 소개) — New */
+        '<div style="background:var(--gold-soft);border:1px solid var(--gold);border-radius:10px;padding:10px 12px;margin-bottom:14px;">' +
+          '&#129309; <b>주선자(대신 소개) 기능이 생겼어요! (New)</b><br>' +
+          '내가 소개팅을 안 하더라도, <b>친구를 대신 등록·소개</b>할 수 있어요.<br>' +
+          '<b>이용 방법</b>' +
+          '<ol style="padding-left:18px;margin:6px 0;">' +
+            '<li>신청서 작성 화면 위에서 <b>[본인 / 주선자]</b> 중 <b>주선자</b> 선택.</li>' +
+            '<li>처음이면 <b>"새 주선자로 등록"</b>(닉네임·연락처·PIN), 이미 있으면 <b>"주선자 로그인"</b>.</li>' +
+            '<li>로그인 후 <b>친구(sub)를 대신 등록</b> → 관리자 승인되면 명단에 올라가요(🤝 표시).</li>' +
+            '<li>상단 <b>&#128260; 활동 중 프로필</b>에서 <b>각 친구로 전환</b>해 대신 요청·승인해요.</li>' +
+            '<li>친구가 직접 보고 싶어 하면, 그 친구에게 <b>&#128273; 임시 로그인 PIN(1일)</b>을 발급해 주면 친구가 직접 로그인해 둘러볼 수 있어요.</li>' +
+          '</ol>' +
+          '<span style="color:var(--muted);">※ 주선자 본인은 명단에 노출되지 않아요. 친구 정보는 <b>본인 동의</b>를 받아 등록해 주세요.</span>' +
+        '</div>' +
+
+        /* 3) 기능 */
+        '<p><b>&#10024; 그 밖의 기능·규칙</b></p>' +
         '<ul style="padding-left:20px;margin:6px 0;">' +
           '<li>사진/번호를 요청할 때 <b>간단한 메시지</b>를 함께 보낼 수 있어요.</li>' +
           '<li>요청을 받으면 <b>승인 / 보류 / 거절</b>과 함께 <b>답장 메시지</b>를 보낼 수 있어요.</li>' +
-          '<li>예를 들어 사진 요청에 대해 <b>"보류"</b>로 보내면서, <b>"사진 보여주세요"</b> 또는 <b>"직업을 알려주세요"</b> 처럼 요청을 할 수 있어요.</li>' +
+          '<li>예를 들어 사진 요청에 <b>"보류 + 사진 보여주세요"</b> 처럼 되물을 수 있어요.</li>' +
+          '<li>프로필의 <b>자기소개 · 원하는 이성 조건 · 피하고 싶은 조건</b>은 <b>필수(각 20자 이상)</b>예요. 자세할수록 매칭이 잘 돼요!</li>' +
+          '<li>삭제·수정은 <b>로그인한 본인</b>만 할 수 있어요.</li>' +
           '<li>상단 <b>&#128172; Q&amp;A</b> 로 관리자에게 문의·건의를 보낼 수 있어요.</li>' +
         '</ul>' +
 
