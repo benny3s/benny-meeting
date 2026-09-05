@@ -752,7 +752,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-58';
+  var APP_VERSION = '2026-09-06-59';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1931,8 +1931,9 @@
           adminInfoHtml +
         '</div>' +
         '<div class="pf-actions">' +
-          '<button type="button" class="card-btn orange" data-action="request-photo" data-id="' + escapeHtml(entry.id) + '">📷 사진 요청</button>' +
-          '<button type="button" class="card-btn primary" data-action="request-contact" data-id="' + escapeHtml(entry.id) + '">📱 번호 요청</button>' +
+          (currentUser && isMatchmakerEntry(findMyEntry(state)) ? '' : /* 주선자 본인은 요청 불가 → 버튼 숨김 */
+            '<button type="button" class="card-btn orange" data-action="request-photo" data-id="' + escapeHtml(entry.id) + '">📷 사진 요청</button>' +
+            '<button type="button" class="card-btn primary" data-action="request-contact" data-id="' + escapeHtml(entry.id) + '">📱 번호 요청</button>') +
           adminBtn +
           '<button type="button" class="card-btn" data-action="edit" data-id="' + escapeHtml(entry.id) + '">수정</button>' +
           '<button type="button" class="card-btn danger" data-action="delete" data-id="' + escapeHtml(entry.id) + '">삭제</button>' +
@@ -2198,7 +2199,7 @@
       roleToggle + setupNote + editNote + proxyNote +
       '<div class="form-card">' +
         '<div class="form-lede">' +
-          '<h2>' + (isEdit ? '프로필 수정' : (proxy ? '🤝 친구를 소개해 주세요' : '좋은 사람, 소개해 주세요')) + '</h2>' +
+          '<h2>' + (isEdit ? '프로필 수정' : (proxy ? '🤝 친구를 소개해 주세요' : '본인을 소개해 주세요')) + '</h2>' +
           '<p>' + (isEdit ? '수정할 항목을 변경한 뒤 저장하세요.' : (proxy ? '소개할 친구의 정보를 채워주세요. 관리자 승인 후 명단에 올라가요.' : '아래 정보를 채워서 제출하면 관리자 승인 후 명단에 올라가요.')) + '</p>' +
         '</div>' +
         '<form id="entry-form" novalidate>' +
@@ -2250,9 +2251,14 @@
             '<div class="section-label">추가 정보</div>' +
             (proxy
               ? '<input type="hidden" id="f-pin" name="pin" value="">'
-              : '<div class="field"><label for="f-pin">개인 PIN ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
-                  '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="숫자 4~8자리" required') + '>' +
-                  '<span class="hint">나중에 본인이 신청을 취소하거나 데이트를 신청할 때 필요해요.</span></div>') +
+              : (function () {
+                  var loggedIn = !isEdit && !!currentUser; /* 로그인 상태로 본인 프로필 작성 시 PIN 재입력 생략 */
+                  var pinLabelExtra = isEdit ? '<span class="opt">(비우면 유지)</span>' : (loggedIn ? '<span class="opt">(비우면 로그인 PIN 사용)</span>' : '<span class="req">필수</span>');
+                  var pinAttrs = isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : (loggedIn ? ' class="keep-ph" placeholder="(비우면 ' + escapeHtml((currentUser && currentUser.nickname) || '') + ' 로그인 PIN 그대로)"' : ' placeholder="숫자 4~8자리" required');
+                  return '<div class="field"><label for="f-pin">개인 PIN ' + pinLabelExtra + '</label>' +
+                    '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8"' + pinAttrs + '>' +
+                    '<span class="hint">나중에 본인이 신청을 취소하거나 데이트를 신청할 때 필요해요.</span></div>';
+                })()) +
             exampleTip +
             '<div class="field"><label for="f-intro">자기소개 <span class="req">필수</span> <span class="opt">최소 20자</span></label>' +
               '<span class="hint">정보가 자세할수록 매칭 성공률이 올라가요!</span>' +
@@ -3202,7 +3208,7 @@
       if (!realName) missing.push('실명');
       if (!contact) missing.push('전화번호');
       if (!proxy && !referrerText) missing.push('소개자'); /* 대리 등록은 소개자 선택 */
-      if (!proxy && !pin) missing.push('개인 PIN');       /* 대리 프로필은 PIN 없음 */
+      if (!proxy && !pin && !currentUser) missing.push('개인 PIN'); /* 로그인 상태면 기존 PIN 재사용 가능 */
       if (intro.length < 20) missing.push('자기소개(20자 이상)');
       if (idealType.length < 20) missing.push('원하는 이성 조건(20자 이상)');
       if (dealbreaker.length < 20) missing.push('피하고 싶은 조건(20자 이상)');
@@ -3223,6 +3229,7 @@
       }
     }
     if (proxy && !referrerText) referrerText = '주선자: ' + ((currentUser && currentUser.nickname) || '');
+    if (!isEdit && !proxy && !pin && currentUser && currentUser.pin) pin = currentUser.pin; /* 로그인 상태 본인 프로필: 기존 PIN 그대로 사용 */
     if (pin && pin.length < 4) {
       modalNotice('입력 오류', 'PIN은 4자리 이상이어야 해요.');
       return;
@@ -3532,6 +3539,9 @@
     var typeLabel = isPhoto ? '사진 보기' : '번호 보기';
     requireLogin().then(function (fromEntry) {
       if (!fromEntry) return;
+      if (isMatchmakerEntry(fromEntry)) {
+        return modalNotice('프로필 선택 필요', '주선자 본인은 소개팅 요청을 보낼 수 없어요. 상단 "🔄 활동 중 프로필"에서 소개할 친구를 선택하거나, 먼저 소개할 친구(sub)를 등록해 주세요.');
+      }
       if (fromEntry.id === toId) return modalNotice('안내', '본인에게는 요청할 수 없어요.');
       var existingReq = (state.dateRequests || []).find(function (req) {
         return req.fromId === fromEntry.id && req.toId === toId && (req.type || 'contact') === type &&
@@ -5046,10 +5056,10 @@
     var isIOS = /iPhone|iPad|iPod/i.test(ua);
     /* 아이폰은 홈 화면에 추가한 앱에서만 알림 가능 → 사파리 탭이면 먼저 안내 (지원 안 함 경고보다 먼저) */
     if (isIOS && !isStandalone()) {
-      modalNotice('아이폰 알림 안내', '아이폰은 사파리 탭에서는 알림이 안 돼요. 먼저 "홈 화면에 추가"로 아이콘을 만든 뒤, 그 아이콘으로 열어서 알림을 켜주세요. (iOS 16.4 이상)');
+      modalNotice('아이폰 알림 안내', '아이폰은 사파리 탭에서는 알림이 안 돼요. Safari에서 아래 공유 버튼 → "홈 화면에 추가" → 그 아이콘으로 다시 열어서 켜주세요. (아이폰은 크롬 앱으로도 알림이 안 돼요 · iOS 16.4 이상)');
       return;
     }
-    if (!notifSupported()) { modalNotice('안내', '이 브라우저에서는 알림을 지원하지 않아요. 크롬(안드로이드/PC)이나 홈 화면에 추가한 아이폰에서 사용해주세요.'); return; }
+    if (!notifSupported()) { modalNotice('안내', '이 브라우저에서는 웹 알림을 지원하지 않아요. 안드로이드·PC는 크롬, 아이폰은 사파리에서 "홈 화면에 추가" 후 그 아이콘으로 열어주세요.'); return; }
     if (Notification.permission === 'denied') {
       modalNotice('알림 차단됨', '브라우저 설정에서 이 사이트의 알림을 "허용"으로 바꿔주세요. (주소창 왼쪽 자물쇠 → 알림)');
       return;
@@ -5088,12 +5098,13 @@
   /* ---- 관리자 알림 (관리자 페이지에서 기기별로 켜고 끔) ---- */
   function handleAdminNotifToggle() {
     if (!isAdminUnlocked) { modalNotice('안내', '관리자 모드에서만 설정할 수 있어요.'); return; }
-    if (!notifSupported()) { modalNotice('안내', '이 브라우저에서는 알림을 지원하지 않아요. 크롬(안드로이드/PC)이나 홈 화면에 추가한 아이폰(사파리)에서 사용해주세요.'); return; }
     var ua = navigator.userAgent || '';
+    /* 아이폰은 홈 화면 앱에서만 알림 가능 → 사파리 탭이면 "지원 안 함"보다 먼저 안내 */
     if (/iPhone|iPad|iPod/i.test(ua) && !isStandalone()) {
-      modalNotice('아이폰 알림 안내', '아이폰은 먼저 "홈 화면에 추가"로 홈 화면에 아이콘을 만든 뒤, 그 아이콘으로 열어서 켜주세요.');
+      modalNotice('아이폰 알림 안내', '아이폰은 사파리 탭에서는 알림이 안 돼요. Safari에서 아래 공유 버튼 → "홈 화면에 추가" → 그 아이콘으로 다시 열어서 켜주세요. (아이폰은 크롬 앱으로도 알림이 안 돼요 · iOS 16.4 이상)');
       return;
     }
+    if (!notifSupported()) { modalNotice('안내', '이 브라우저에서는 웹 알림을 지원하지 않아요. 안드로이드·PC는 크롬, 아이폰은 사파리에서 "홈 화면에 추가" 후 그 아이콘으로 열어주세요.'); return; }
     if (Notification.permission === 'denied') {
       modalNotice('알림 차단됨', '브라우저 설정에서 이 사이트의 알림을 "허용"으로 바꿔주세요. (주소창 왼쪽 자물쇠 → 알림)');
       return;
