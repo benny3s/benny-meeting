@@ -207,6 +207,15 @@
   .gender-toggle label:has(input:checked) {
     border-color: var(--accent); background: var(--accent-soft); color: var(--accent-deep); font-weight: 700;
   }
+  /* 본인/주선자 토글 (성별 토글과 동일 디자인) */
+  .role-toggle { display: flex; gap: 10px; margin: 0 0 12px; }
+  .role-btn {
+    flex: 1; text-align: center; padding: 12px 8px;
+    border: 1px solid var(--line); border-radius: 10px;
+    cursor: pointer; font-weight: 400; color: var(--muted);
+    background: var(--paper); user-select: none; font-family: inherit; font-size: 0.95rem;
+  }
+  .role-btn.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-deep); font-weight: 700; }
 
   /* ---------- Degree radio group (relationship to Benny) ---------- */
   .degree-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
@@ -743,7 +752,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-56';
+  var APP_VERSION = '2026-09-05-57';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -771,6 +780,7 @@
   var editingEntryId = null;
   var proxyRegisterMode = false; /* 친구 대신 소개(대리 등록) 폼 모드 */
   var actingAs = null;           /* 주선자가 지금 활동 중인 프로필 id (null = 내 프로필). 새로고침 시 초기화 */
+  var formRole = 'self';         /* 신청 탭 상단 토글: 'self'(본인) | 'matchmaker'(주선자) | 'mm-new'(새 주선자 등록) */
   var currentUser = null;
   var exampleTipDismissed = false; /* 이번 폼 진입 동안만 닫힘 (새로고침·탭 재진입 시 초기화) */
 
@@ -1268,6 +1278,8 @@
   }
   /* ---- 주선자(대리 등록) 헬퍼 ---- */
   function isProxyEntry(e) { return !!(e && e.managedBy); }
+  function isMatchmakerEntry(e) { return !!(e && e.isMatchmaker); } /* 매니저 전용 계정(명단 비노출) */
+  function meIsMatchmaker() { var me = currentUser && (findMyEntry(currentState) || findMyPending(currentState)); return isMatchmakerEntry(me); }
   /* 내가(로그인한 회원이) 소개하는 대리 프로필 목록 */
   function entriesManagedByMe(state) {
     if (!currentUser) return [];
@@ -1320,6 +1332,7 @@
   function logoutUser() {
     currentUser = null;
     actingAs = null;
+    formRole = 'self';
     saveSession();
     if (activeTab === 'mine') activeTab = 'form';
     paint(currentState);
@@ -1420,6 +1433,7 @@
         maybeUpgradePin(entry, r.pin);
         currentUser = { id: entry.id, nickname: entry.nickname, pin: r.pin };
         actingAs = null;
+        formRole = entry.isMatchmaker ? 'matchmaker' : 'self';
         saveSession();
         activeTab = 'mine';
         touchLastSeen(entry.id);
@@ -1927,7 +1941,7 @@
 
   function renderList(state) {
     var showTest = showTestInList();
-    var entries = (state.entries || []).filter(function (e) { return !e.testAccount || showTest; });
+    var entries = (state.entries || []).filter(function (e) { return !e.isMatchmaker && (!e.testAccount || showTest); });
     var maleCount = entries.filter(function (e) { return e.gender === 'male'; }).length;
     var femaleCount = entries.filter(function (e) { return e.gender === 'female'; }).length;
     var me = findMyEntry(state);
@@ -2054,9 +2068,105 @@
     });
   }
 
+  /* 신청 탭 상단 본인/주선자 토글 (성별 토글과 같은 디자인) */
+  function roleToggleHtml() {
+    var self = (formRole === 'self');
+    return '<div class="role-toggle">' +
+      '<button type="button" class="role-btn' + (self ? ' active' : '') + '" data-role="self">🙋 본인</button>' +
+      '<button type="button" class="role-btn' + (!self ? ' active' : '') + '" data-role="matchmaker">🤝 주선자</button>' +
+    '</div>';
+  }
+  /* 주선자: 로그인 또는 새 등록 선택 패널 (미로그인 시) */
+  function renderMatchmakerAuth(state) {
+    return roleToggleHtml() +
+      '<div class="form-card">' +
+        '<div class="form-lede"><h2>🤝 주선자</h2><p>여러 친구를 대신 등록하고 요청·승인을 대신 관리하는 계정이에요. 주선자 본인은 명단에 노출되지 않아요.</p></div>' +
+        '<div style="display:flex;flex-direction:column;gap:10px;padding:2px 2px 8px;">' +
+          '<button type="button" class="submit-btn" id="mm-login">이미 주선자예요 · 로그인</button>' +
+          '<button type="button" class="card-btn" id="mm-new-btn" style="padding:12px;">＋ 새 주선자로 등록</button>' +
+        '</div>' +
+      '</div>';
+  }
+  /* 주선자: 새 계정 등록 폼 (닉네임+연락처+PIN만) */
+  function renderMatchmakerNew(state) {
+    var setupNote = (!state.adminAuth)
+      ? '<div class="readonly-note">관리자 초기 설정이 아직 안 됐어요. 운영자라면 위의 "관리자" 버튼을 눌러 PIN을 먼저 설정해주세요.</div>' : '';
+    return roleToggleHtml() + setupNote +
+      '<div class="form-card">' +
+        '<div class="form-lede"><h2>🤝 새 주선자 등록</h2><p>친구들을 대신 소개할 주선자 계정을 만들어요. 관리자 승인 후 이용할 수 있어요.</p></div>' +
+        '<form id="entry-form" autocomplete="off">' +
+          '<div class="field"><label for="f-nickname">주선자 닉네임 <span class="req">필수</span></label>' +
+            '<input type="text" id="f-nickname" name="nickname" maxlength="20" placeholder="예: 베니" required></div>' +
+          '<div class="field"><label for="f-contact">전화번호 <span class="req">필수</span></label>' +
+            '<input type="tel" id="f-contact" name="contact" maxlength="11" inputmode="numeric" data-numeric placeholder="예: 01012345678" required>' +
+            '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
+          '<div class="field"><label for="f-pin">개인 PIN <span class="req">필수</span></label>' +
+            '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8" placeholder="숫자 4~8자리" required>' +
+            '<span class="hint">로그인할 때 필요해요.</span></div>' +
+          '<div class="consent-box"><label class="consent-label"><input type="checkbox" id="f-consent"> <span>개인정보 수집 및 이용에 동의합니다.</span></label>' +
+            '<p class="consent-detail">수집 항목: 닉네임, 연락처 · 목적: 주선자 관리·연락 · 동의 거부 시 등록 불가.</p></div>' +
+          '<div class="submit-row"><button type="submit" class="submit-btn" id="submit-btn">🤝 주선자 등록</button>' +
+            '<button type="button" class="cancel-btn" id="mm-back">뒤로</button>' +
+            '<span class="status-msg" id="status-msg"></span></div>' +
+        '</form>' +
+      '</div>';
+  }
+  function handleMatchmakerSubmit() {
+    var state = currentState;
+    if (!state.adminAuth) { modalNotice('안내', '관리자가 아직 PIN을 설정하지 않았어요.'); return; }
+    var form = document.getElementById('entry-form');
+    var nickname = (form.querySelector('[name="nickname"]').value || '').trim();
+    var contact = (form.querySelector('[name="contact"]').value || '').trim();
+    var pin = (form.querySelector('[name="pin"]').value || '').trim();
+    var missing = [];
+    if (!nickname) missing.push('닉네임');
+    if (!contact) missing.push('전화번호');
+    if (!pin) missing.push('개인 PIN');
+    if (missing.length) return modalNotice('입력 오류', '다음을 채워주세요: ' + missing.join(', '));
+    if (pin.length < 4) return modalNotice('입력 오류', 'PIN은 4자리 이상이어야 해요.');
+    if (!/^01[0-9]{8,9}$/.test(contact)) return modalNotice('입력 오류', '전화번호는 01012345678 형식으로 입력해주세요.');
+    var consent = document.getElementById('f-consent');
+    if (!consent || !consent.checked) return modalNotice('동의 필요', '개인정보 수집 및 이용에 동의해 주세요.');
+    var nickLower = nickname.toLowerCase();
+    var dup = (state.entries || []).concat(state.pendingEntries || []).some(function (e) { return (e.nickname || '').trim().toLowerCase() === nickLower; });
+    if (dup) return modalNotice('닉네임 중복', '이미 사용 중인 닉네임이에요.');
+    var btn = document.getElementById('submit-btn'), msg = document.getElementById('status-msg');
+    if (btn) btn.disabled = true;
+    if (msg) { msg.textContent = '제출 중...'; msg.className = 'status-msg'; }
+    var pubJwk = state.adminAuth.publicKeyJwk;
+    var entryId = genId();
+    Promise.all([
+      encryptForAdmin(pubJwk, contact),
+      makePinAuth(pin),
+      encryptForSelf(pin, contact)
+    ]).then(function (r) {
+      var entry = {
+        id: entryId, nickname: nickname, isMatchmaker: true,
+        contactEnc: r[0], pinAuth: r[1], contactSelfEnc: r[2],
+        submittedAt: new Date().toISOString()
+      };
+      return stateRef.update({ pendingEntries: firebase.firestore.FieldValue.arrayUnion(entry) });
+    }).then(function () {
+      currentUser = { id: entryId, nickname: nickname, pin: pin };
+      actingAs = null;
+      saveSession();
+      formRole = 'matchmaker';
+      appendLog('signup', nickname, '주선자 등록 신청');
+      notifyAdmin('새 주선자 📝', nickname + '님이 주선자 등록을 신청했어요 (승인 대기).');
+      modalNotice('접수 완료 🤝', '주선자 등록을 신청했어요! 관리자 승인 후, 신청 탭에서 친구를 대신 소개(sub 추가)할 수 있어요.');
+      activeTab = 'mine';
+      paint(currentState);
+    }).catch(function (err) {
+      if (btn) btn.disabled = false;
+      if (msg) { msg.textContent = '오류: ' + (err.message || err); msg.className = 'status-msg error'; }
+    });
+  }
+
   function renderForm(state) {
     var isEdit = !!editingEntryId;
-    var proxy = proxyRegisterMode && !isEdit; /* 친구 대신 소개(대리 등록) 모드 */
+    if (!isEdit && formRole === 'mm-new') return renderMatchmakerNew(state);
+    if (!isEdit && formRole === 'matchmaker' && !currentUser) return renderMatchmakerAuth(state);
+    var proxy = (proxyRegisterMode || (formRole === 'matchmaker' && currentUser)) && !isEdit; /* 친구 대신 소개(대리 등록) */
     /* 상시 표시 예시 (입력 중에도 안 사라지게 위에 컬럼으로) */
     var exampleTip =
       '<div class="example-cols">' +
@@ -2077,10 +2187,13 @@
       ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">프로필 수정 모드입니다. 실명·연락처·소개자·PIN은 비워두면 기존 값이 유지돼요. <button type="button" class="card-btn" id="cancel-edit" style="margin-left:8px;padding:4px 12px;">수정 취소</button></div>'
       : '';
     var proxyNote = proxy
-      ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">🤝 <b>친구 대신 소개하기</b> — 아래는 <b>소개할 친구의 정보</b>예요. 친구는 앱에 가입하지 않아도 되고, 요청·승인은 주선자(' + escapeHtml((currentUser && currentUser.nickname) || '나') + ')님이 대신 처리해요. <button type="button" class="card-btn" id="cancel-proxy" style="margin-left:8px;padding:4px 12px;">일반 신청으로</button></div>'
+      ? (formRole === 'matchmaker'
+        ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">🤝 <b>친구 대신 소개 (sub 추가)</b> — 소개할 친구의 정보를 입력하세요. 친구는 앱에 가입하지 않아도 되고, 요청·승인은 주선자(' + escapeHtml((currentUser && currentUser.nickname) || '나') + ')님이 대신 처리해요.</div>'
+        : '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">🤝 <b>친구 대신 소개하기</b> — 아래는 <b>소개할 친구의 정보</b>예요. 친구는 앱에 가입하지 않아도 되고, 요청·승인은 주선자(' + escapeHtml((currentUser && currentUser.nickname) || '나') + ')님이 대신 처리해요. <button type="button" class="card-btn" id="cancel-proxy" style="margin-left:8px;padding:4px 12px;">일반 신청으로</button></div>')
       : '';
+    var roleToggle = isEdit ? '' : roleToggleHtml();
     return (
-      setupNote + editNote + proxyNote +
+      roleToggle + setupNote + editNote + proxyNote +
       '<div class="form-card">' +
         '<div class="form-lede">' +
           '<h2>' + (isEdit ? '프로필 수정' : (proxy ? '🤝 친구를 소개해 주세요' : '좋은 사람, 소개해 주세요')) + '</h2>' +
@@ -2291,6 +2404,34 @@
     if (!me) {
       return '<div class="admin-panel"><h2>메시지함</h2><p class="sub">신청 정보를 찾을 수 없어요. 다시 로그인해주세요.</p></div>';
     }
+    /* 주선자(본인)로 보고 있을 때: 소개팅 요청함 대신 안내 + 내가 소개한 사람 요약 */
+    if (isMatchmakerEntry(me)) {
+      var subs = entriesManagedByMe(state);
+      var subPend = (state.pendingEntries || []).filter(function (e) { return e.managedBy === currentUser.id; });
+      var subList = (subs.length || subPend.length)
+        ? subs.map(function (s) {
+            var pend = (state.dateRequests || []).filter(function (r) { return r.toId === s.id && (function(x){return x==='pending'||x==='held';})(reqStatus(r)); }).length;
+            return '<div style="border:1px solid ' + (pend ? 'var(--accent)' : 'var(--line)') + ';border-radius:10px;padding:10px 12px;margin-top:8px;">🤝 <b>' + escapeHtml(s.nickname) + '</b> <span style="color:var(--muted);font-size:0.8rem;">' + escapeHtml(formatUid(s) || '') + '</span>' + (pend ? '<span class="count">받은요청 ' + pend + '</span>' : '') + ' <button type="button" class="card-btn" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;margin-left:6px;">이 친구로 전환</button></div>';
+          }).join('') +
+          subPend.map(function (s) { return '<div style="border:1px dashed var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;color:var(--muted);">⏳ <b>' + escapeHtml(s.nickname) + '</b> — 관리자 승인 대기</div>'; }).join('')
+        : '<p class="sub" style="margin:0;">아직 소개한 친구가 없어요. 아래 버튼으로 시작해보세요.</p>';
+      var mmThread = threadFor(state, currentUser.id, 'user');
+      return (
+        '<div class="admin-panel">' +
+          '<h2 style="margin:0 0 4px;">🤝 주선자 홈</h2>' +
+          '<div class="my-uid">' + escapeHtml(me.nickname) + ' · 주선자</div>' +
+          '<p class="sub">친구들을 대신 소개하고 요청을 관리하는 계정이에요. 주선자 본인은 명단에 노출되지 않아요.</p>' +
+          '<button type="button" class="submit-btn" id="start-proxy" style="width:100%;box-sizing:border-box;margin:4px 0 14px;">🤝 새 친구 소개하기 (sub 추가)</button>' +
+          '<div class="mine-section"><h3>내가 소개한 사람<span class="count">' + (subs.length + subPend.length) + '</span></h3>' + subList + '</div>' +
+          '<div class="mine-section"><h3>💬 관리자 메시지<span class="count">' + mmThread.length + '</span></h3>' +
+            (mmThread.length ? mmThread.map(function (m) { return msgLineHtml(m, false); }).join('') : '<p class="sub" style="margin:0;">아직 없어요.</p>') +
+            '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">' +
+              '<button type="button" class="card-btn primary" id="member-msg-open" style="flex:none;">✍️ 관리자에게 메시지</button>' +
+              (mmThread.length ? '<button type="button" class="card-btn" id="member-msg-delall" style="flex:none;">전체 삭제</button>' : '') +
+            '</div></div>' +
+        '</div>'
+      );
+    }
     var reqs = state.dateRequests || [];
     var groups = [
       { key: 'in-photo', title: '📷 받은 사진 요청', incoming: true, type: 'photo' },
@@ -2356,6 +2497,19 @@
     var pendingItems = pending.map(function (e) {
       var displayName = e.nickname || e.name || '(이름 없음)';
       var ageStr = e.birthYear ? (String(e.birthYear).slice(2) + '년생') : '-';
+      if (e.isMatchmaker) {
+        return (
+          '<div class="pending-item">' +
+            '<div class="p-name">🤝 ' + escapeHtml(displayName) + ' <span class="chip" style="background:var(--gold-soft);color:var(--gold);">주선자</span></div>' +
+            '<div class="p-meta">주선자(매니저) 등록 — 명단에 노출되지 않아요. 승인하면 친구들을 대신 소개할 수 있어요.</div>' +
+            '<div class="pending-actions">' +
+              '<button type="button" class="card-btn" data-action="detail-pending" data-id="' + escapeHtml(e.id) + '">상세 보기</button>' +
+              '<button type="button" class="card-btn approve" data-action="approve" data-id="' + escapeHtml(e.id) + '">승인</button>' +
+              '<button type="button" class="card-btn danger" data-action="reject" data-id="' + escapeHtml(e.id) + '">거절</button>' +
+            '</div>' +
+          '</div>'
+        );
+      }
       var photoStatus = !e.photoCount
         ? '<span style="color:var(--muted);">사진 없음</span>'
         : (e.blurPhoto === false
@@ -2682,7 +2836,7 @@
 
   function renderApp(state) {
     var showTestList = showTestInList();
-    var entries = (state.entries || []).filter(function (e) { return !e.testAccount || showTestList; });
+    var entries = (state.entries || []).filter(function (e) { return !e.isMatchmaker && (!e.testAccount || showTestList); });
     var pendingCount = (state.pendingEntries || []).length;
     var reqCount = (state.dateRequests || []).filter(function (r) {
       var st = reqStatus(r); return st !== 'approved' && st !== 'rejected';
@@ -3006,6 +3160,7 @@
   }
 
   function handleFormSubmit() {
+    if (formRole === 'mm-new' && !editingEntryId) { handleMatchmakerSubmit(); return; } /* 새 주선자 등록 */
     var state = currentState;
     if (!state.adminAuth) {
       modalNotice('안내', '관리자가 아직 PIN을 설정하지 않았어요. 관리자에게 문의해주세요.');
@@ -4122,6 +4277,22 @@
     var state = currentState;
     var entry = (state.pendingEntries || []).find(function (e) { return e.id === id; });
     if (!entry) return;
+    if (entry.isMatchmaker) {
+      var mrows = '<div class="detail-grid">' +
+        '<div class="detail-row"><div class="detail-label">구분</div><div class="detail-value">🤝 주선자(매니저) — 명단 비노출</div></div>' +
+        '<div class="detail-row"><div class="detail-label">닉네임</div><div class="detail-value">' + escapeHtml(entry.nickname) + '</div></div>' +
+        '<div class="detail-row"><div class="detail-label">연락처</div><div class="detail-value" id="detail-contact">복호화 중...</div></div>' +
+        '</div>';
+      modalNotice(escapeHtml(entry.nickname) + ' (주선자) 상세', '').then(function () {});
+      var mbox = document.querySelector('.modal-box');
+      if (mbox) { var me2 = mbox.querySelector('.modal-msg'); if (me2) me2.innerHTML = mrows; }
+      if (adminPrivateKey && entry.contactEnc) {
+        decryptWithAdmin(adminPrivateKey, entry.contactEnc).then(function (c) {
+          var el = document.getElementById('detail-contact'); if (el) el.textContent = c;
+        }).catch(function () { var el = document.getElementById('detail-contact'); if (el) el.textContent = '(복호화 실패)'; });
+      }
+      return;
+    }
     var photoHtml = '<div id="detail-photos" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;"></div>';
     var rows = '<div class="detail-grid">';
     rows += '<div class="detail-row"><div class="detail-label">고유번호</div><div class="detail-value">' + escapeHtml(formatUid(entry) || '—') + '</div></div>';
@@ -4274,10 +4445,21 @@
 
   /* ---- global event delegation ---- */
   document.body.addEventListener('click', function (e) {
+    var roleBtn = e.target.closest('[data-role]');
+    if (roleBtn) {
+      formRole = roleBtn.getAttribute('data-role'); /* 'self' | 'matchmaker' */
+      proxyRegisterMode = false;
+      photoDataUrls = [];
+      paint(currentState);
+      return;
+    }
+    if (e.target.closest('#mm-new-btn')) { formRole = 'mm-new'; photoDataUrls = []; paint(currentState); return; }
+    if (e.target.closest('#mm-back')) { formRole = 'matchmaker'; paint(currentState); return; }
+    if (e.target.closest('#mm-login')) { modalLogin(); return; }
     var tabBtn = e.target.closest('[data-tab]');
     if (tabBtn) {
       activeTab = tabBtn.getAttribute('data-tab');
-      if (activeTab === 'form') { exampleTipDismissed = false; proxyRegisterMode = false; } /* 탭으로 들어오면 일반 신청서 */
+      if (activeTab === 'form') { exampleTipDismissed = false; proxyRegisterMode = false; formRole = meIsMatchmaker() ? 'matchmaker' : 'self'; } /* 탭 진입: 주선자면 sub추가, 아니면 본인 신청 */
       if (activeTab === 'mine') markMineSeen();
       paint(currentState);
       window.scrollTo(0, 0); /* 탭 전환 시 맨 위로 */
@@ -4380,6 +4562,7 @@
     if (e.target.closest('#start-proxy')) {
       if (!currentUser) { modalNotice('로그인 필요', '친구 대신 소개하려면 먼저 로그인해주세요.'); return; }
       proxyRegisterMode = true;
+      formRole = 'matchmaker'; /* 토글도 주선자로 맞춤 */
       editingEntryId = null;
       photoDataUrls = [];
       activeTab = 'form';
@@ -4388,6 +4571,7 @@
     }
     if (e.target.closest('#cancel-proxy')) {
       proxyRegisterMode = false;
+      formRole = 'self';
       photoDataUrls = [];
       activeTab = 'list';
       paint(currentState);
@@ -4575,6 +4759,11 @@
       }
       checkVersion(state);
       restoreSession(state);
+      /* 주선자로 로그인 유지 중이면 신청 탭이 sub 추가 모드가 되도록 */
+      if (currentUser && currentUser.id) {
+        var meAny = (state.entries || []).concat(state.pendingEntries || []).find(function (e) { return e.id === currentUser.id; });
+        formRole = (meAny && meAny.isMatchmaker) ? 'matchmaker' : 'self';
+      }
 
       var adminPromise = Promise.resolve();
       try {
