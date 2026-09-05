@@ -577,6 +577,34 @@
   }
   .seen-table th { color: var(--muted); font-weight: 600; font-size: 0.8rem; }
   .seen-table td.seen-date { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  /* 관리자 표: 더 길게 세로 스크롤 + 헤더 고정 */
+  .admin-table-wrap {
+    max-height: 70vh; overflow: auto;
+    border: 1px solid var(--line); border-radius: 12px;
+  }
+  .admin-table-wrap thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: var(--paper); backdrop-filter: saturate(1.2);
+  }
+  .admin-table-wrap thead th[data-action] { transition: color 0.15s; }
+  .admin-table-wrap thead th[data-action]:hover { color: var(--ink); }
+  .seen-table tr.filter-row th { position: sticky; top: 34px; z-index: 1; background: var(--paper); padding: 4px 6px; }
+  .log-filter-input {
+    width: 100%; box-sizing: border-box; padding: 4px 8px;
+    border: 1px solid var(--line); border-radius: 7px;
+    font-size: 0.78rem; background: var(--bg, #fff); color: var(--ink);
+  }
+  .log-filter-input:focus { border-color: var(--accent); outline: none; }
+  .log-table td { vertical-align: top; }
+  /* 상세 팝업: 관리자 전용 최근접속·알람 정보 */
+  .pf-admininfo {
+    margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+    background: var(--gold-soft); border: 1px solid var(--gold);
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .pf-ai-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 0.82rem; }
+  .pf-ai-label { color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .pf-ai-val { text-align: right; font-variant-numeric: tabular-nums; }
   .cap-bar {
     height: 12px; border-radius: 999px; background: var(--line);
     overflow: hidden; margin-top: 4px;
@@ -687,7 +715,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-53';
+  var APP_VERSION = '2026-09-05-54';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -704,6 +732,11 @@
   var adminPrivateKey = null;
   var decryptedContacts = {};
   var decryptedRequests = {};
+  /* 관리자 표 정렬/필터 상태 */
+  var adminSeenSort = { col: 'uid', dir: 'desc' };   /* 최근 접속·권한 표 (기본: 고유번호 내림차순) */
+  var adminLogSort = { col: 'time', dir: 'desc' };   /* 활동 기록 표 (기본: 시간 내림차순) */
+  var adminLogFilterActor = '';                       /* 활동 기록 고유번호/닉네임 필터 */
+  var adminLogFilterTime = '';                        /* 활동 기록 시간 필터 */
   var currentState = null;
   var photoDataUrls = [];
   var formPhotosReady = true; /* 수정 시 원본 사진 로드 완료 여부 */
@@ -756,6 +789,34 @@
   }
   function genId() {
     return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('e' + Date.now() + Math.random().toString(16).slice(2));
+  }
+  /* 정렬 헤더 화살표 (활성 컬럼만 강조) */
+  function sortArrow(s, col) {
+    if (!s || s.col !== col) return ' <span style="color:var(--line);font-size:0.72rem;">↕</span>';
+    return ' <span style="color:var(--accent);font-size:0.72rem;">' + (s.dir === 'asc' ? '▲' : '▼') + '</span>';
+  }
+  /* 활동 기록 행을 필터값으로 즉시 숨김/표시 (paint 없이 → 입력 포커스 유지) */
+  function applyLogFilter() {
+    var rows = document.querySelectorAll('.log-trow');
+    if (!rows.length) return;
+    var fa = (adminLogFilterActor || '').toLowerCase().trim();
+    var ft = (adminLogFilterTime || '').toLowerCase().trim();
+    var shown = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var okA = !fa || (r.getAttribute('data-actor') || '').indexOf(fa) >= 0;
+      var okT = !ft || (r.getAttribute('data-time') || '').indexOf(ft) >= 0;
+      var show = okA && okT;
+      r.hidden = !show;
+      if (show) shown++;
+    }
+    var note = document.getElementById('log-empty-note');
+    if (note) note.hidden = shown > 0;
+  }
+  /* 정렬 방향 토글 (같은 컬럼 재클릭 시 반전) */
+  function toggleSort(s, col, defaultDir) {
+    if (s.col === col) s.dir = (s.dir === 'asc' ? 'desc' : 'asc');
+    else { s.col = col; s.dir = defaultDir || 'desc'; }
   }
   function readStateLocal() {
     try {
@@ -1700,7 +1761,7 @@
     });
   }
 
-  function cardHtml(entry, num, state) {
+  function cardHtml(entry, num, state, detailMode) {
     var displayName = entry.nickname || entry.name || '';
     var thumb = cardThumb(entry);
     var pCount = photoCountOf(entry);
@@ -1724,6 +1785,16 @@
     } else {
       contactHtml = '<div class="pf-contact" style="cursor:pointer;" data-action="reveal-contact" data-id="' + escapeHtml(entry.id) + '">' + ICON_LOCK + '<span>연락처 보기 (승인된 사람에게만 공개)</span></div>';
     }
+    /* 상세 팝업에서 관리자에게만: 최근 접속 시간 + 알람 설정 여부 */
+    var adminInfoHtml = '';
+    if (detailMode && isAdminUnlocked) {
+      var seenTxt = entry.lastSeenAt ? new Date(entry.lastSeenAt).toLocaleString('ko-KR') : '기록 없음';
+      adminInfoHtml =
+        '<div class="pf-admininfo">' +
+          '<div class="pf-ai-row"><span class="pf-ai-label">🕘 최근 접속</span><span class="pf-ai-val">' + escapeHtml(seenTxt) + '</span></div>' +
+          '<div class="pf-ai-row"><span class="pf-ai-label">🔔 알람 설정</span><span class="pf-ai-val" id="detail-notif-' + escapeHtml(entry.id) + '">확인 중…</span></div>' +
+        '</div>';
+    }
     var adminBtn = isAdminUnlocked
       ? '<button type="button" class="card-btn admin-detail-btn" data-action="detail" data-id="' + escapeHtml(entry.id) + '">🔍 상세</button>' +
         '<button type="button" class="card-btn" data-action="admin-msg" data-id="' + escapeHtml(entry.id) + '">💬 메시지</button>'
@@ -1746,6 +1817,7 @@
           '</ul>' +
           extras +
           contactHtml +
+          adminInfoHtml +
         '</div>' +
         '<div class="pf-actions">' +
           '<button type="button" class="card-btn orange" data-action="request-photo" data-id="' + escapeHtml(entry.id) + '">📷 사진 요청</button>' +
@@ -1851,15 +1923,38 @@
     var idx = (state.entries || []).indexOf(entry);
     var overlay = openModal(
       '<button type="button" class="card-close" id="card-detail-close" aria-label="닫기">&times;</button>' +
-      '<div class="card-scroll">' + cardHtml(entry, idx + 1, state) + '</div>'
+      '<div class="card-scroll">' + cardHtml(entry, idx + 1, state, true) + '</div>'
     );
     overlay.classList.add('card-detail-modal');
+    /* 관리자: 알람 설정 여부를 pushTokens에서 조회해 채움 */
+    if (isAdminUnlocked) fillNotifStatus(entry.id);
     var closeActions = ['edit', 'delete', 'request-photo', 'request-contact', 'detail'];
     overlay.addEventListener('click', function (e) {
       if (e.target === overlay) { closeModal(overlay); return; }
       if (e.target.closest('#card-detail-close')) { closeModal(overlay); return; }
       var btn = e.target.closest('[data-action]');
       if (btn && closeActions.indexOf(btn.getAttribute('data-action')) >= 0) closeModal(overlay);
+    });
+  }
+
+  /* 회원 상세 팝업의 "알람 설정" 값을 pushTokens/{id} 문서에서 조회해 채움 (관리자용) */
+  function fillNotifStatus(id) {
+    var el = document.getElementById('detail-notif-' + id);
+    if (!el) return;
+    pushTokensRef.doc(id).get().then(function (doc) {
+      var el2 = document.getElementById('detail-notif-' + id);
+      if (!el2) return;
+      var n = 0;
+      if (doc.exists) {
+        var t = doc.data().tokens;
+        n = Array.isArray(t) ? t.length : (t && typeof t === 'object' ? Object.keys(t).length : 0);
+      }
+      el2.innerHTML = n > 0
+        ? '<b style="color:var(--accent);">켜짐</b> <span style="color:var(--muted);">· ' + n + '개 기기</span>'
+        : '<span style="color:var(--muted);">꺼짐</span>';
+    }).catch(function () {
+      var el3 = document.getElementById('detail-notif-' + id);
+      if (el3) el3.innerHTML = '<span style="color:var(--muted);">확인 불가</span>';
     });
   }
 
@@ -2224,26 +2319,45 @@
           '<div style="margin-top:10px;">' + doneItems + '</div></details>'
       : '';
 
-    /* 접속 기록 + 사진/번호 권한 관리 */
-    var seenRows = allEntries.slice().sort(function (a, b) {
-      return (b.lastSeenAt || '').localeCompare(a.lastSeenAt || '');
-    }).map(function (e) {
-      var photoN = allEntries.filter(function (x) { return x.id !== e.id && canViewPhotoOf(state, x.id, e.id); }).length;
-      var contactN = allEntries.filter(function (x) { return x.id !== e.id && canViewContactOf(state, x.id, e.id); }).length;
+    /* 접속 기록 + 사진/번호 권한 관리 (컬럼별 정렬 가능) */
+    var seenData = allEntries.map(function (e) {
+      return {
+        e: e,
+        photoN: allEntries.filter(function (x) { return x.id !== e.id && canViewPhotoOf(state, x.id, e.id); }).length,
+        contactN: allEntries.filter(function (x) { return x.id !== e.id && canViewContactOf(state, x.id, e.id); }).length
+      };
+    });
+    var sc = adminSeenSort, sdir = sc.dir === 'asc' ? 1 : -1;
+    seenData.sort(function (a, b) {
+      var r = 0;
+      if (sc.col === 'uid') r = (a.e.serial || 0) - (b.e.serial || 0);
+      else if (sc.col === 'seen') r = (a.e.lastSeenAt || '').localeCompare(b.e.lastSeenAt || '');
+      else if (sc.col === 'photo') r = a.photoN - b.photoN;
+      else if (sc.col === 'contact') r = a.contactN - b.contactN;
+      if (r === 0) r = (a.e.serial || 0) - (b.e.serial || 0); /* 동점 시 고유번호 */
+      return r * sdir;
+    });
+    var seenRows = seenData.map(function (d) {
+      var e = d.e;
       return '<tr><td data-action="card-detail" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer;">' +
         '<div style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(e) || '—') + (e.testAccount ? ' 🧪' : '') + '</div>' +
         '<div style="text-decoration:underline dotted;">' + escapeHtml(e.nickname) + '</div>' +
         '</td>' +
         '<td class="seen-date">' + (e.lastSeenAt ? new Date(e.lastSeenAt).toLocaleString('ko-KR') : '기록 없음') + '</td>' +
-        '<td style="text-align:center;"><button type="button" class="card-btn" data-action="perm-photo" data-id="' + escapeHtml(e.id) + '" style="flex:none;padding:3px 9px;">📷 ' + photoN + '</button></td>' +
-        '<td style="text-align:center;"><button type="button" class="card-btn" data-action="perm-contact" data-id="' + escapeHtml(e.id) + '" style="flex:none;padding:3px 9px;">📱 ' + contactN + '</button></td>' +
+        '<td style="text-align:center;"><button type="button" class="card-btn" data-action="perm-photo" data-id="' + escapeHtml(e.id) + '" style="flex:none;padding:3px 9px;">📷 ' + d.photoN + '</button></td>' +
+        '<td style="text-align:center;"><button type="button" class="card-btn" data-action="perm-contact" data-id="' + escapeHtml(e.id) + '" style="flex:none;padding:3px 9px;">📱 ' + d.contactN + '</button></td>' +
         '</tr>';
     }).join('');
+    function seenTh(col, label) {
+      return '<th data-action="seen-sort" data-col="' + col + '" style="cursor:pointer;user-select:none;white-space:nowrap;">' + label + sortArrow(adminSeenSort, col) + '</th>';
+    }
     var seenSection =
       '<h2>👣 최근 접속 · 권한</h2>' +
-      '<p class="sub">닉네임 클릭 = 프로필 보기. 📷/📱 숫자 = 그 회원의 사진/번호를 볼 수 있는 사람 수 (클릭해서 관리).</p>' +
+      '<p class="sub">헤더를 눌러 정렬해요. 닉네임 클릭 = 프로필 보기. 📷/📱 숫자 = 그 회원의 사진/번호를 볼 수 있는 사람 수 (클릭해서 관리).</p>' +
       (allEntries.length
-        ? '<div class="log-list" style="overflow-x:auto;"><table class="seen-table"><thead><tr><th>고유번호 · 닉네임</th><th>접속</th><th>📷 권한</th><th>📱 권한</th></tr></thead><tbody>' + seenRows + '</tbody></table></div>'
+        ? '<div class="admin-table-wrap"><table class="seen-table"><thead><tr>' +
+            seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 권한') + seenTh('contact', '📱 권한') +
+          '</tr></thead><tbody>' + seenRows + '</tbody></table></div>'
         : '<p class="sub">등록된 사람이 없어요.</p>');
 
     /* 서버 용량 */
@@ -2258,24 +2372,56 @@
       }
       return false;
     }
-    var logs = (state.logs || []).filter(function (l) { return !isTestLog(l); }).slice().reverse();
-    var logRows = logs.map(function (l) {
+    var logData = (state.logs || []).filter(function (l) { return !isTestLog(l); }).map(function (l) {
       var le = (state.entries || []).find(function (x) { return x.nickname === l.actor; });
-      var actorHtml = le
-        ? '<span data-action="card-detail" data-id="' + escapeHtml(le.id) + '" style="cursor:pointer;"><b style="font-variant-numeric:tabular-nums;">' + escapeHtml(formatUid(le) || '—') + '</b> <span style="text-decoration:underline dotted;">' + escapeHtml(l.actor) + '</span></span>'
-        : '<b>' + escapeHtml(l.actor || '-') + '</b>';
-      return '<div style="padding:8px 0;border-bottom:1px dashed var(--line);">' +
-        '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">' +
-          '<span style="font-size:0.86rem;">' + actorHtml + '</span>' +
-          '<span style="color:var(--muted);font-size:0.74rem;white-space:nowrap;">' + fmtDate(l.at) + '</span>' +
-        '</div>' +
-        '<div style="margin-top:2px;font-size:0.86rem;color:var(--ink);">' + escapeHtml(l.detail || '') + '</div>' +
-      '</div>';
+      return {
+        l: l, le: le,
+        uid: le ? (formatUid(le) || '—') : '',
+        actor: l.actor || '',
+        detail: l.detail || '',
+        at: l.at || '',
+        timeStr: fmtDate(l.at),
+        serial: le ? (le.serial || 0) : -1
+      };
+    });
+    var lc = adminLogSort, ldir = lc.dir === 'asc' ? 1 : -1;
+    logData.sort(function (a, b) {
+      var r = 0;
+      if (lc.col === 'actor') r = a.serial - b.serial;
+      else if (lc.col === 'detail') r = a.detail.localeCompare(b.detail);
+      else r = a.at.localeCompare(b.at); /* time */
+      if (r === 0) r = a.at.localeCompare(b.at);
+      return r * ldir;
+    });
+    var logRows = logData.map(function (d) {
+      var actorHtml = d.le
+        ? '<span data-action="card-detail" data-id="' + escapeHtml(d.le.id) + '" style="cursor:pointer;"><b style="font-variant-numeric:tabular-nums;">' + escapeHtml(d.uid) + '</b> <span style="text-decoration:underline dotted;">' + escapeHtml(d.actor) + '</span></span>'
+        : '<b>' + escapeHtml(d.actor || '-') + '</b>';
+      var fActor = (d.uid + ' ' + d.actor).toLowerCase();
+      var fTime = d.timeStr.toLowerCase();
+      return '<tr class="log-trow" data-actor="' + escapeHtml(fActor) + '" data-time="' + escapeHtml(fTime) + '">' +
+        '<td style="font-size:0.84rem;">' + actorHtml + '</td>' +
+        '<td style="font-size:0.84rem;color:var(--ink);">' + escapeHtml(d.detail) + '</td>' +
+        '<td class="seen-date" style="font-size:0.76rem;color:var(--muted);">' + escapeHtml(d.timeStr) + '</td>' +
+        '</tr>';
     }).join('');
+    function logTh(col, label) {
+      return '<th data-action="log-sort" data-col="' + col + '" style="cursor:pointer;user-select:none;white-space:nowrap;">' + label + sortArrow(adminLogSort, col) + '</th>';
+    }
     var logSection =
       '<h2>📜 활동 기록</h2>' +
-      '<p class="sub">최근 ' + LOG_LIMIT + '건까지 보관돼요. (관리자만 볼 수 있어요)</p>' +
-      (logs.length ? '<div class="log-list">' + logRows + '</div>' : '<p class="sub">아직 기록이 없어요.</p>');
+      '<p class="sub">헤더로 정렬, 아래 칸으로 검색해요. 최근 ' + LOG_LIMIT + '건까지 보관. (관리자만)</p>' +
+      (logData.length
+        ? '<div class="admin-table-wrap"><table class="seen-table log-table"><thead>' +
+            '<tr>' + logTh('actor', '고유번호 · 닉네임') + logTh('detail', '변경 내용') + logTh('time', '시간') + '</tr>' +
+            '<tr class="filter-row">' +
+              '<th><input type="text" class="log-filter-input" data-logfilter="actor" placeholder="🔍 번호·닉네임" value="' + escapeHtml(adminLogFilterActor) + '"></th>' +
+              '<th></th>' +
+              '<th><input type="text" class="log-filter-input" data-logfilter="time" placeholder="🔍 시간" value="' + escapeHtml(adminLogFilterTime) + '"></th>' +
+            '</tr>' +
+          '</thead><tbody>' + logRows + '</tbody></table></div>' +
+          '<p class="sub" id="log-empty-note" hidden>검색 결과가 없어요.</p>'
+        : '<p class="sub">아직 기록이 없어요.</p>');
 
     /* 관리자 메시지 (회원별 스레드) */
     var msgByEntry = {};
@@ -2480,6 +2626,7 @@
         if (openMsgFolds[items[i].getAttribute('data-eid')]) items[i].open = true;
       }
     } catch (e) {}
+    try { applyLogFilter(); } catch (e) {} /* 활동기록 필터 재적용 */
     maybeRestoreDraft();
   }
 
@@ -4081,6 +4228,8 @@
       else if (action === 'revoke-approve') handleRevokeApprove(id);
       else if (action === 'perm-photo') { if (isAdminUnlocked) openPermPopup(id, 'photo'); }
       else if (action === 'perm-contact') { if (isAdminUnlocked) openPermPopup(id, 'contact'); }
+      else if (action === 'seen-sort') { toggleSort(adminSeenSort, actionBtn.getAttribute('data-col'), 'desc'); paint(currentState); }
+      else if (action === 'log-sort') { toggleSort(adminLogSort, actionBtn.getAttribute('data-col'), 'desc'); paint(currentState); }
       else if (action === 'cancel-sent') handleCancelSent(id);
       else if (action === 'reapply') handleReapplyRequest(id);
       else if (action === 'hide-request') handleHideRequest(id);
@@ -4099,6 +4248,12 @@
   document.body.addEventListener('input', function (e) {
     if (e.target.hasAttribute && e.target.hasAttribute('data-numeric')) stripNonDigits(e.target);
     if (e.target.closest && e.target.closest('#entry-form')) saveDraft();
+    if (e.target.hasAttribute && e.target.hasAttribute('data-logfilter')) {
+      var which = e.target.getAttribute('data-logfilter');
+      if (which === 'actor') adminLogFilterActor = e.target.value;
+      else if (which === 'time') adminLogFilterTime = e.target.value;
+      applyLogFilter(); /* paint 없이 즉시 필터 → 입력 포커스 유지 */
+    }
   });
   document.body.addEventListener('compositionend', function (e) {
     if (e.target.hasAttribute && e.target.hasAttribute('data-numeric')) stripNonDigits(e.target);
