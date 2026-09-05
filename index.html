@@ -755,7 +755,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-06-70';
+  var APP_VERSION = '2026-09-06-71';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -2989,7 +2989,7 @@
           return '<button type="button" class="pf-switch-chip' + (on ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '">🤝 ' + escapeHtml(s.nickname) + '</button>';
         }).join('');
         chips += '<button type="button" class="pf-switch-chip pf-switch-add" data-action="switch-add">＋ 친구 소개</button>';
-        switcher = '<div class="profile-switch"><span class="ps-label">🔄 활동 중 프로필</span><div class="ps-chips">' + chips + '</div></div>';
+        switcher = '<div class="profile-switch"><span class="ps-label">🔄 누구로 활동할까요? <span style="font-weight:400;color:var(--muted);">눌러서 전환</span></span><div class="ps-chips">' + chips + '</div></div>';
       }
     }
     var panel;
