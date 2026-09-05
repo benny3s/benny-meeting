@@ -298,6 +298,19 @@
     border: none; background: var(--gold-soft); color: var(--ink); border-radius: 50%;
     cursor: pointer; font-size: 1rem; line-height: 1; display: flex; align-items: center; justify-content: center;
   }
+  /* 상시 표시 예시 (컬럼형) */
+  .example-cols {
+    margin: 0 0 14px; padding: 12px 14px; border-radius: 12px;
+    background: var(--card); border: 1px solid var(--gold); box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+  }
+  .example-cols-title { font-weight: 700; color: var(--accent); font-size: 0.85rem; margin-bottom: 8px; }
+  .example-cols-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .ex-col { background: var(--gold-soft); border-radius: 9px; padding: 8px 10px; }
+  .ex-col-t { font-weight: 700; font-size: 0.76rem; color: var(--ink); margin-bottom: 4px; }
+  .ex-col-b { font-size: 0.74rem; color: var(--muted); line-height: 1.55; }
+  @media (max-width: 620px) { .example-cols-grid { grid-template-columns: 1fr; } }
+  .char-count { text-align: right; font-size: 0.74rem; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .char-count.short { color: var(--accent); font-weight: 600; }
 
   .consent-box { margin: 16px 0; padding: 14px 16px; border-radius: 10px; background: var(--gold-soft); border: 1px solid var(--border); }
   .consent-label { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 0.92rem; font-weight: 600; color: var(--ink); }
@@ -730,7 +743,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-55';
+  var APP_VERSION = '2026-09-05-56';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -834,6 +847,22 @@
   function toggleSort(s, col, defaultDir) {
     if (s.col === col) s.dir = (s.dir === 'asc' ? 'desc' : 'asc');
     else { s.col = col; s.dir = defaultDir || 'desc'; }
+  }
+  /* 자기소개/이성조건/비선호 글자수 카운터 갱신 (최소 20자) */
+  var CC_MIN = 20;
+  function updateCharCounts() {
+    var ids = ['f-intro', 'f-idealtype', 'f-dealbreaker'];
+    for (var i = 0; i < ids.length; i++) {
+      var ta = document.getElementById(ids[i]);
+      if (!ta) continue;
+      var cc = document.querySelector('.char-count[data-cc="' + ids[i] + '"]');
+      if (!cc) continue;
+      var len = (ta.value || '').trim().length;
+      var max = ta.getAttribute('maxlength') || '';
+      var short = len < CC_MIN;
+      cc.textContent = len + ' / ' + max + (short ? ' · 최소 ' + CC_MIN + '자' : ' ✓');
+      cc.className = 'char-count' + (short ? ' short' : '');
+    }
   }
   function readStateLocal() {
     try {
@@ -2028,12 +2057,18 @@
   function renderForm(state) {
     var isEdit = !!editingEntryId;
     var proxy = proxyRegisterMode && !isEdit; /* 친구 대신 소개(대리 등록) 모드 */
-    var exampleTip = exampleTipDismissed ? '' :
-      '<div class="example-tip" id="example-tip">' +
-        '<button type="button" class="example-tip-x" id="example-tip-close" aria-label="닫기">&times;</button>' +
-        '<div class="example-tip-title">✍️ 이렇게 써보세요 (예시)</div>' +
-        '<p><b>자기소개</b><br>ENTJ. 자기계발에 미쳐있는 사람이라 부지런히 사는 것을 좋아합니다. 추진력 왕! 저의 추진력을 따라와 주실 분 구해요. 디자이너라 아름다운 것을 좋아하고, 맛집·멋집 탐방 같이 다닐 분!</p>' +
-        '<p><b>원하는 이성 조건</b><br>선한 인상의 외모, 키 173 이상. 투자/재테크 좋아하시는 분 선호. 자기관리 잘하시고 담배 안 피우시는 분. 같은 종교면 더 좋아요. (본인 기독교)</p>' +
+    /* 상시 표시 예시 (입력 중에도 안 사라지게 위에 컬럼으로) */
+    var exampleTip =
+      '<div class="example-cols">' +
+        '<div class="example-cols-title">✍️ 이렇게 써보세요 (예시)</div>' +
+        '<div class="example-cols-grid">' +
+          '<div class="ex-col"><div class="ex-col-t">자기소개</div>' +
+            '<div class="ex-col-b">ENTJ · 비흡연 · 소주 1병<br>취미: 요리, 카페 탐방, 등산<br>추진력 있고 대화 잘 통해요. 맛집·멋집 같이 다닐 분!</div></div>' +
+          '<div class="ex-col"><div class="ex-col-t">원하는 이성 조건</div>' +
+            '<div class="ex-col-b">키 173+ · 90~97년생<br>비흡연 · 자기관리 잘하는 분<br>재테크 관심 있고 배려심 있는 분</div></div>' +
+          '<div class="ex-col"><div class="ex-col-t">피하고 싶은 조건</div>' +
+            '<div class="ex-col-b">흡연자 · 종교 강요<br>연락 안 되는 사람<br>과한 음주</div></div>' +
+        '</div>' +
       '</div>';
     var setupNote = (!state.adminAuth)
       ? '<div class="readonly-note">관리자 초기 설정이 아직 안 됐어요. 운영자라면 위의 "관리자" 버튼을 눌러 PIN을 먼저 설정해주세요.</div>'
@@ -2104,13 +2139,16 @@
                   '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="숫자 4~8자리" required') + '>' +
                   '<span class="hint">나중에 본인이 신청을 취소하거나 데이트를 신청할 때 필요해요.</span></div>') +
             exampleTip +
-            '<div class="field"><label for="f-intro">자기소개 <span class="opt">(선택)</span></label>' +
+            '<div class="field"><label for="f-intro">자기소개 <span class="req">필수</span> <span class="opt">최소 20자</span></label>' +
               '<span class="hint">정보가 자세할수록 매칭 성공률이 올라가요!</span>' +
-              '<textarea id="f-intro" name="intro" rows="5" maxlength="500" placeholder="예:\nMBTI: ENFP\n흡연 유무: 비흡연\n주량: 소주 1병\n종교: 무교\n취미: 요리, 카페 탐방, 등산"></textarea></div>' +
-            '<div class="field"><label for="f-idealtype">원하는 이성 조건 <span class="opt">(선택)</span></label>' +
-              '<textarea id="f-idealtype" name="idealType" rows="5" maxlength="500" placeholder="예:\n학력: 대졸 이상\n키: 170cm 이상\n생년: 90~97년생\nMBTI: 외향형 선호\n흡연 유무: 비흡연\n주량: 적당히\n종교: 무관"></textarea></div>' +
-            '<div class="field"><label for="f-dealbreaker">피하고 싶은 조건 <span class="opt">(선택)</span></label>' +
-              '<textarea id="f-dealbreaker" name="dealbreaker" rows="3" maxlength="300" placeholder="예: 흡연자, 종교 강요, 연락 안 되는 사람"></textarea></div>' +
+              '<textarea id="f-intro" name="intro" rows="5" maxlength="500" placeholder="예: MBTI ENFP · 비흡연 · 취미는 요리·등산 ..."></textarea>' +
+              '<div class="char-count" data-cc="f-intro">0 / 500</div></div>' +
+            '<div class="field"><label for="f-idealtype">원하는 이성 조건 <span class="req">필수</span> <span class="opt">최소 20자</span></label>' +
+              '<textarea id="f-idealtype" name="idealType" rows="5" maxlength="500" placeholder="예: 키 170+ · 90~97년생 · 비흡연 · 자기관리 잘하는 분 ..."></textarea>' +
+              '<div class="char-count" data-cc="f-idealtype">0 / 500</div></div>' +
+            '<div class="field"><label for="f-dealbreaker">피하고 싶은 조건 <span class="req">필수</span> <span class="opt">최소 20자</span></label>' +
+              '<textarea id="f-dealbreaker" name="dealbreaker" rows="3" maxlength="300" placeholder="예: 흡연자 · 종교 강요 · 연락 안 되는 사람 ..."></textarea>' +
+              '<div class="char-count" data-cc="f-dealbreaker">0 / 300</div></div>' +
           '</div>' +
           '<hr class="perforation">' +
           (isEdit ? '' : (proxy
@@ -2734,6 +2772,7 @@
       }
     } catch (e) {}
     try { applyLogFilter(); } catch (e) {} /* 활동기록 필터 재적용 */
+    try { updateCharCounts(); } catch (e) {} /* 자기소개 등 글자수 카운터 */
     maybeRestoreDraft();
   }
 
@@ -3007,6 +3046,9 @@
       if (!contact) missing.push('전화번호');
       if (!proxy && !referrerText) missing.push('소개자'); /* 대리 등록은 소개자 선택 */
       if (!proxy && !pin) missing.push('개인 PIN');       /* 대리 프로필은 PIN 없음 */
+      if (intro.length < 20) missing.push('자기소개(20자 이상)');
+      if (idealType.length < 20) missing.push('원하는 이성 조건(20자 이상)');
+      if (dealbreaker.length < 20) missing.push('피하고 싶은 조건(20자 이상)');
     }
     if (missing.length > 0) {
       modalNotice('입력 오류', '다음 항목을 채워주세요: ' + missing.join(', '));
@@ -3257,6 +3299,7 @@
       var blurCheck = form.querySelector('#f-blur');
       if (blurCheck) blurCheck.checked = !!entry.blurPhoto;
       renderPhotoThumbs();
+      updateCharCounts();
     }, 50);
   }
 
@@ -4399,6 +4442,7 @@
   document.body.addEventListener('input', function (e) {
     if (e.target.hasAttribute && e.target.hasAttribute('data-numeric')) stripNonDigits(e.target);
     if (e.target.closest && e.target.closest('#entry-form')) saveDraft();
+    if (e.target.id === 'f-intro' || e.target.id === 'f-idealtype' || e.target.id === 'f-dealbreaker') updateCharCounts();
     if (e.target.hasAttribute && e.target.hasAttribute('data-logfilter')) {
       var which = e.target.getAttribute('data-logfilter');
       if (which === 'actor') adminLogFilterActor = e.target.value;
@@ -4550,6 +4594,12 @@
       }).then(function () {
         paint(state);
         refreshNotifTokens();
+        /* 로그인 유지 상태여도 앱 열 때 최근 방문 시간 갱신 (로그인 때만 갱신되던 문제) */
+        if (currentUser && currentUser.id) {
+          var meNow = (state.entries || []).find(function (e) { return e.id === currentUser.id; });
+          var last = meNow && meNow.lastSeenAt ? new Date(meNow.lastSeenAt).getTime() : 0;
+          if (Date.now() - last > 5 * 60 * 1000) touchLastSeen(currentUser.id); /* 5분 이상 지났을 때만 */
+        }
       });
     }).catch(function (err) {
       document.getElementById('app').innerHTML =
