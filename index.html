@@ -755,7 +755,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-06-67';
+  var APP_VERSION = '2026-09-06-68';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1445,7 +1445,7 @@
     var sortedEntries = (state.entries || []).slice().sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
     var all = sortedEntries.concat(state.pendingEntries || []).filter(function (e) {
       if (e.managedBy && (!e.pinAuth || subPinExpired(e))) return false; /* 대리 프로필은 로그인 목록서 제외 (유효한 임시 PIN 있을 때만 노출) */
-      if (mmOnly && !isMatchmakerRole(e, state)) return false; /* 주선자 로그인: Lv2/Lv3만 */
+      if (mmOnly) return isMatchmakerRole(e, state); /* 주선자 로그인: Lv2/Lv3면 테스트 여부 무관하게 노출 */
       return !e.testAccount || showTest;
     }).map(function (e) {
       var uid = formatUid(e);
