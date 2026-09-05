@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-48';
+  var APP_VERSION = '2026-09-05-49';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1155,10 +1155,10 @@
       if (!raw) return;
       var u = JSON.parse(raw);
       if (!u || !u.id) return;
-      var exists = (state.entries || []).some(function (e) { return e.id === u.id; }) ||
-        (state.pendingEntries || []).some(function (e) { return e.id === u.id; });
-      if (exists) currentUser = u;
-      else { try { localStorage.removeItem('meetUser'); sessionStorage.removeItem('meetUser'); } catch (e2) {} }
+      /* 저장된 로그인은 그대로 복원. (예전엔 state에 없으면 지워버려서, 로딩이 늦거나
+         비어있을 때 로그인이 자꾸 풀렸음) 계정이 실제로 삭제된 경우엔 '내 정보 없음'으로 보이고
+         본인이 다시 로그인/로그아웃 하면 됨. */
+      currentUser = u;
     } catch (e) {}
   }
   function logoutUser() {
