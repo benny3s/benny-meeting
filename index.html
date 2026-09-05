@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-47';
+  var APP_VERSION = '2026-09-05-48';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1752,10 +1752,17 @@
     var entries = (state.entries || []).filter(function (e) { return !e.testAccount || showTest; });
     var maleCount = entries.filter(function (e) { return e.gender === 'male'; }).length;
     var femaleCount = entries.filter(function (e) { return e.gender === 'female'; }).length;
-    var filtered = entries.filter(function (e) { return listFilter === 'all' || e.gender === listFilter; });
+    var me = findMyEntry(state);
+    var isPermFilter = (listFilter === 'photo' || listFilter === 'contact');
+    var filtered = entries.filter(function (e) {
+      if (listFilter === 'male' || listFilter === 'female') return e.gender === listFilter;
+      if (listFilter === 'photo') return me && e.id !== me.id && canViewPhotoOf(state, me.id, e.id);
+      if (listFilter === 'contact') return me && e.id !== me.id && canViewContactOf(state, me.id, e.id);
+      return true;
+    });
     /* 고유번호(serial) 내림차순 — 최근 가입(높은 번호)이 위로 */
     var ordered = filtered.slice().sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
-    if (!ordered.length) {
+    if (!ordered.length && !isPermFilter && listFilter === 'all') {
       return '<div class="empty-state"><div class="big">' + ICON_HEART + '</div><p>아직 등록된 사람이 없어요.<br>첫 번째로 신청해 보세요!</p></div>';
     }
     var body;
@@ -1770,8 +1777,20 @@
         return cardHtml(e, idx + 1, state);
       }).join('') + '</div>';
     }
+    var guide = '';
+    if (isPermFilter) {
+      var kind = listFilter === 'photo' ? '사진' : '번호';
+      guide = '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">' +
+        '<b>' + escapeHtml(me ? me.nickname : '회원') + '</b>님이 <b>' + kind + '</b>를 볼 수 있는 분들이에요.' +
+        (ordered.length ? '' : '<br>아직 없어요 — 마음에 드는 분에게 적극적으로 ' + kind + ' 보기 요청을 해보세요! 💪') +
+        '</div>';
+    }
     var viewToggle = '<button type="button" class="view-toggle' + (listView === 'compact' ? ' on' : '') + '" data-viewtoggle="1">' +
       (listView === 'compact' ? '🖼 사진으로' : '☰ 간단히') + '</button>';
+    var permBtns = me
+      ? '<button type="button" class="filter-btn" data-filter="photo" aria-pressed="' + (listFilter === 'photo') + '">📷 사진</button>' +
+        '<button type="button" class="filter-btn" data-filter="contact" aria-pressed="' + (listFilter === 'contact') + '">📱 번호</button>'
+      : '';
     return (
       '<div class="list-toolbar">' +
         '<div class="summary"><strong>' + entries.length + '명</strong> 등록 (남 ' + maleCount + ' / 여 ' + femaleCount + ')' + viewToggle + '</div>' +
@@ -1779,8 +1798,10 @@
           '<button type="button" class="filter-btn" data-filter="all" aria-pressed="' + (listFilter === 'all') + '">전체</button>' +
           '<button type="button" class="filter-btn" data-filter="male" aria-pressed="' + (listFilter === 'male') + '">남성</button>' +
           '<button type="button" class="filter-btn" data-filter="female" aria-pressed="' + (listFilter === 'female') + '">여성</button>' +
+          permBtns +
         '</div>' +
       '</div>' +
+      guide +
       body
     );
   }
@@ -1885,23 +1906,15 @@
             '<div class="field"><label for="f-workplace">직장 위치 <span class="opt">(회사명/직업 공개는 자유)</span> <span class="req">필수</span></label>' +
               '<input type="text" id="f-workplace" name="workplace" maxlength="60" placeholder="예: 강남 (아모레/연구원)" required></div>' +
             '<div class="field"><label for="f-referrer">누구를 통해 알게 되셨나요? ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
-              '<input type="text" id="f-referrer" name="referrerText" maxlength="60"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 홍길동 (베니 친구), 김철수 (건너 건너)" required') + '>' +
-              '<span class="hint">' + ICON_LOCK + ' 관리자(베니)가 추후 연락드리기 위해서입니다. 암호화되어 관리자만 볼 수 있어요.</span></div>' +
-            '<div class="field"><label>베니와의 관계 <span class="req">필수</span></label>' +
-              '<div class="degree-group">' +
-                '<label><input type="radio" name="degreeChoice" value="1" required><span>1촌 · 베니의 친구</span></label>' +
-                '<label><input type="radio" name="degreeChoice" value="2"><span>2촌 · 베니의 두 다리 건너</span></label>' +
-                '<label><input type="radio" name="degreeChoice" value="3"><span>3촌 · 베니의 세 다리 건너</span></label>' +
-                '<label><input type="radio" name="degreeChoice" value="other"><span>그 외</span></label>' +
-              '</div>' +
-            '</div>' +
+              '<input type="text" id="f-referrer" name="referrerText" maxlength="60"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 홍길동 (관리자 친구 통해)" required') + '>' +
+              '<span class="hint">예시 · <b>홍길동 (관리자 친구 통해)</b> · <b>김철수 (소개해준 친구 이름)</b> · <b>우연히 알게 됨, SNS</b> 등<br>' + ICON_LOCK + ' 관리자(베니)가 추후 연락드리기 위해서예요. 암호화되어 관리자만 볼 수 있어요.</span></div>' +
             '<div class="field"><label>사진 <span class="opt">(선택, 최대 3장)</span></label>' +
-              '<span class="hint">사진은 전체 공개, 선택 공개 (흐리게 처리하여, 사진 요청 승인시에만 공개) 가능</span>' +
+              '<span class="hint">기본은 <b>흐리게(비공개)</b> 처리돼요 — 사진 요청을 승인한 사람에게만 보여요. 아래 체크를 해제하면 <b>전체 공개</b>가 됩니다.</span>' +
               '<div class="photo-upload-area" id="photo-upload-area"></div>' +
               '<div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap;">' +
                 '<label class="photo-pick">사진 추가<input type="file" id="f-photo" accept="image/*" multiple></label>' +
                 '<label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;cursor:pointer">' +
-                  '<input type="checkbox" name="blurPhoto" id="f-blur" style="width:16px;height:16px;accent-color:var(--accent)"> 사진 흐리게 처리' +
+                  '<input type="checkbox" name="blurPhoto" id="f-blur"' + (isEdit ? '' : ' checked') + ' style="width:16px;height:16px;accent-color:var(--accent)"> 사진 흐리게 처리 (요청 승인 시에만 공개)' +
                 '</label>' +
               '</div></div>' +
             '<div class="section-label">추가 정보</div>' +
@@ -2013,6 +2026,10 @@
         ? '<div class="mine-note" style="color:#137333;">📷 내 사진을 상대에게 공개했어요.</div>'
         : '<div class="mine-actions"><button type="button" class="card-btn" data-action="reveal-mine" data-id="' + escapeHtml(r.id) + '">📷 내 사진 공개</button></div>';
     }
+    /* 받은 사진 요청: 상대가 자기 사진을 공개함 → 나는 명단에서 그 사람 사진을 볼 수 있음 */
+    if (incoming && isPhoto && r.fromRevealed) {
+      revealMine += '<div class="mine-note" style="color:#137333;">📷 상대가 사진을 공개했어요! 명단에서 이 분의 사진을 볼 수 있어요.</div>';
+    }
     /* 주의가 필요한 항목 강조: 받은 대기/보류(응답 필요), 보낸 보류/거절(다시 요청 가능) */
     var needAction = (incoming && (st === 'pending' || st === 'held')) || (!incoming && (st === 'held' || st === 'rejected'));
     return (
@@ -2104,11 +2121,16 @@
     var pendingItems = pending.map(function (e) {
       var displayName = e.nickname || e.name || '(이름 없음)';
       var ageStr = e.birthYear ? (String(e.birthYear).slice(2) + '년생') : '-';
-      var deg = degreeLabel(e.degreeChoice || e.degree);
+      var photoStatus = !e.photoCount
+        ? '<span style="color:var(--muted);">사진 없음</span>'
+        : (e.blurPhoto === false
+          ? '<b style="color:var(--accent);">🔓 사진 전체공개</b>'
+          : '<span style="color:var(--muted);">🔒 사진 비공개 (요청 승인 시 공개)</span>');
       return (
         '<div class="pending-item">' +
           '<div class="p-name">' + escapeHtml(displayName) + '</div>' +
-          '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + ' · ' + escapeHtml(e.region || '') + ' · ' + escapeHtml(deg) + '</div>' +
+          '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + ' · ' + escapeHtml(e.region || '') + '</div>' +
+          '<div class="p-meta" style="margin-top:3px;">' + photoStatus + '</div>' +
           '<div class="pending-actions">' +
             '<button type="button" class="card-btn" data-action="detail-pending" data-id="' + escapeHtml(e.id) + '">상세 보기</button>' +
             '<button type="button" class="card-btn approve" data-action="approve" data-id="' + escapeHtml(e.id) + '">승인</button>' +
@@ -2192,21 +2214,26 @@
           '<div style="margin-top:10px;">' + doneItems + '</div></details>'
       : '';
 
-    /* 접속 기록 */
+    /* 접속 기록 + 사진/번호 권한 관리 */
     var seenRows = allEntries.slice().sort(function (a, b) {
       return (b.lastSeenAt || '').localeCompare(a.lastSeenAt || '');
     }).map(function (e) {
+      var photoN = allEntries.filter(function (x) { return x.id !== e.id && canViewPhotoOf(state, x.id, e.id); }).length;
+      var contactN = allEntries.filter(function (x) { return x.id !== e.id && canViewContactOf(state, x.id, e.id); }).length;
       return '<tr><td data-action="card-detail" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer;">' +
         '<div style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(e) || '—') + (e.testAccount ? ' 🧪' : '') + '</div>' +
         '<div style="text-decoration:underline dotted;">' + escapeHtml(e.nickname) + '</div>' +
         '</td>' +
-        '<td class="seen-date">' + (e.lastSeenAt ? new Date(e.lastSeenAt).toLocaleString('ko-KR') : '기록 없음') + '</td></tr>';
+        '<td class="seen-date">' + (e.lastSeenAt ? new Date(e.lastSeenAt).toLocaleString('ko-KR') : '기록 없음') + '</td>' +
+        '<td style="text-align:center;"><button type="button" class="card-btn" data-action="perm-photo" data-id="' + escapeHtml(e.id) + '" style="flex:none;padding:3px 9px;">📷 ' + photoN + '</button></td>' +
+        '<td style="text-align:center;"><button type="button" class="card-btn" data-action="perm-contact" data-id="' + escapeHtml(e.id) + '" style="flex:none;padding:3px 9px;">📱 ' + contactN + '</button></td>' +
+        '</tr>';
     }).join('');
     var seenSection =
-      '<h2>👣 최근 접속</h2>' +
-      '<p class="sub">회원별 마지막 로그인 시각이에요.</p>' +
+      '<h2>👣 최근 접속 · 권한</h2>' +
+      '<p class="sub">닉네임 클릭 = 프로필 보기. 📷/📱 숫자 = 그 회원의 사진/번호를 볼 수 있는 사람 수 (클릭해서 관리).</p>' +
       (allEntries.length
-        ? '<div class="log-list"><table class="seen-table"><thead><tr><th>고유번호 · 닉네임</th><th>마지막 접속</th></tr></thead><tbody>' + seenRows + '</tbody></table></div>'
+        ? '<div class="log-list" style="overflow-x:auto;"><table class="seen-table"><thead><tr><th>고유번호 · 닉네임</th><th>접속</th><th>📷 권한</th><th>📱 권한</th></tr></thead><tbody>' + seenRows + '</tbody></table></div>'
         : '<p class="sub">등록된 사람이 없어요.</p>');
 
     /* 서버 용량 */
@@ -2710,7 +2737,6 @@
     if (!height) missing.push('키');
     if (!region) missing.push('사는 곳');
     if (!workplace) missing.push('직장 위치');
-    if (!degreeChoice) missing.push('베니와의 관계');
     if (!isEdit) {
       if (!realName) missing.push('실명');
       if (!contact) missing.push('전화번호');
@@ -3237,6 +3263,84 @@
       if (req.fromRevealed && req.fromId === targetId && req.toId === viewerId) return true;
       return false;
     });
+  }
+  /* 번호는 승인 시 상호 공개 → 두 사람 사이 승인된 번호 요청이 있으면 서로 볼 수 있음 */
+  function canViewContactOf(state, viewerId, targetId) {
+    return (state.dateRequests || []).some(function (req) {
+      if ((req.type || 'contact') !== 'contact' || !req.approved) return false;
+      return (req.fromId === viewerId && req.toId === targetId) || (req.fromId === targetId && req.toId === viewerId);
+    });
+  }
+  /* 관리자: 특정 회원의 사진/번호를 볼 수 있는 사람 관리 팝업 */
+  function openPermPopup(targetId, kind) {
+    if (!isAdminUnlocked) return;
+    var state = currentState;
+    var target = (state.entries || []).find(function (e) { return e.id === targetId; });
+    if (!target) return;
+    var isPhoto = kind === 'photo';
+    var others = (state.entries || []).filter(function (e) { return e.id !== targetId; })
+      .sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
+    var rows = others.map(function (x) {
+      var has = isPhoto ? canViewPhotoOf(state, x.id, targetId) : canViewContactOf(state, x.id, targetId);
+      return '<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line);cursor:pointer;">' +
+        '<input type="checkbox" data-permtoggle="1" data-viewer="' + escapeHtml(x.id) + '" data-target="' + escapeHtml(targetId) + '" data-kind="' + kind + '"' + (has ? ' checked' : '') + ' style="width:17px;height:17px;accent-color:var(--accent);flex:none;">' +
+        '<span><b style="font-variant-numeric:tabular-nums;">' + escapeHtml(formatUid(x) || '—') + '</b> ' + escapeHtml(x.nickname) + (x.testAccount ? ' 🧪' : '') + '</span>' +
+      '</label>';
+    }).join('');
+    var overlay = openModal(
+      '<h3>' + (isPhoto ? '📷 사진' : '📱 번호') + ' 권한 관리</h3>' +
+      '<p class="modal-msg"><b>' + escapeHtml(target.nickname) + '</b>님의 ' + (isPhoto ? '사진' : '번호') + '를 볼 수 있는 사람이에요. 체크로 관리하세요.' +
+        (isPhoto ? '' : '<br><span style="color:var(--muted);font-size:0.82rem;">번호는 회원끼리 요청·승인으로만 공유돼요. 여기선 <b>해제(회수)</b>만 가능해요.</span>') + '</p>' +
+      '<div style="max-height:48vh;overflow-y:auto;">' + (rows || '<p class="sub">다른 회원이 없어요.</p>') + '</div>' +
+      '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">닫기</button></div>'
+    );
+    overlay.classList.add('wide-modal');
+    overlay.querySelector('#modal-ok').addEventListener('click', function () { closeModal(overlay); });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(overlay); });
+  }
+  /* 관리자: 권한 부여/회수 */
+  function setPermission(kind, viewerId, targetId, grant, cb) {
+    if (!isAdminUnlocked) return;
+    if (kind === 'contact' && grant) {
+      modalNotice('안내', '번호는 회원끼리 요청·승인으로만 공유돼요. 관리자가 직접 부여할 수는 없어요.');
+      if (cb) cb.checked = false;
+      return;
+    }
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var reqs = s.dateRequests || [];
+        if (kind === 'photo') {
+          if (grant) {
+            var found = false;
+            reqs = reqs.map(function (r) {
+              if ((r.type || 'contact') === 'photo' && r.fromId === viewerId && r.toId === targetId) {
+                found = true; var c = JSON.parse(JSON.stringify(r)); c.approved = true; c.rejected = false; c.held = false; c.decidedAt = new Date().toISOString(); return c;
+              }
+              return r;
+            });
+            if (!found) reqs = reqs.concat([{ id: genId(), type: 'photo', fromId: viewerId, toId: targetId, approved: true, adminGranted: true, decidedAt: new Date().toISOString(), submittedAt: new Date().toISOString() }]);
+          } else {
+            reqs = reqs.map(function (r) {
+              if ((r.type || 'contact') !== 'photo') return r;
+              if (r.fromId === viewerId && r.toId === targetId && r.approved) { var c = JSON.parse(JSON.stringify(r)); c.approved = false; return c; }
+              if (r.fromId === targetId && r.toId === viewerId && r.fromRevealed) { var c2 = JSON.parse(JSON.stringify(r)); c2.fromRevealed = false; return c2; }
+              return r;
+            });
+          }
+        } else { /* contact revoke */
+          reqs = reqs.map(function (r) {
+            if ((r.type || 'contact') !== 'contact' || !r.approved) return r;
+            if ((r.fromId === viewerId && r.toId === targetId) || (r.fromId === targetId && r.toId === viewerId)) { var c = JSON.parse(JSON.stringify(r)); c.approved = false; c.userApproved = false; return c; }
+            return r;
+          });
+        }
+        tx.update(stateRef, { dateRequests: reqs });
+      });
+    }).then(function () {
+      appendLog('admin', '관리자', (kind === 'photo' ? '사진' : '번호') + ' 권한 ' + (grant ? '부여' : '회수') + ' · ' + nickForEntry(currentState, viewerId) + (grant ? ' → ' : ' ✕ ') + nickForEntry(currentState, targetId));
+      return refreshNow();
+    }).catch(function (err) { modalNotice('오류', '변경 실패: ' + (err.message || err)); });
   }
   /* 보낸 사진 요청에서 "내 사진 공개" → 상대가 내 사진을 볼 수 있게 함 */
   function handleRevealMine(id) {
@@ -3964,6 +4068,8 @@
       else if (action === 'user-reject') handleUserRejectRequest(id);
       else if (action === 'reveal-mine') handleRevealMine(id);
       else if (action === 'revoke-approve') handleRevokeApprove(id);
+      else if (action === 'perm-photo') { if (isAdminUnlocked) openPermPopup(id, 'photo'); }
+      else if (action === 'perm-contact') { if (isAdminUnlocked) openPermPopup(id, 'contact'); }
       else if (action === 'cancel-sent') handleCancelSent(id);
       else if (action === 'reapply') handleReapplyRequest(id);
       else if (action === 'hide-request') handleHideRequest(id);
@@ -4027,6 +4133,15 @@
   document.body.addEventListener('change', function (e) {
     var testCb = e.target.closest && e.target.closest('[data-testtoggle]');
     if (testCb) { handleSetTest(testCb.getAttribute('data-testtoggle'), testCb.checked); return; }
+    var permCb = e.target.closest && e.target.closest('[data-permtoggle]');
+    if (permCb) { setPermission(permCb.getAttribute('data-kind'), permCb.getAttribute('data-viewer'), permCb.getAttribute('data-target'), permCb.checked, permCb); return; }
+    if (e.target.id === 'f-blur' && !e.target.checked) {
+      var blurCb = e.target;
+      modalConfirm('전체 공개 확인', '사진을 전체 공개할까요? 모든 회원이 요청 없이 바로 볼 수 있어요.', '전체 공개', 'danger').then(function (ok) {
+        if (!ok) blurCb.checked = true; /* 취소하면 다시 흐리게 */
+      });
+      return;
+    }
     if (e.target.id === 'f-photo') {
       var files = e.target.files;
       if (!files || !files.length) return;
