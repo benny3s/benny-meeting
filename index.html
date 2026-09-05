@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-44';
+  var APP_VERSION = '2026-09-05-45';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1983,8 +1983,15 @@
           '<button type="button" class="card-btn primary" data-action="reapply" data-id="' + escapeHtml(r.id) + '">다시 요청</button>' +
           '<button type="button" class="card-btn" data-action="hide-request" data-id="' + escapeHtml(r.id) + '">내역 삭제</button>' +
         '</div>';
+    } else if (incoming && (st === 'approved' || st === 'user_approved')) {
+      /* 받은 요청을 승인함 → 승인 취소(상대 접근 차단) 또는 내역만 삭제 */
+      actions =
+        '<div class="mine-actions">' +
+          '<button type="button" class="card-btn danger" data-action="revoke-approve" data-id="' + escapeHtml(r.id) + '">승인 취소</button>' +
+          '<button type="button" class="card-btn" data-action="hide-request" data-id="' + escapeHtml(r.id) + '">내역 삭제</button>' +
+        '</div>';
     } else if (st === 'approved' || st === 'rejected') {
-      /* (받은 요청 처리 완료 또는 승인된 보낸 요청) 내역 삭제 */
+      /* (승인된 보낸 요청 또는 거절 내역) 내역 삭제 */
       actions =
         '<div class="mine-actions">' +
           '<button type="button" class="card-btn" data-action="hide-request" data-id="' + escapeHtml(r.id) + '">내역 삭제</button>' +
@@ -3030,7 +3037,7 @@
             notifyAdmin(typeLabel + ' 요청', fromEntry.nickname + '님이 ' + target.nickname + '님의 ' + typeLabel + '를 요청했어요!');
             return refreshNow();
           }).then(function () {
-            modalNotice('요청 완료', escapeHtml(target.nickname) + '님에게 ' + typeLabel + ' 요청을 보냈어요!<br>"메시지함" 탭에서 상태를 볼 수 있어요.');
+            modalNotice('요청 완료', target.nickname + '님에게 ' + typeLabel + ' 요청을 보냈어요! "메시지함" 탭에서 상태를 볼 수 있어요.');
           });
         });
       }).catch(function (err) {
@@ -3254,40 +3261,37 @@
     }).catch(function () {});
   }
   /* ---- user (recipient) decisions on incoming requests ---- */
-  /* 승인 모달: 사진 요청이면 "승인 + 나도 요청"(상호 공개) 버튼도 제공. null=취소, 아니면 {reciprocal, message} */
-  function modalApprove(msg, placeholder, showReciprocal) {
-    return new Promise(function (resolve) {
-      var overlay = openModal(
-        '<h3>요청 승인</h3>' +
-        '<p class="modal-msg">' + escapeHtml(msg) + '</p>' +
-        '<textarea class="modal-input" id="ap-text" rows="3" maxlength="200" placeholder="' + escapeHtml(placeholder || '답장 메시지 (선택)') + '"></textarea>' +
-        (showReciprocal ? '<p class="modal-msg" style="font-size:0.8rem;margin:8px 0 0;">· <b>승인</b>: 상대가 내 사진을 볼 수 있어요.<br>· <b>승인 + 나도 요청</b>: 승인하면서 상대에게 <b>사진 요청도 함께</b> 보내요. (상대가 승인하면 나도 볼 수 있어요)</p>' : '') +
-        '<div class="modal-actions" style="flex-wrap:wrap;">' +
-          '<button type="button" class="card-btn" id="ap-cancel">취소</button>' +
-          '<button type="button" class="card-btn primary" id="ap-ok">승인</button>' +
-          (showReciprocal ? '<button type="button" class="card-btn primary" id="ap-recip" style="background:var(--gold);border-color:var(--gold);">승인 + 나도 요청</button>' : '') +
-        '</div>'
-      );
-      function finish(v) { closeModal(overlay); resolve(v); }
-      function txt() { return overlay.querySelector('#ap-text').value.trim(); }
-      overlay.querySelector('#ap-cancel').addEventListener('click', function () { finish(null); });
-      overlay.querySelector('#ap-ok').addEventListener('click', function () { finish({ reciprocal: false, message: txt() }); });
-      var rc = overlay.querySelector('#ap-recip');
-      if (rc) rc.addEventListener('click', function () { finish({ reciprocal: true, message: txt() }); });
-      overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
+  /* 받은 요청 승인 취소 → 다시 대기 상태로, 상대 접근 차단 */
+  function handleRevokeApprove(id) {
+    var me = findMyEntry(currentState);
+    if (!me) return modalNotice('로그인 필요', '먼저 로그인해주세요.');
+    var req = (currentState.dateRequests || []).find(function (r) { return r.id === id; });
+    if (!req || req.toId !== me.id) return;
+    var st = reqStatus(req);
+    if (st !== 'approved' && st !== 'user_approved') return;
+    var isPhoto = (req.type || 'contact') === 'photo';
+    var fromName = nickForEntry(currentState, req.fromId);
+    modalConfirm('승인 취소', fromName + '님의 ' + (isPhoto ? '사진' : '번호') + ' 요청 승인을 취소할까요? 상대는 더 이상 ' + (isPhoto ? '사진을' : '번호를') + ' 볼 수 없고, 요청은 다시 "대기중"으로 돌아가요.', '승인 취소', 'danger').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).map(function (r) {
+            if (r.id !== id) return r;
+            var c = JSON.parse(JSON.stringify(r));
+            delete c.approved; delete c.userApproved; delete c.held;
+            delete c.approveMessage; delete c.decidedAt; delete c.toContact;
+            return c;
+          });
+          tx.update(stateRef, { dateRequests: reqs });
+        });
+      }).then(function () {
+        appendLog('request', me.nickname, (isPhoto ? '사진' : '번호') + ' 요청 승인 취소 → ' + fromName);
+        return refreshNow();
+      }).then(function () {
+        modalNotice('승인 취소됨', fromName + '님의 요청이 다시 대기 상태가 됐어요. 상대는 더 이상 ' + (isPhoto ? '사진을' : '번호를') + ' 볼 수 없어요.');
+      }).catch(function (err) { modalNotice('오류', '취소에 실패했어요: ' + (err.message || err)); });
     });
-  }
-  /* 사진 상호공개: 나 → 상대 사진 요청을 자동 생성 (중복이면 생성 안 함) */
-  function sendReciprocalPhotoRequest(me, targetId, targetName) {
-    var exists = (currentState.dateRequests || []).some(function (r) {
-      return r.fromId === me.id && r.toId === targetId && (r.type || 'contact') === 'photo' && (r.hiddenBy || []).indexOf(me.id) < 0;
-    });
-    if (exists) return Promise.resolve(false);
-    var req = { id: genId(), type: 'photo', fromId: me.id, toId: targetId, note: '', submittedAt: new Date().toISOString() };
-    return stateRef.update({ dateRequests: firebase.firestore.FieldValue.arrayUnion(req) }).then(function () {
-      appendLog('request', me.nickname, '사진 요청 → ' + targetName + ' (상호 공개)');
-      return true;
-    }).catch(function () { return false; });
   }
   function handleUserApproveRequest(id) {
     var state = currentState;
@@ -3304,11 +3308,8 @@
       ? escapeHtml(fromName) + '님에게 사진을 공개할까요? 승인하면 바로 볼 수 있게 돼요.'
       : escapeHtml(fromName) + '님과 서로 번호를 공개할까요? 승인하면 바로 서로의 번호를 볼 수 있어요.') +
       ' 상대에게 전할 답장을 남길 수 있어요.';
-    var wantReciprocal = false;
-    modalApprove(msg, '예: 반가워요! 잘 부탁드려요 :)', isPhoto).then(function (res) {
-      if (res === null) return;
-      var replyMsg = res.message;
-      wantReciprocal = res.reciprocal;
+    modalMessage('요청 승인', msg, '승인', 'primary', '예: 반가워요! 잘 부탁드려요 :)').then(function (replyMsg) {
+      if (replyMsg === null) return;
       /* 번호 요청이면 내 번호를 담아 바로 확정 (관리자 개입 없음) */
       var contactPromise = isPhoto ? Promise.resolve(null) : ensureMyContact();
       return contactPromise.then(function (myNum) {
@@ -3339,19 +3340,10 @@
           var req2 = ((currentState && currentState.dateRequests) || []).find(function (r) { return r.id === id; });
           var done = req2 && req2.approved;
           var baseMsg = isPhoto
-            ? escapeHtml(fromName) + '님이 사진을 볼 수 있게 됐어요.'
+            ? fromName + '님이 사진을 볼 수 있게 됐어요.'
             : (done
               ? '승인했어요! 이제 서로의 번호를 볼 수 있어요.'
               : '승인했어요! 상대방 번호 정보가 없어서 관리자 확인이 필요해요.');
-          if (wantReciprocal && isPhoto) {
-            return sendReciprocalPhotoRequest(me, req.fromId, fromName).then(function (created) {
-              return refreshNow().then(function () {
-                modalNotice('승인 완료', baseMsg + (created
-                  ? '<br>' + escapeHtml(fromName) + '님에게 <b>사진 요청</b>도 보냈어요. 상대가 승인하면 나도 볼 수 있어요!'
-                  : '<br>(이미 ' + escapeHtml(fromName) + '님에게 보낸 사진 요청이 있어요.)'));
-              });
-            });
-          }
           modalNotice('승인 완료', baseMsg);
         });
       }).catch(function (err) {
@@ -3947,6 +3939,7 @@
       else if (action === 'user-hold') handleUserHoldRequest(id);
       else if (action === 'user-reject') handleUserRejectRequest(id);
       else if (action === 'reveal-mine') handleRevealMine(id);
+      else if (action === 'revoke-approve') handleRevokeApprove(id);
       else if (action === 'cancel-sent') handleCancelSent(id);
       else if (action === 'reapply') handleReapplyRequest(id);
       else if (action === 'hide-request') handleHideRequest(id);
