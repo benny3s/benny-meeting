@@ -1,4 +1,4 @@
-/* 소개상점 — 요청 이벤트 발생 시 상대에게 FCM 웹 푸시 발송 */
+/* 소개장터 — 요청 이벤트 발생 시 상대에게 FCM 웹 푸시 발송 */
 const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
 admin.initializeApp();

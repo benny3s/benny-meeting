@@ -1,4 +1,4 @@
-/* 소개상점 — FCM 백그라운드 알림 서비스워커 */
+/* 소개장터 — FCM 백그라운드 알림 서비스워커 */
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 
@@ -17,7 +17,7 @@ var APP_URL = 'https://benny3s.github.io/benny-meeting/';
 /* 앱이 꺼져 있거나 백그라운드일 때 (data 메시지) */
 messaging.onBackgroundMessage(function (payload) {
   var n = (payload && payload.notification) || (payload && payload.data) || {};
-  var title = n.title || '소개상점';
+  var title = n.title || '소개장터';
   var options = {
     body: n.body || '',
     icon: n.icon || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"%3E%3Crect width="48" height="48" fill="%23B23A48"/%3E%3Ctext x="24" y="34" font-size="26" text-anchor="middle" fill="white"%3E%E2%99%A5%3C/text%3E%3C/svg%3E',

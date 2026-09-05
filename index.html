@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="light">
-<title>소개상점</title>
+<title>소개장터</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap">
 <style id="page-style">
   :root {
@@ -755,7 +755,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-06-61';
+  var APP_VERSION = '2026-09-06-62';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -2909,7 +2909,7 @@
     return (
       '<div class="masthead"><div class="masthead-inner">' +
         '<div class="masthead-icon">' + ICON_HEART + '</div>' +
-        '<div><h1 id="masthead-title" title="새로고침" style="cursor:pointer;">소개상점</h1><p>관리자 주변 사람들 중심으로 시작한, 서로를 소개하는 작은 상점이에요.</p></div>' +
+        '<div><h1 id="masthead-title" title="새로고침" style="cursor:pointer;">소개장터</h1><p>관리자 주변 사람들 중심으로 시작한, 서로를 소개하는 작은 장터예요.</p></div>' +
       '</div>' +
       '<div class="admin-bar">' +
         '<div class="admin-bar-row">' +
@@ -4890,7 +4890,7 @@
       } catch (e) {}
     }
     var overlay = openModal(
-      '<h3 style="text-align:center;">안녕하세요! 소개상점입니다 &#128522;</h3>' +
+      '<h3 style="text-align:center;">안녕하세요! 소개장터입니다 &#128522;</h3>' +
       '<div class="modal-msg" style="text-align:left;line-height:1.75;font-size:0.88rem;">' +
 
         /* 1) 알림 */
@@ -5018,10 +5018,10 @@
       var opts = { body: '이 알림이 보이면 정상이에요! 실제 요청이 오면 이렇게 알려드려요.', icon: icon, tag: 'benchinso-test-' + Date.now(), renotify: true };
       if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
         navigator.serviceWorker.getRegistration().then(function (reg) {
-          if (reg && reg.showNotification) { reg.showNotification('소개상점 테스트 알림 🔔', opts); }
-          else { try { new Notification('소개상점 테스트 알림 🔔', opts); } catch (e) {} }
-        }).catch(function () { try { new Notification('소개상점 테스트 알림 🔔', opts); } catch (e) {} });
-      } else { try { new Notification('소개상점 테스트 알림 🔔', opts); } catch (e) {} }
+          if (reg && reg.showNotification) { reg.showNotification('소개장터 테스트 알림 🔔', opts); }
+          else { try { new Notification('소개장터 테스트 알림 🔔', opts); } catch (e) {} }
+        }).catch(function () { try { new Notification('소개장터 테스트 알림 🔔', opts); } catch (e) {} });
+      } else { try { new Notification('소개장터 테스트 알림 🔔', opts); } catch (e) {} }
     }
     if (Notification.permission === 'granted') {
       fire();
@@ -5194,7 +5194,7 @@
       var base = location.href.split('?')[0].split('#')[0];
       var dir = base.substring(0, base.lastIndexOf('/') + 1);
       var manifest = {
-        id: base, name: '소개상점', short_name: '소개상점',
+        id: base, name: '소개장터', short_name: '소개장터',
         start_url: base, scope: dir, display: 'standalone',
         background_color: '#FBF3EE', theme_color: '#B23A48',
         icons: [
