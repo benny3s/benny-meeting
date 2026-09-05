@@ -752,7 +752,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-57';
+  var APP_VERSION = '2026-09-05-58';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1345,7 +1345,9 @@
 
   function modalLogin() {
     var state = currentState || {};
-    var showTest = showTestInList(); /* 테스트 계정은 관리자가 "테스트 표시"를 켰거나 본인이 테스트 계정일 때만 노출 */
+    /* 로그인창: "테스트 계정 표시" 토글이 켜져 있으면(관리자 기기) 로그인 목록에도 노출.
+       (관리자 잠금 여부와 무관 — 토글은 관리자만 켤 수 있어 일반 회원 기기엔 안 뜸) */
+    var showTest = testAccountsShown() || meIsTest();
     var sortedEntries = (state.entries || []).slice().sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
     var all = sortedEntries.concat(state.pendingEntries || []).filter(function (e) {
       if (e.managedBy) return false; /* 대리 프로필은 PIN이 없어 로그인 불가 → 목록에서 제외 */
@@ -5247,7 +5249,45 @@
     appStarted = true;
     setupPWA();
     init();
+    setupPullRefresh();
     setTimeout(showAnnouncement, 800);
+  }
+  /* 아이폰 홈화면 앱(standalone)은 네이티브 "당겨서 새로고침"이 없음 → 직접 구현 */
+  function setupPullRefresh() {
+    try {
+      if (!isStandalone()) return; /* 브라우저 탭은 네이티브 기능 있음 */
+      var startY = 0, dy = 0, active = false, ind = null;
+      function topPos() { return window.pageYOffset || document.documentElement.scrollTop || 0; }
+      function ensureInd() {
+        if (ind) return ind;
+        ind = document.createElement('div');
+        ind.style.cssText = 'position:fixed;top:0;left:0;right:0;display:flex;justify-content:center;align-items:flex-end;height:0;overflow:hidden;z-index:99999;background:linear-gradient(var(--gold-soft,#f6ecd9),transparent);color:var(--accent,#B23A48);font-size:0.85rem;font-weight:700;pointer-events:none;padding-bottom:6px;box-sizing:border-box;transition:height 0.12s ease;';
+        document.body.appendChild(ind);
+        return ind;
+      }
+      function reset() { if (ind) ind.style.height = '0px'; dy = 0; active = false; }
+      document.addEventListener('touchstart', function (e) {
+        if (e.touches.length !== 1) { active = false; return; }
+        if (document.querySelector('.modal-overlay')) { active = false; return; } /* 모달 열림 시 비활성 */
+        if (topPos() <= 0) { startY = e.touches[0].clientY; active = true; dy = 0; }
+        else active = false;
+      }, { passive: true });
+      document.addEventListener('touchmove', function (e) {
+        if (!active) return;
+        dy = e.touches[0].clientY - startY;
+        if (dy > 0 && topPos() <= 0) {
+          var el = ensureInd();
+          el.style.height = Math.min(dy * 0.5, 72) + 'px';
+          el.textContent = dy > 90 ? '↑ 놓으면 새로고침' : '↓ 당겨서 새로고침';
+        } else if (ind) { ind.style.height = '0px'; }
+      }, { passive: true });
+      document.addEventListener('touchend', function () {
+        if (!active) return;
+        if (dy > 90) { if (ind) { ind.style.height = '46px'; ind.textContent = '새로고침 중…'; } location.reload(); }
+        else reset();
+      }, { passive: true });
+      document.addEventListener('touchcancel', reset, { passive: true });
+    } catch (e) {}
   }
   try {
     firebase.auth().onAuthStateChanged(function (user) {
