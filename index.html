@@ -320,6 +320,8 @@
   @media (max-width: 620px) { .example-cols-grid { grid-template-columns: 1fr; } }
   .char-count { text-align: right; font-size: 0.74rem; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
   .char-count.short { color: var(--accent); font-weight: 600; }
+  .field-error { color: var(--accent); font-size: 0.78rem; margin-top: 4px; font-weight: 600; }
+  input.input-dup { border-color: var(--accent) !important; background: var(--accent-soft, #fdeef0) !important; }
 
   .consent-box { margin: 16px 0; padding: 14px 16px; border-radius: 10px; background: var(--gold-soft); border: 1px solid var(--border); }
   .consent-label { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 0.92rem; font-weight: 600; color: var(--ink); }
@@ -642,6 +644,7 @@
   }
   .pf-switch-chip:hover { border-color: var(--gold); }
   .pf-switch-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
+  .pf-switch-chip.pf-switch-add { border-style: dashed; color: var(--accent); }
   .cap-bar {
     height: 12px; border-radius: 999px; background: var(--line);
     overflow: hidden; margin-top: 4px;
@@ -752,7 +755,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-06-60';
+  var APP_VERSION = '2026-09-06-61';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -857,6 +860,20 @@
   function toggleSort(s, col, defaultDir) {
     if (s.col === col) s.dir = (s.dir === 'asc' ? 'desc' : 'asc');
     else { s.col = col; s.dir = defaultDir || 'desc'; }
+  }
+  /* 닉네임 실시간 중복 체크 (입력 즉시 빨간 테두리) */
+  function checkNicknameDup() {
+    var el = document.getElementById('f-nickname');
+    if (!el) return;
+    var v = (el.value || '').trim().toLowerCase();
+    var err = document.getElementById('nick-err');
+    var dup = false;
+    if (v && currentState) {
+      var all = (currentState.entries || []).concat(currentState.pendingEntries || []);
+      dup = all.some(function (e) { return e.id !== editingEntryId && (e.nickname || '').trim().toLowerCase() === v; });
+    }
+    if (dup) { el.classList.add('input-dup'); if (err) err.hidden = false; }
+    else { el.classList.remove('input-dup'); if (err) err.hidden = true; }
   }
   /* 자기소개/이성조건/비선호 글자수 카운터 갱신 (최소 20자) */
   var CC_MIN = 20;
@@ -2098,7 +2115,8 @@
         '<div class="form-lede"><h2>🤝 새 주선자 등록</h2><p>친구들을 대신 소개할 주선자 계정을 만들어요. 관리자 승인 후 이용할 수 있어요.</p></div>' +
         '<form id="entry-form" autocomplete="off">' +
           '<div class="field"><label for="f-nickname">주선자 닉네임 <span class="req">필수</span></label>' +
-            '<input type="text" id="f-nickname" name="nickname" maxlength="20" placeholder="예: 베니" required></div>' +
+            '<input type="text" id="f-nickname" name="nickname" maxlength="20" placeholder="예: 베니" required>' +
+            '<div class="field-error" id="nick-err" hidden>이미 사용 중인 닉네임이에요. 다른 닉네임을 써주세요.</div></div>' +
           '<div class="field"><label for="f-contact">전화번호 <span class="req">필수</span></label>' +
             '<input type="tel" id="f-contact" name="contact" maxlength="11" inputmode="numeric" data-numeric placeholder="예: 01012345678" required>' +
             '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
@@ -2206,7 +2224,8 @@
             '<div class="row-2">' +
               '<div class="field"><label for="f-nickname">공개 이름 (닉네임) <span class="req">필수</span></label>' +
                 '<input type="text" id="f-nickname" name="nickname" maxlength="20" placeholder="예: 민지" required>' +
-                '<span class="hint">닉네임 사용 추천 (전 소개팅녀/소개팅남 모르게)</span></div>' +
+                '<span class="hint">닉네임 사용 추천 (전 소개팅녀/소개팅남 모르게)</span>' +
+                '<div class="field-error" id="nick-err" hidden>이미 사용 중인 닉네임이에요. 다른 닉네임을 써주세요.</div></div>' +
               '<div class="field"><label for="f-realname">실명 ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
                 '<input type="text" id="f-realname" name="realName" maxlength="20"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 김민지" required') + '>' +
                 '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
@@ -2864,17 +2883,21 @@
         '<span class="count" title="요청">요청 ' + reqCount + '</span>' +
         '<span class="count' + (msgUnread >= 1 ? ' blink' : '') + '" title="안 읽은 Q&A">Q&A ' + msgUnread + '</span></button>';
     }
-    /* 주선자 프로필 전환 바 (내가 소개한 대리 프로필이 1개 이상일 때) */
+    /* 주선자 프로필 전환 바: 주선자 계정이거나 대리 프로필이 1개 이상일 때 표시 (주선자는 sub 없어도 항상 보임) */
     var switcher = '';
     if (currentUser) {
       var mySubs = entriesManagedByMe(state);
-      if (mySubs.length) {
+      var meSelfAny = (state.entries || []).concat(state.pendingEntries || []).find(function (e) { return e.id === currentUser.id; });
+      var iAmMM = isMatchmakerEntry(meSelfAny);
+      if (mySubs.length || iAmMM) {
         var selfActive = !actingAs || actingAs === currentUser.id;
-        var chips = '<button type="button" class="pf-switch-chip' + (selfActive ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(currentUser.id) + '">' + escapeHtml(currentUser.nickname) + ' (나)</button>';
+        var selfSuffix = iAmMM ? ' (주선자)' : ' (나)';
+        var chips = '<button type="button" class="pf-switch-chip' + (selfActive ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(currentUser.id) + '">' + escapeHtml(currentUser.nickname) + selfSuffix + '</button>';
         chips += mySubs.map(function (s) {
           var on = actingAs === s.id;
           return '<button type="button" class="pf-switch-chip' + (on ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '">🤝 ' + escapeHtml(s.nickname) + '</button>';
         }).join('');
+        chips += '<button type="button" class="pf-switch-chip pf-switch-add" data-action="switch-add">＋ 친구 소개</button>';
         switcher = '<div class="profile-switch"><span class="ps-label">🔄 활동 중 프로필</span><div class="ps-chips">' + chips + '</div></div>';
       }
     }
@@ -4613,6 +4636,10 @@
       else if (action === 'user-hold') handleUserHoldRequest(id);
       else if (action === 'user-reject') handleUserRejectRequest(id);
       else if (action === 'switch-profile') handleSwitchProfile(id);
+      else if (action === 'switch-add') {
+        if (!currentUser) { modalNotice('로그인 필요', '먼저 로그인해주세요.'); return; }
+        proxyRegisterMode = true; formRole = 'matchmaker'; editingEntryId = null; photoDataUrls = []; actingAs = null; activeTab = 'form'; paint(currentState);
+      }
       else if (action === 'reveal-mine') handleRevealMine(id);
       else if (action === 'revoke-approve') handleRevokeApprove(id);
       else if (action === 'perm-photo') { if (isAdminUnlocked) openPermPopup(id, 'photo'); }
@@ -4638,6 +4665,7 @@
     if (e.target.hasAttribute && e.target.hasAttribute('data-numeric')) stripNonDigits(e.target);
     if (e.target.closest && e.target.closest('#entry-form')) saveDraft();
     if (e.target.id === 'f-intro' || e.target.id === 'f-idealtype' || e.target.id === 'f-dealbreaker') updateCharCounts();
+    if (e.target.id === 'f-nickname') checkNicknameDup();
     if (e.target.hasAttribute && e.target.hasAttribute('data-logfilter')) {
       var which = e.target.getAttribute('data-logfilter');
       if (which === 'actor') adminLogFilterActor = e.target.value;
