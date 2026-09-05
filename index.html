@@ -685,7 +685,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-05-42';
+  var APP_VERSION = '2026-09-05-43';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1749,7 +1749,8 @@
     var maleCount = entries.filter(function (e) { return e.gender === 'male'; }).length;
     var femaleCount = entries.filter(function (e) { return e.gender === 'female'; }).length;
     var filtered = entries.filter(function (e) { return listFilter === 'all' || e.gender === listFilter; });
-    var ordered = filtered.slice().reverse();
+    /* 고유번호(serial) 내림차순 — 최근 가입(높은 번호)이 위로 */
+    var ordered = filtered.slice().sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
     if (!ordered.length) {
       return '<div class="empty-state"><div class="big">' + ICON_HEART + '</div><p>아직 등록된 사람이 없어요.<br>첫 번째로 신청해 보세요!</p></div>';
     }
