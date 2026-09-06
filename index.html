@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-89';
+  var APP_VERSION = '2026-09-07-90';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1570,12 +1570,13 @@
   /* ---- 일반 회원 → 주선자 밑으로 들어가기 (주선자 요청) ---- */
   function modalRequestMatchmaker(state) {
     return new Promise(function (resolve) {
-      var mms = (state.entries || []).filter(function (e) { return isMatchmakerEntry(e) && e.id !== currentUser.id; });
+      /* 주선자 계정(isMatchmaker)만 대상 */
+      var mms = (state.entries || []).filter(function (e) { return isMatchmakerEntry(e) && e.id !== currentUser.id && !e.testAccount; });
       if (!mms.length) { modalNotice('안내', '아직 등록된 주선자가 없어요.'); resolve(null); return; }
       var opts = mms.map(function (e, i) {
         return '<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;cursor:pointer;">' +
           '<input type="radio" name="mm-pick" value="' + escapeHtml(e.id) + '"' + (i === 0 ? ' checked' : '') + ' style="width:16px;height:16px;accent-color:var(--accent);flex:none;">' +
-          '<span><b>' + escapeHtml(e.nickname) + '</b> <span style="color:var(--muted);font-size:0.8rem;">주선자</span></span>' +
+          '<span><b>' + escapeHtml(e.nickname) + '</b> <span style="color:var(--muted);font-size:0.8rem;">' + escapeHtml(formatUid(e) || '') + ' · 주선자</span></span>' +
         '</label>';
       }).join('');
       var overlay = openModal(
@@ -1689,6 +1690,83 @@
         return refreshNow();
       }).then(function () { modalNotice('거절함', jr.fromNick + '님의 요청을 거절했어요.'); })
         .catch(function (err) { modalNotice('오류', '실패: ' + (err.message || err)); });
+    });
+  }
+  /* ---- 일반 ↔ 주선자 계정 전환 ----
+     모델: 주선자는 "매니저 계정(로그인·PIN) + 본인(ownerSelf) 프로필 sub" 구조.
+     전환은 새 매니저 래퍼를 만들거나 지우고 로그인 대상을 옮길 뿐 — 프로필/사진은 그대로 유지(같은 PIN). */
+  function handleConvertToMatchmaker() {
+    if (!currentUser) return;
+    var me = myAuthEntry(currentState);
+    if (!me) return modalNotice('안내', '승인된 회원만 전환할 수 있어요.');
+    if (isMatchmakerEntry(me)) return modalNotice('안내', '이미 주선자 계정이에요.');
+    if (me.managedBy) return modalNotice('안내', '주선자가 관리하는 계정은 전환할 수 없어요.');
+    modalConfirm('주선자 계정으로 전환',
+      '주선자 계정이 되면 다른 회원이 나에게 "주선자 요청"을 보낼 수 있어요. 지금 내 소개팅 프로필은 "본인" 프로필로 그대로 유지되고 명단에도 계속 보여요. 로그인 PIN도 그대로예요. (언제든 되돌릴 수 있어요) 전환할까요?',
+      '주선자로 전환', 'primary').then(function (ok) {
+      if (!ok) return;
+      var mmId = genId();
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var meNow = (s.entries || []).find(function (e) { return e.id === me.id; });
+          if (!meNow) throw new Error('내 계정을 찾을 수 없어요.');
+          var mm = { id: mmId, nickname: meNow.nickname, isMatchmaker: true, pinAuth: meNow.pinAuth, contactEnc: meNow.contactEnc || null, submittedAt: new Date().toISOString() };
+          var entries = (s.entries || []).map(function (e) {
+            if (e.id === me.id) { var c = JSON.parse(JSON.stringify(e)); c.managedBy = mmId; c.ownerSelf = true; delete c.pinAuth; delete c.pinExpiresAt; return c; }
+            if (e.managedBy === me.id) { var c2 = JSON.parse(JSON.stringify(e)); c2.managedBy = mmId; return c2; } /* 기존 친구들 재부모 */
+            return e;
+          });
+          entries.push(mm);
+          tx.update(stateRef, { entries: entries });
+        });
+      }).then(function () {
+        currentUser = { id: mmId, nickname: me.nickname, pin: currentUser.pin }; saveSession();
+        actingResolved = false; actingAs = null; formRole = 'matchmaker';
+        appendLog('edit', me.nickname, '일반→주선자 계정 전환');
+        return refreshNow();
+      }).then(function () {
+        activeTab = 'mine'; paint(currentState);
+        modalNotice('전환 완료 🤝', '주선자 계정이 되었어요. 내 소개팅 프로필은 "본인"으로 유지돼요. 이제 다른 회원의 주선자 요청을 받을 수 있어요.');
+      }).catch(function (err) { modalNotice('오류', '전환 실패: ' + (err.message || err)); });
+    });
+  }
+  function handleConvertToMember() {
+    if (!currentUser) return;
+    var me = myAuthEntry(currentState);
+    if (!me || !isMatchmakerEntry(me)) return modalNotice('안내', '주선자 계정만 일반 계정으로 전환할 수 있어요.');
+    var mySubsAll = entriesManagedByMe(currentState);
+    var friends = mySubsAll.filter(function (e) { return !e.ownerSelf; });
+    var ownSelf = mySubsAll.find(function (e) { return e.ownerSelf; });
+    if (friends.length) return modalNotice('전환 불가', '관리 중인 친구가 있어요. 친구를 각각 "일반 계정 전환"으로 독립시킨 뒤에 전환할 수 있어요.');
+    if (!ownSelf) return modalNotice('전환 불가', '내 "본인" 소개팅 프로필이 없어요. (친구도 본인도 없으면 전환 불가) 먼저 "신청서 → 본인"으로 등록하세요.');
+    modalConfirm('일반 계정으로 전환',
+      '"본인" 소개팅 프로필(' + ownSelf.nickname + ')을 독립된 일반 계정으로 바꿔요. 앞으로 주선자 요청은 받지 않고, 이 프로필로 직접 로그인·소개팅해요. 로그인 PIN은 그대로예요. 전환할까요?',
+      '일반으로 전환', 'primary').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var mmNow = (s.entries || []).find(function (e) { return e.id === me.id; });
+          var entries = (s.entries || []).filter(function (e) { return e.id !== me.id; }).map(function (e) {
+            if (e.id !== ownSelf.id) return e;
+            var c = JSON.parse(JSON.stringify(e));
+            delete c.managedBy; delete c.ownerSelf; delete c.proxyConsentAt; delete c.pinExpiresAt;
+            if (mmNow && mmNow.pinAuth) c.pinAuth = mmNow.pinAuth; /* 주선자 PIN을 이 계정 로그인 PIN으로 */
+            return c;
+          });
+          var jrs = (s.joinRequests || []).filter(function (j) { return j.toId !== me.id; });
+          tx.update(stateRef, { entries: entries, joinRequests: jrs });
+        });
+      }).then(function () {
+        currentUser = { id: ownSelf.id, nickname: ownSelf.nickname, pin: currentUser.pin }; saveSession();
+        actingResolved = false; actingAs = null; formRole = 'self';
+        appendLog('edit', ownSelf.nickname, '주선자→일반 계정 전환');
+        return refreshNow();
+      }).then(function () {
+        activeTab = 'mine'; paint(currentState);
+        modalNotice('전환 완료 🙋', ownSelf.nickname + '님, 이제 일반 소개팅 계정이에요. 같은 PIN으로 로그인해요.');
+      }).catch(function (err) { modalNotice('오류', '전환 실패: ' + (err.message || err)); });
     });
   }
   /* 로그인 유지: localStorage에 저장해 기기에서 오래 유지 (로그아웃 전까지) */
@@ -2825,6 +2903,25 @@
     );
   }
 
+  /* 나에게 온 "주선자 요청" 승인/거절 섹션 (주선자든 일반 회원이든 요청을 받으면 보이게) */
+  function joinRequestSectionHtml(state, showEmpty) {
+    if (!currentUser) return '';
+    var joinReqs = (state.joinRequests || []).filter(function (j) { return j.toId === currentUser.id; });
+    if (!joinReqs.length && !showEmpty) return '';
+    return '<div class="mine-section"><h3>🤝 받은 주선자 요청<span class="count' + (joinReqs.length ? ' blink' : '') + '">' + joinReqs.length + '</span></h3>' +
+      (joinReqs.length
+        ? joinReqs.map(function (j) {
+            return '<div style="border:1px solid var(--accent);border-radius:10px;padding:10px 12px;margin-top:8px;">' +
+              '<b>' + escapeHtml(j.fromNick) + '</b>님이 <b>주선자로 관리해 달라</b>고 요청했어요.' +
+              (j.message ? '<div style="margin-top:4px;color:var(--muted);font-size:0.85rem;white-space:pre-wrap;">“' + escapeHtml(j.message) + '”</div>' : '') +
+              '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">' +
+                '<button type="button" class="card-btn approve" data-action="join-approve" data-id="' + escapeHtml(j.id) + '" style="flex:none;">승인</button>' +
+                '<button type="button" class="card-btn danger" data-action="join-reject" data-id="' + escapeHtml(j.id) + '" style="flex:none;">거절</button>' +
+              '</div></div>';
+          }).join('')
+        : '<p class="sub" style="margin:0;">받은 요청이 없어요.</p>') +
+      '</div>';
+  }
   function renderMine(state) {
     var me = findMyEntry(state);
     var myPending = findMyPending(state);
@@ -2854,22 +2951,7 @@
         ? '<p class="sub" style="margin:0 0 10px;color:var(--accent);">⏳ 승인 대기 친구: ' + subPend.map(function (s) { return escapeHtml(s.nickname); }).join(', ') + '</p>'
         : '';
       var mmThread = threadFor(state, currentUser.id, 'user');
-      /* 일반 회원이 "내 밑으로 들어오고 싶다"고 보낸 요청 */
-      var joinReqs = (state.joinRequests || []).filter(function (j) { return j.toId === currentUser.id; });
-      var joinSection =
-        '<div class="mine-section"><h3>🤝 받은 주선자 요청<span class="count' + (joinReqs.length ? ' blink' : '') + '">' + joinReqs.length + '</span></h3>' +
-          (joinReqs.length
-            ? joinReqs.map(function (j) {
-                return '<div style="border:1px solid var(--accent);border-radius:10px;padding:10px 12px;margin-top:8px;">' +
-                  '<b>' + escapeHtml(j.fromNick) + '</b>님이 <b>주선자로 관리해 달라</b>고 요청했어요.' +
-                  (j.message ? '<div style="margin-top:4px;color:var(--muted);font-size:0.85rem;white-space:pre-wrap;">“' + escapeHtml(j.message) + '”</div>' : '') +
-                  '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">' +
-                    '<button type="button" class="card-btn approve" data-action="join-approve" data-id="' + escapeHtml(j.id) + '" style="flex:none;">승인</button>' +
-                    '<button type="button" class="card-btn danger" data-action="join-reject" data-id="' + escapeHtml(j.id) + '" style="flex:none;">거절</button>' +
-                  '</div></div>';
-              }).join('')
-            : '<p class="sub" style="margin:0;">받은 요청이 없어요.</p>') +
-        '</div>';
+      var joinSection = joinRequestSectionHtml(state, true); /* 주선자는 항상 표시 */
       mmHome =
           '<h2 style="margin:0 0 4px;">🤝 주선자 홈</h2>' +
           '<div class="my-uid">' + escapeHtml(currentUser.nickname) + ' · 주선자</div>' +
@@ -2882,7 +2964,9 @@
             '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">' +
               '<button type="button" class="card-btn primary" id="member-msg-open" style="flex:none;">✍️ 관리자에게 메시지</button>' +
               (mmThread.length ? '<button type="button" class="card-btn" id="member-msg-delall" style="flex:none;">전체 삭제</button>' : '') +
-            '</div></div>';
+            '</div></div>' +
+          '<div class="mine-section" style="margin-top:14px;"><button type="button" class="card-btn" id="convert-member" style="flex:none;">🙋 일반 계정으로 전환</button>' +
+            '<p class="sub" style="margin:6px 0 0;">친구 없이 본인 프로필만 있을 때, 주선자를 그만두고 일반 소개팅 계정으로 돌아가요.</p></div>';
     }
     /* Case A: 주선자 계정 자체로 보고 있음(본인 미전환/미등록) → 관리 홈만 */
     if (isMatchmakerEntry(me)) {
@@ -2980,8 +3064,13 @@
         '<div class="my-uid">고유번호 ' + escapeHtml(formatUid(me) || '—') + (isSubProfile ? ' · 🤝 대리' : '') + '</div>' +
         actingBanner +
         '<p class="sub">' + escapeHtml(me.nickname) + '님, 반가워요! 받은 요청은 직접 승인하거나 거절할 수 있어요.</p>' +
+        (isSubProfile ? '' : joinRequestSectionHtml(state, false)) + /* 나에게 온 주선자 요청 있으면 표시 */
         sections +
         (isSubProfile ? '' : msgSection) +
+        ((!isSubProfile && !isMatchmakerEntry(myAuthEntry(state)) && me.id === currentUser.id)
+          ? '<div class="mine-section" style="margin-top:14px;"><button type="button" class="card-btn" id="convert-mm" style="flex:none;">🤝 주선자 계정으로 전환</button>' +
+              '<p class="sub" style="margin:6px 0 0;">여러 친구를 소개하거나, 다른 회원의 주선자 요청을 받고 싶다면 전환하세요. 내 소개팅 프로필은 그대로 유지돼요.</p></div>'
+          : '') +
       '</div>'
     );
   }
@@ -5157,6 +5246,8 @@
     }
     if (e.target.closest('#request-mm')) { handleRequestMatchmaker(); return; }
     if (e.target.closest('#cancel-mm-req')) { handleCancelMmReq(); return; }
+    if (e.target.closest('#convert-mm')) { handleConvertToMatchmaker(); return; }
+    if (e.target.closest('#convert-member')) { handleConvertToMember(); return; }
     if (e.target.closest('#cancel-proxy')) {
       proxyRegisterMode = false;
       formRole = 'self';
