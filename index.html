@@ -2367,9 +2367,11 @@
       });
     }).catch(function () {});
   }
+  /* 하루 경계를 한국시간(KST, UTC+9) 기준으로 계산 (UTC로 하면 KST 오전 9시 이전 접속이 전날로 잡혀 누락됨) */
+  function kstDay(iso) { return new Date(new Date(iso).getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
   function touchLastSeen(entryId) {
     var now = new Date().toISOString();
-    var today = now.slice(0, 10); /* YYYY-MM-DD (UTC) */
+    var today = kstDay(now); /* YYYY-MM-DD (KST 기준 하루) */
     db.runTransaction(function (tx) {
       return tx.get(stateRef).then(function (doc) {
         var s = doc.data();
@@ -2382,7 +2384,7 @@
         var update = { entries: entries };
         /* 하루 1회 접속 로그 → 활동 기록에 접속 이력이 남게 (로그인 유지 상태로 열기만 해도 기록) */
         var logs = s.logs || [];
-        var loggedToday = logs.some(function (l) { return l.type === 'access' && l.actor === nick && (l.at || '').slice(0, 10) === today; });
+        var loggedToday = logs.some(function (l) { return l.type === 'access' && l.actor === nick && l.at && kstDay(l.at) === today; });
         if (!loggedToday) {
           logs = logs.concat([{ id: genId(), at: now, type: 'access', actor: nick, detail: '접속' }]);
           if (logs.length > LOG_LIMIT) logs = logs.slice(logs.length - LOG_LIMIT);
