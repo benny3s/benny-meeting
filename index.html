@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-86';
+  var APP_VERSION = '2026-09-07-87';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1393,6 +1393,14 @@
     var h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
     return (h > 0 ? h + '시간 ' : '') + m + '분 남음';
   }
+  /* 임시 PIN 만료 시각을 "M/D HH:MM까지"로 표기 */
+  function subPinUntilText(e) {
+    if (!e || !e.pinExpiresAt) return '';
+    var d = new Date(e.pinExpiresAt);
+    var mm = d.getMonth() + 1, dd = d.getDate();
+    var hh = ('0' + d.getHours()).slice(-2), mi = ('0' + d.getMinutes()).slice(-2);
+    return mm + '/' + dd + ' ' + hh + ':' + mi + '까지';
+  }
   function meIsMatchmaker() { var me = currentUser && (findMyEntry(currentState) || findMyPending(currentState)); return isMatchmakerEntry(me); }
   /* 내가(로그인한 회원이) 소개하는 대리 프로필 목록 */
   function entriesManagedByMe(state) {
@@ -1464,8 +1472,34 @@
         appendLog('request', currentUser.nickname, '(대리) ' + sub.nickname + ' 임시 로그인 PIN 발급(1일)');
         return refreshNow();
       }).then(function () {
-        modalNotice('임시 PIN 발급 완료 🔑', sub.nickname + '님에게 알려주세요 — "로그인에서 닉네임 ' + sub.nickname + ', PIN ' + r.p1 + ' 입력". 친구가 직접 후보를 보고 반응·요청할 수 있어요. 유효기간 24시간, 만료되면 다시 발급하면 돼요. (언제든 "PIN 회수"로 끊을 수 있어요)');
+        modalNotice('임시 PIN 발급 완료 🔑', sub.nickname + '님에게 알려주세요 — "로그인에서 닉네임 ' + sub.nickname + ', PIN ' + r.p1 + ' 입력". 친구가 직접 후보를 보고 반응·요청할 수 있어요. ' + subPinUntilText({ pinExpiresAt: expiresAt }) + ' 유효(24시간), 만료 전 "연장"으로 늘리거나 "회수"로 끊을 수 있어요.');
       }).catch(function (err) { modalNotice('오류', '발급 실패: ' + (err.message || err)); });
+    });
+  }
+  /* 임시 PIN 연장 (같은 PIN 유지, 만료시각만 24시간 뒤로) */
+  function handleExtendSubPin(subId) {
+    if (!currentUser) return;
+    var sub = ((currentState && currentState.entries) || []).find(function (e) { return e.id === subId && e.managedBy === currentUser.id; });
+    if (!sub) return;
+    if (!sub.pinAuth) return handleIssueSubPin(subId); /* 발급된 게 없으면 새로 발급으로 */
+    modalConfirm('임시 PIN 연장', sub.nickname + '님의 임시 로그인 PIN을 지금부터 24시간 더 연장할까요? (PIN은 그대로 유지돼요)', '연장', 'approve').then(function (ok) {
+      if (!ok) return;
+      var expiresAt = new Date(Date.now() + SUB_PIN_TTL_MS).toISOString();
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var entries = (s.entries || []).map(function (e) {
+            if (e.id !== subId) return e;
+            var c = JSON.parse(JSON.stringify(e)); c.pinExpiresAt = expiresAt; return c;
+          });
+          tx.update(stateRef, { entries: entries });
+        });
+      }).then(function () {
+        appendLog('request', currentUser.nickname, '(대리) ' + sub.nickname + ' 임시 PIN 연장(24시간)');
+        return refreshNow();
+      }).then(function () {
+        modalNotice('연장 완료 🔑', sub.nickname + '님 임시 PIN이 ' + subPinUntilText({ pinExpiresAt: expiresAt }) + ' 연장됐어요.');
+      }).catch(function (err) { modalNotice('오류', '연장 실패: ' + (err.message || err)); });
     });
   }
   function handleRevokeSubPin(subId) {
@@ -2811,10 +2845,11 @@
             var isOwn = !!s.ownerSelf;
             var pinActive = s.pinAuth && !subPinExpired(s);
             var pinExpiredNow = s.pinAuth && subPinExpired(s);
-            var pinBadge = isOwn ? '' : (pinActive ? '<span class="chip" style="background:#e6f4ea;color:#137333;">🔑 임시로그인 ON · ' + escapeHtml(subPinRemainText(s)) + '</span>'
+            var pinBadge = isOwn ? '' : (pinActive ? '<span class="chip" style="background:#e6f4ea;color:#137333;">🔑 임시로그인 ' + escapeHtml(subPinUntilText(s)) + '</span>'
               : (pinExpiredNow ? '<span class="chip" style="background:#f1f1f1;color:#888;">🔑 임시로그인 만료됨</span>' : ''));
             var pinBtns = isOwn ? '' : (pinActive
-              ? '<button type="button" class="card-btn danger" data-action="sub-pin-revoke" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">🔑 PIN 회수</button>'
+              ? '<button type="button" class="card-btn approve" data-action="sub-pin-extend" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">🔑 연장</button>' +
+                '<button type="button" class="card-btn danger" data-action="sub-pin-revoke" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">🔑 회수</button>'
               : '<button type="button" class="card-btn" data-action="sub-pin-issue" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">🔑 ' + (pinExpiredNow ? '임시 PIN 다시 발급' : '임시 PIN 발급') + '</button>');
             return '<div style="border:1px solid ' + (pend ? 'var(--accent)' : 'var(--line)') + ';border-radius:10px;padding:10px 12px;margin-top:8px;">' +
               (isOwn ? '🙋 ' : '🤝 ') + '<b>' + escapeHtml(s.nickname) + '</b>' + (isOwn ? ' <span class="chip" style="background:#fdeef0;color:var(--accent);">본인</span>' : '') + ' <span style="color:var(--muted);font-size:0.8rem;">' + escapeHtml(formatUid(s) || '') + '</span>' + (pend ? '<span class="count">받은요청 ' + pend + '</span>' : '') + ' ' + pinBadge +
@@ -2903,10 +2938,18 @@
     /* 메시지함 오른쪽 버튼 (상황별) */
     var headBtns = '';
     if (viaMatchmaker && !me.ownerSelf) {
-      /* 주선자가 친구(sub)로 전환해서 볼 때: 1일 임시 PIN 발급 / 독립(일반) 계정 전환 */
-      headBtns =
-        '<button type="button" class="card-btn" data-action="sub-pin-issue" data-id="' + escapeHtml(me.id) + '" style="flex:none;">🔑 1일 PIN 발급</button>' +
+      /* 주선자가 친구(sub)로 전환해서 볼 때: 1일 임시 PIN 발급/연장 + 독립(일반) 계정 전환 */
+      var pinOn = me.pinAuth && !subPinExpired(me);
+      var pinBtn = pinOn
+        ? '<button type="button" class="card-btn approve" data-action="sub-pin-extend" data-id="' + escapeHtml(me.id) + '" style="flex:none;" title="눌러서 24시간 연장">🔑 임시PIN ' + escapeHtml(subPinUntilText(me)) + ' · 연장</button>'
+        : '<button type="button" class="card-btn" data-action="sub-pin-issue" data-id="' + escapeHtml(me.id) + '" style="flex:none;">🔑 1일 PIN 발급</button>';
+      headBtns = pinBtn +
         '<button type="button" class="card-btn" data-action="sub-detach" data-id="' + escapeHtml(me.id) + '" style="flex:none;">🪪 일반 계정 전환</button>';
+    } else if (isSubProfile) {
+      /* 친구(sub)가 임시 PIN으로 직접 로그인한 경우: 만료 시각 표시 */
+      if (me.pinAuth && !subPinExpired(me)) {
+        headBtns = '<span class="chip" style="background:#e6f4ea;color:#137333;align-self:center;">🔑 임시 로그인 ' + escapeHtml(subPinUntilText(me)) + ' (' + escapeHtml(subPinRemainText(me)) + ')</span>';
+      }
     } else if (!isSubProfile) {
       /* 일반/주선자 본인 계정: 주선자 요청(내가 관리하는 사람이 없을 때만) + 친구 대신 소개 */
       var iManage = entriesManagedByMe(state).length > 0;
@@ -5136,6 +5179,7 @@
       else if (action === 'user-reject') handleUserRejectRequest(id);
       else if (action === 'switch-profile') handleSwitchProfile(id);
       else if (action === 'sub-pin-issue') handleIssueSubPin(id);
+      else if (action === 'sub-pin-extend') handleExtendSubPin(id);
       else if (action === 'sub-detach') handleDetachSub(id);
       else if (action === 'join-approve') handleApproveJoin(id);
       else if (action === 'join-reject') handleRejectJoin(id);
