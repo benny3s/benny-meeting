@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-95';
+  var APP_VERSION = '2026-09-07-96';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -2718,6 +2718,11 @@
     if (!isEdit && formRole === 'mm-new') return renderMatchmakerNew(state);
     if (!isEdit && formRole === 'matchmaker' && !currentUser) return renderMatchmakerAuth(state);
     var proxy = (proxyRegisterMode || (formRole === 'matchmaker' && currentUser)) && !isEdit; /* 친구 대신 소개(대리 등록) */
+    /* 승인 대기 중인 계정(로그인은 됐지만 아직 명단에 없음)은 친구 소개 불가 → 본인 버튼과 동일하게 막음 */
+    if (proxy && currentUser && !myAuthEntry(state) && findMyPending(state)) {
+      return roleToggleHtml() +
+        '<div class="form-card"><div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">⏳ 아직 <b>관리자 승인 대기</b> 중이에요. 승인되면 친구를 소개할 수 있어요. (승인 상태는 "메시지함"에서 확인)</div></div>';
+    }
     var ownerMMForm = !isEdit && !proxy && !!(currentUser && isMatchmakerEntry(myAuthEntry(state))); /* 주선자가 [본인] 탭에서 자기 프로필 작성 → PIN 없는 관리 프로필 */
     /* 상시 표시 예시 (입력 중에도 안 사라지게 위에 컬럼으로) */
     var exampleTip =
