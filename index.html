@@ -758,7 +758,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-78';
+  var APP_VERSION = '2026-09-07-79';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1313,6 +1313,31 @@
   }
   /* 주선자 역할(친구를 대신 등록·관리하는 계정) = Lv2 또는 Lv3 */
   function isMatchmakerRole(entry, state) { var lv = memberLevel(entry, state); return lv === 2 || lv === 3; }
+  /* 내 소개팅 프로필(본인): 주선자면 ownerSelf 프로필, 일반 회원이면 본인 계정 자체 */
+  function mySelfProfile(state) {
+    if (!currentUser) return null;
+    var authE = myAuthEntry(state);
+    if (authE && isMatchmakerEntry(authE)) {
+      return (state.entries || []).find(function (e) { return e.managedBy === currentUser.id && e.ownerSelf; }) || null;
+    }
+    return authE || null; /* 일반 회원(Lv1/Lv3)은 본인 계정이 곧 프로필 */
+  }
+  /* [본인] 폼 열기: 이미 본인 프로필이 있으면 수정, 없으면 새로 작성 */
+  function openSelfForm() {
+    formRole = 'self';
+    proxyRegisterMode = false;
+    editingEntryId = null;
+    photoDataUrls = [];
+    var prof = mySelfProfile(currentState);
+    if (prof) { startEditing(prof); return; } /* 이미 있으면 수정 (startEditing이 activeTab='form' + paint + 필드 채움) */
+    /* 승인 대기 중인 본인 프로필이 있으면 새로 만들지 않게 안내 */
+    var authE = myAuthEntry(currentState), pend = (currentState && currentState.pendingEntries) || [];
+    var pendSelf = (authE && isMatchmakerEntry(authE))
+      ? pend.find(function (e) { return e.managedBy === currentUser.id && e.ownerSelf; })
+      : pend.find(function (e) { return e.id === currentUser.id; });
+    if (pendSelf) { modalNotice('승인 대기', '본인 프로필이 관리자 승인 대기 중이에요. 승인되면 여기서 수정할 수 있어요.'); activeTab = 'mine'; paint(currentState); return; }
+    activeTab = 'form'; paint(currentState);
+  }
   /* 관리자용 등급 배지 (회원 명단에서 구분) */
   function levelBadge(entry, state) {
     if (entry && entry.ownerSelf) return '<span class="chip" style="background:#fdeef0;color:var(--accent);">🙋 본인</span>';
@@ -4641,10 +4666,11 @@
   document.body.addEventListener('click', function (e) {
     var roleBtn = e.target.closest('[data-role]');
     if (roleBtn) {
-      formRole = roleBtn.getAttribute('data-role'); /* 'self' | 'matchmaker' */
+      var rmode = roleBtn.getAttribute('data-role'); /* 'self' | 'matchmaker' */
       proxyRegisterMode = false;
       photoDataUrls = [];
-      paint(currentState);
+      if (rmode === 'self') { openSelfForm(); } /* 이미 본인 프로필 있으면 수정으로 */
+      else { formRole = rmode; paint(currentState); }
       return;
     }
     if (e.target.closest('#mm-new-btn')) { formRole = 'mm-new'; photoDataUrls = []; paint(currentState); return; }
@@ -4652,8 +4678,15 @@
     if (e.target.closest('#mm-login')) { handleLogin({ matchmakerOnly: true }); return; }
     var tabBtn = e.target.closest('[data-tab]');
     if (tabBtn) {
-      activeTab = tabBtn.getAttribute('data-tab');
-      if (activeTab === 'form') { exampleTipDismissed = false; proxyRegisterMode = false; formRole = meIsMatchmaker() ? 'matchmaker' : 'self'; } /* 탭 진입: 주선자면 sub추가, 아니면 본인 신청 */
+      var destTab = tabBtn.getAttribute('data-tab');
+      if (destTab === 'form') {
+        exampleTipDismissed = false; proxyRegisterMode = false; editingEntryId = null;
+        if (meIsMatchmaker()) { activeTab = 'form'; formRole = 'matchmaker'; paint(currentState); } /* 주선자 기본: 친구 추가 */
+        else { activeTab = 'form'; openSelfForm(); } /* 일반 회원: 본인 프로필(있으면 수정, 없으면 새로) */
+        window.scrollTo(0, 0);
+        return;
+      }
+      activeTab = destTab;
       if (activeTab === 'mine') markMineSeen();
       paint(currentState);
       window.scrollTo(0, 0); /* 탭 전환 시 맨 위로 */
