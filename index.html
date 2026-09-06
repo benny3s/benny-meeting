@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-105';
+  var APP_VERSION = '2026-09-07-106';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -1831,6 +1831,40 @@
         activeTab = 'mine'; paint(currentState);
         modalNotice('전환 완료 🙋', ownSelf.nickname + '님, 이제 일반 소개팅 계정이에요. 같은 PIN으로 로그인해요.');
       }).catch(function (err) { modalNotice('오류', '전환 실패: ' + (err.message || err)); });
+    });
+  }
+  /* 주선자 계정 삭제 (계정 + 본인 프로필). 관리 중인 친구가 있으면 먼저 정리 필요 */
+  function handleDeleteMatchmaker() {
+    if (!currentUser) return;
+    var me = myAuthEntry(currentState);
+    if (!me || !isMatchmakerEntry(me)) return modalNotice('안내', '주선자 계정만 여기서 삭제할 수 있어요.');
+    var subs = entriesManagedByMe(currentState);
+    var friends = subs.filter(function (e) { return !e.ownerSelf; });
+    if (friends.length) return modalNotice('삭제 불가', '내가 관리하는 친구가 있어요. 친구를 각각 정리(독립 전환 또는 삭제)한 뒤에 계정을 삭제할 수 있어요.');
+    var ownSelf = subs.find(function (e) { return e.ownerSelf; });
+    var msg = ownSelf
+      ? '주선자 계정과 내 소개팅 프로필(' + ownSelf.nickname + ')을 모두 삭제할까요? 되돌릴 수 없어요.'
+      : '주선자 계정을 삭제할까요? 되돌릴 수 없어요.';
+    modalConfirm('계정 삭제', msg, '삭제', 'danger').then(function (ok) {
+      if (!ok) return;
+      var delIds = {}; delIds[me.id] = true; if (ownSelf) delIds[ownSelf.id] = true;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var entries = (s.entries || []).filter(function (e) { return !delIds[e.id]; });
+          var reqs = (s.dateRequests || []).filter(function (r) { return !delIds[r.fromId] && !delIds[r.toId]; });
+          var jrs = (s.joinRequests || []).filter(function (j) { return !delIds[j.fromId] && !delIds[j.toId]; });
+          tx.update(stateRef, { entries: entries, dateRequests: reqs, joinRequests: jrs });
+        });
+      }).then(function () {
+        Object.keys(delIds).forEach(function (id) { try { photosRef.doc(id).delete().catch(function () {}); } catch (e) {} try { pushTokensRef.doc(id).delete().catch(function () {}); } catch (e) {} });
+        appendLog('admin', me.nickname, '주선자 계정 삭제(본인 포함)');
+        currentUser = null; actingAs = null; actingResolved = false; formRole = 'self'; saveSession();
+        return refreshNow();
+      }).then(function () {
+        activeTab = 'list'; paint(currentState);
+        modalNotice('삭제 완료', '계정이 삭제되었어요.');
+      }).catch(function (err) { modalNotice('오류', '삭제 실패: ' + (err.message || err)); });
     });
   }
   /* 로그인 유지: localStorage에 저장해 기기에서 오래 유지 (로그아웃 전까지) */
@@ -3056,7 +3090,9 @@
             '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">' +
               '<button type="button" class="card-btn primary" id="member-msg-open" style="flex:none;">✍️ 관리자에게 메시지</button>' +
               (mmThread.length ? '<button type="button" class="card-btn" id="member-msg-delall" style="flex:none;">전체 삭제</button>' : '') +
-            '</div></div>';
+            '</div></div>' +
+          '<div class="mine-section" style="margin-top:14px;"><button type="button" class="card-btn danger" id="delete-mm" style="flex:none;">🗑 주선자 계정 삭제</button>' +
+            '<p class="sub" style="margin:6px 0 0;">계정과 내 소개팅 프로필을 삭제해요. (관리 중인 친구가 있으면 먼저 정리해야 해요)</p></div>';
     }
     /* Case A: 주선자 계정 자체로 보고 있음(본인 미전환/미등록) → 관리 홈만 */
     if (isMatchmakerEntry(me)) {
@@ -5343,6 +5379,7 @@
     if (e.target.closest('#cancel-mm-req')) { handleCancelMmReq(); return; }
     if (e.target.closest('#convert-mm')) { handleConvertToMatchmaker(); return; }
     if (e.target.closest('#convert-member')) { handleConvertToMember(); return; }
+    if (e.target.closest('#delete-mm')) { handleDeleteMatchmaker(); return; }
     if (e.target.closest('#ps-expand')) { switcherExpanded = !switcherExpanded; adjustSwitcherClip(); return; }
     if (e.target.closest('#cancel-proxy')) {
       proxyRegisterMode = false;
