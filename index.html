@@ -79,9 +79,9 @@
   .masthead {
     background: var(--ink);
     color: var(--paper);
-    padding: 36px 20px 20px;
+    padding: 36px 20px 18px;
     border-bottom: 3px dashed var(--gold);
-    margin-bottom: 32px;
+    margin-bottom: 12px;
   }
   .masthead-inner { max-width: 880px; margin: 0 auto; display: flex; align-items: center; gap: 14px; }
   .masthead-icon { color: var(--accent); flex-shrink: 0; }
@@ -758,7 +758,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-06-77';
+  var APP_VERSION = '2026-09-07-78';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -872,8 +872,10 @@
     var err = document.getElementById('nick-err');
     var dup = false;
     if (v && currentState) {
+      /* 주선자가 본인 프로필을 만들 땐 주선자 계정과 같은 닉네임 허용 */
+      var exemptId = (!editingEntryId && currentUser && isMatchmakerEntry(myAuthEntry(currentState))) ? currentUser.id : null;
       var all = (currentState.entries || []).concat(currentState.pendingEntries || []);
-      dup = all.some(function (e) { return e.id !== editingEntryId && (e.nickname || '').trim().toLowerCase() === v; });
+      dup = all.some(function (e) { return e.id !== editingEntryId && e.id !== exemptId && (e.nickname || '').trim().toLowerCase() === v; });
     }
     if (dup) { el.classList.add('input-dup'); if (err) err.hidden = false; }
     else { el.classList.remove('input-dup'); if (err) err.hidden = true; }
@@ -1313,6 +1315,7 @@
   function isMatchmakerRole(entry, state) { var lv = memberLevel(entry, state); return lv === 2 || lv === 3; }
   /* 관리자용 등급 배지 (회원 명단에서 구분) */
   function levelBadge(entry, state) {
+    if (entry && entry.ownerSelf) return '<span class="chip" style="background:#fdeef0;color:var(--accent);">🙋 본인</span>';
     var lv = memberLevel(entry, state);
     if (lv === 0) return '<span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 친구</span>';
     if (lv === 2) return '<span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자</span>';
@@ -2297,6 +2300,7 @@
     if (!isEdit && formRole === 'mm-new') return renderMatchmakerNew(state);
     if (!isEdit && formRole === 'matchmaker' && !currentUser) return renderMatchmakerAuth(state);
     var proxy = (proxyRegisterMode || (formRole === 'matchmaker' && currentUser)) && !isEdit; /* 친구 대신 소개(대리 등록) */
+    var ownerMMForm = !isEdit && !proxy && !!(currentUser && isMatchmakerEntry(myAuthEntry(state))); /* 주선자가 [본인] 탭에서 자기 프로필 작성 → PIN 없는 관리 프로필 */
     /* 상시 표시 예시 (입력 중에도 안 사라지게 위에 컬럼으로) */
     var exampleTip =
       '<div class="example-cols">' +
@@ -2326,14 +2330,14 @@
       roleToggle + setupNote + editNote + proxyNote +
       '<div class="form-card">' +
         '<div class="form-lede">' +
-          '<h2>' + (isEdit ? '프로필 수정' : (proxy ? '🤝 친구를 소개해 주세요' : '본인을 소개해 주세요')) + '</h2>' +
-          '<p>' + (isEdit ? '수정할 항목을 변경한 뒤 저장하세요.' : (proxy ? '소개할 친구의 정보를 채워주세요. 관리자 승인 후 명단에 올라가요.' : '아래 정보를 채워서 제출하면 관리자 승인 후 명단에 올라가요.')) + '</p>' +
+          '<h2>' + (isEdit ? '프로필 수정' : (proxy ? '🤝 친구를 소개해 주세요' : (ownerMMForm ? '🙋 내 소개팅 프로필' : '본인을 소개해 주세요'))) + '</h2>' +
+          '<p>' + (isEdit ? '수정할 항목을 변경한 뒤 저장하세요.' : (proxy ? '소개할 친구의 정보를 채워주세요. 관리자 승인 후 명단에 올라가요.' : (ownerMMForm ? '주선자님 본인의 소개팅 프로필이에요. 승인 후 상단 "🔄 활동 중 프로필"에서 본인으로 전환해 직접 활동할 수 있어요. (PIN 없이 주선자 계정으로 관리)' : '아래 정보를 채워서 제출하면 관리자 승인 후 명단에 올라가요.'))) + '</p>' +
         '</div>' +
         '<form id="entry-form" novalidate>' +
           '<div class="field-group">' +
             '<div class="row-2">' +
               '<div class="field"><label for="f-nickname">공개 이름 (닉네임) <span class="req">필수</span></label>' +
-                '<input type="text" id="f-nickname" name="nickname" maxlength="20" placeholder="예: 민지" required>' +
+                '<input type="text" id="f-nickname" name="nickname" maxlength="20" placeholder="예: 민지"' + (ownerMMForm ? ' value="' + escapeHtml((currentUser && currentUser.nickname) || '') + '"' : '') + ' required>' +
                 '<span class="hint">닉네임 사용 추천 (전 소개팅녀/소개팅남 모르게)</span>' +
                 '<div class="field-error" id="nick-err" hidden>이미 사용 중인 닉네임이에요. 다른 닉네임을 써주세요.</div></div>' +
               '<div class="field"><label for="f-realname">실명 ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
@@ -2360,7 +2364,9 @@
               '<input type="text" id="f-region" name="region" maxlength="40" placeholder="예: 서울 마포구" required></div>' +
             '<div class="field"><label for="f-workplace">직장 위치 <span class="opt">(회사명/직업 공개는 자유)</span> <span class="req">필수</span></label>' +
               '<input type="text" id="f-workplace" name="workplace" maxlength="60" placeholder="예: 강남 (아모레/연구원)" required></div>' +
-            (proxy
+            (ownerMMForm
+              ? '<input type="hidden" id="f-referrer" name="referrerText" value="">'
+              : proxy
               ? '<div class="field"><label for="f-referrer">소개 대상과의 관계 <span class="opt">(선택)</span></label>' +
                   '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 대학 후배 / 회사 동료">' +
                   '<span class="hint">' + ICON_LOCK + ' 주선자(나)와 소개 대상의 관계예요. 관리자만 볼 수 있어요.</span></div>'
@@ -2377,7 +2383,7 @@
                 '</label>' +
               '</div></div>' +
             '<div class="section-label">추가 정보</div>' +
-            (proxy
+            ((proxy || ownerMMForm)
               ? '<input type="hidden" id="f-pin" name="pin" value="">'
               : (function () {
                   var loggedIn = !isEdit && !!currentUser; /* 로그인 상태로 본인 프로필 작성 시 PIN 재입력 생략 */
@@ -2545,19 +2551,20 @@
       var subs = entriesManagedByMe(state);
       var subPend = (state.pendingEntries || []).filter(function (e) { return e.managedBy === currentUser.id; });
       var subList = (subs.length || subPend.length)
-        ? subs.map(function (s) {
+        ? subs.slice().sort(function (a, b) { return (b.ownerSelf ? 1 : 0) - (a.ownerSelf ? 1 : 0); }).map(function (s) {
             var pend = (state.dateRequests || []).filter(function (r) { return r.toId === s.id && (function(x){return x==='pending'||x==='held';})(reqStatus(r)); }).length;
+            var isOwn = !!s.ownerSelf;
             var pinActive = s.pinAuth && !subPinExpired(s);
             var pinExpiredNow = s.pinAuth && subPinExpired(s);
-            var pinBadge = pinActive ? '<span class="chip" style="background:#e6f4ea;color:#137333;">🔑 임시로그인 ON · ' + escapeHtml(subPinRemainText(s)) + '</span>'
-              : (pinExpiredNow ? '<span class="chip" style="background:#f1f1f1;color:#888;">🔑 임시로그인 만료됨</span>' : '');
-            var pinBtns = pinActive
+            var pinBadge = isOwn ? '' : (pinActive ? '<span class="chip" style="background:#e6f4ea;color:#137333;">🔑 임시로그인 ON · ' + escapeHtml(subPinRemainText(s)) + '</span>'
+              : (pinExpiredNow ? '<span class="chip" style="background:#f1f1f1;color:#888;">🔑 임시로그인 만료됨</span>' : ''));
+            var pinBtns = isOwn ? '' : (pinActive
               ? '<button type="button" class="card-btn danger" data-action="sub-pin-revoke" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">🔑 PIN 회수</button>'
-              : '<button type="button" class="card-btn" data-action="sub-pin-issue" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">🔑 ' + (pinExpiredNow ? '임시 PIN 다시 발급' : '임시 PIN 발급') + '</button>';
+              : '<button type="button" class="card-btn" data-action="sub-pin-issue" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">🔑 ' + (pinExpiredNow ? '임시 PIN 다시 발급' : '임시 PIN 발급') + '</button>');
             return '<div style="border:1px solid ' + (pend ? 'var(--accent)' : 'var(--line)') + ';border-radius:10px;padding:10px 12px;margin-top:8px;">' +
-              '🤝 <b>' + escapeHtml(s.nickname) + '</b> <span style="color:var(--muted);font-size:0.8rem;">' + escapeHtml(formatUid(s) || '') + '</span>' + (pend ? '<span class="count">받은요청 ' + pend + '</span>' : '') + ' ' + pinBadge +
+              (isOwn ? '🙋 ' : '🤝 ') + '<b>' + escapeHtml(s.nickname) + '</b>' + (isOwn ? ' <span class="chip" style="background:#fdeef0;color:var(--accent);">본인</span>' : '') + ' <span style="color:var(--muted);font-size:0.8rem;">' + escapeHtml(formatUid(s) || '') + '</span>' + (pend ? '<span class="count">받은요청 ' + pend + '</span>' : '') + ' ' + pinBadge +
               '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">' +
-                '<button type="button" class="card-btn" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">이 친구로 전환</button>' +
+                '<button type="button" class="card-btn" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">' + (isOwn ? '내 프로필로 전환' : '이 친구로 전환') + '</button>' +
                 pinBtns +
               '</div></div>';
           }).join('') +
@@ -2752,43 +2759,62 @@
           '<div style="margin-top:10px;">' + doneItems + '</div></details>'
       : '';
 
-    /* 접속 기록 + 사진/번호 권한 관리 (컬럼별 정렬 가능) */
-    var seenData = allEntries.map(function (e) {
+    /* 회원 명단 (트리): 로그인 계정(주선자/일반)이 최상위, 그 아래 관리 프로필(본인/친구) */
+    function permCounts(e) {
       return {
-        e: e,
         photoN: allEntries.filter(function (x) { return x.id !== e.id && canViewPhotoOf(state, x.id, e.id); }).length,
         contactN: allEntries.filter(function (x) { return x.id !== e.id && canViewContactOf(state, x.id, e.id); }).length
       };
+    }
+    var childrenByMgr = {};
+    allEntries.forEach(function (e) { if (e.managedBy) { (childrenByMgr[e.managedBy] = childrenByMgr[e.managedBy] || []).push(e); } });
+    var tops = allEntries.filter(function (e) { return !e.managedBy; }).map(function (e) {
+      var pc = permCounts(e); return { e: e, photoN: pc.photoN, contactN: pc.contactN };
     });
     var sc = adminSeenSort, sdir = sc.dir === 'asc' ? 1 : -1;
-    seenData.sort(function (a, b) {
+    tops.sort(function (a, b) {
       var r = 0;
       if (sc.col === 'uid') r = (a.e.serial || 0) - (b.e.serial || 0);
       else if (sc.col === 'seen') r = (a.e.lastSeenAt || '').localeCompare(b.e.lastSeenAt || '');
       else if (sc.col === 'photo') r = a.photoN - b.photoN;
       else if (sc.col === 'contact') r = a.contactN - b.contactN;
-      if (r === 0) r = (a.e.serial || 0) - (b.e.serial || 0); /* 동점 시 고유번호 */
+      if (r === 0) r = (a.e.serial || 0) - (b.e.serial || 0);
       return r * sdir;
     });
-    var seenRows = seenData.map(function (d) {
-      var e = d.e;
-      return '<tr><td data-action="card-detail" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer;">' +
-        '<div style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(e) || '—') + (e.testAccount ? ' 🧪' : '') + '</div>' +
+    function permCell(e, count, kind) {
+      if (isMatchmakerEntry(e)) return '<td style="text-align:center;color:var(--muted);">—</td>'; /* 순수 주선자는 소개팅 당사자 아님 */
+      var act = kind === 'photo' ? 'perm-photo' : 'perm-contact', icon = kind === 'photo' ? '📷' : '📱';
+      return '<td style="text-align:center;"><button type="button" class="card-btn" data-action="' + act + '" data-id="' + escapeHtml(e.id) + '" style="flex:none;padding:3px 9px;">' + icon + ' ' + count + '</button></td>';
+    }
+    function nameCell(e, indent) {
+      return '<td data-action="card-detail" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer;' + (indent ? 'padding-left:18px;' : '') + '">' +
+        (indent ? '<span style="color:var(--muted);">↳ </span>' : '') +
+        '<div style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;display:inline;">' + escapeHtml(formatUid(e) || '—') + (e.testAccount ? ' 🧪' : '') + '</div>' +
         '<div style="text-decoration:underline dotted;">' + escapeHtml(e.nickname) + '</div>' +
         '<div style="margin-top:3px;">' + levelBadge(e, state) + '</div>' +
-        '</td>' +
+        '</td>';
+    }
+    var seenRows = tops.map(function (d) {
+      var e = d.e;
+      var row = '<tr>' + nameCell(e, false) +
         '<td class="seen-date">' + (e.lastSeenAt ? new Date(e.lastSeenAt).toLocaleString('ko-KR') : '기록 없음') + '</td>' +
-        '<td style="text-align:center;"><button type="button" class="card-btn" data-action="perm-photo" data-id="' + escapeHtml(e.id) + '" style="flex:none;padding:3px 9px;">📷 ' + d.photoN + '</button></td>' +
-        '<td style="text-align:center;"><button type="button" class="card-btn" data-action="perm-contact" data-id="' + escapeHtml(e.id) + '" style="flex:none;padding:3px 9px;">📱 ' + d.contactN + '</button></td>' +
-        '</tr>';
+        permCell(e, d.photoN, 'photo') + permCell(e, d.contactN, 'contact') + '</tr>';
+      var kids = (childrenByMgr[e.id] || []).slice().sort(function (a, b) { return (b.ownerSelf ? 1 : 0) - (a.ownerSelf ? 1 : 0); });
+      row += kids.map(function (c) {
+        var pc = permCounts(c);
+        return '<tr style="background:rgba(0,0,0,0.02);">' + nameCell(c, true) +
+          '<td class="seen-date" style="color:var(--muted);">—</td>' +
+          permCell(c, pc.photoN, 'photo') + permCell(c, pc.contactN, 'contact') + '</tr>';
+      }).join('');
+      return row;
     }).join('');
     function seenTh(col, label) {
       return '<th data-action="seen-sort" data-col="' + col + '" style="cursor:pointer;user-select:none;white-space:nowrap;">' + label + sortArrow(adminSeenSort, col) + '</th>';
     }
     var seenSection =
       '<h2>👥 회원 명단</h2>' +
-      '<p class="sub">구분: <span class="chip" style="background:#f1f1f1;color:#777;">일반</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 친구</span> <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자</span>. 헤더로 정렬 · 닉네임 클릭 = 프로필 · 📷/📱 = 볼 수 있는 사람 수(클릭해서 관리).</p>' +
-      (allEntries.length
+      '<p class="sub">로그인 계정이 상위, 그 아래 <span class="chip" style="background:#fdeef0;color:var(--accent);">🙋 본인</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 친구</span> 가 붙어요. <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자</span> <span class="chip" style="background:#f1f1f1;color:#777;">일반</span>. 헤더로 정렬 · 닉네임 클릭 = 프로필 · 📷/📱 = 볼 수 있는 사람 수(클릭해서 관리).</p>' +
+      (tops.length
         ? '<div class="admin-table-wrap"><table class="seen-table"><thead><tr>' +
             seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 권한') + seenTh('contact', '📱 권한') +
           '</tr></thead><tbody>' + seenRows + '</tbody></table></div>'
@@ -3019,7 +3045,8 @@
         var chips = '<button type="button" class="pf-switch-chip' + (selfActive ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(currentUser.id) + '">' + escapeHtml(currentUser.nickname) + selfSuffix + '</button>';
         chips += mySubs.map(function (s) {
           var on = actingAs === s.id;
-          return '<button type="button" class="pf-switch-chip' + (on ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '">🤝 ' + escapeHtml(s.nickname) + '</button>';
+          var lbl = s.ownerSelf ? ('🙋 ' + escapeHtml(s.nickname) + ' (본인)') : ('🤝 ' + escapeHtml(s.nickname));
+          return '<button type="button" class="pf-switch-chip' + (on ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '">' + lbl + '</button>';
         }).join('');
         chips += '<button type="button" class="pf-switch-chip pf-switch-add" data-action="switch-add">＋ 친구 소개</button>';
         switcher = '<div class="profile-switch"><span class="ps-label">🔄 누구로 활동할까요? <span style="font-weight:400;color:var(--muted);">눌러서 전환</span></span><div class="ps-chips">' + chips + '</div></div>';
@@ -3343,6 +3370,9 @@
 
     var isEdit = !!editingEntryId;
     var proxy = proxyRegisterMode && !isEdit; /* 친구 대신 소개(대리 등록) */
+    /* 주선자(Lv2)가 [본인] 탭에서 자기 소개팅 프로필을 만드는 경우 → 주선자 아래 관리 프로필로 생성(별도 로그인 없음) */
+    var ownerByMM = !proxy && !isEdit && !!(currentUser && isMatchmakerEntry(myAuthEntry(state)));
+    var managedCreate = proxy || ownerByMM; /* 주선자 아래 관리 프로필 생성(managedBy 설정, 로그인 전환 안 함) */
     var origEntry = isEdit ? (state.entries || []).find(function (e) { return e.id === editingEntryId; }) : null;
 
     var missing = [];
@@ -3355,8 +3385,8 @@
     if (!isEdit) {
       if (!realName) missing.push('실명');
       if (!contact) missing.push('전화번호');
-      if (!proxy && !referrerText) missing.push('소개자'); /* 대리 등록은 소개자 선택 */
-      if (!proxy && !pin && !currentUser) missing.push('개인 PIN'); /* 로그인 상태면 기존 PIN 재사용 가능 */
+      if (!managedCreate && !referrerText) missing.push('소개자'); /* 대리/주선자본인 등록은 소개자 선택 */
+      if (!managedCreate && !pin && !currentUser) missing.push('개인 PIN'); /* 로그인 상태면 기존 PIN 재사용 가능 */
       if (intro.length < 20) missing.push('자기소개(20자 이상)');
       if (idealType.length < 20) missing.push('원하는 이성 조건(20자 이상)');
       if (dealbreaker.length < 20) missing.push('피하고 싶은 조건(20자 이상)');
@@ -3377,7 +3407,8 @@
       }
     }
     if (proxy && !referrerText) referrerText = '주선자: ' + ((currentUser && currentUser.nickname) || '');
-    if (!isEdit && !proxy && !pin && currentUser && currentUser.pin) pin = currentUser.pin; /* 로그인 상태 본인 프로필: 기존 PIN 그대로 사용 */
+    if (ownerByMM && !referrerText) referrerText = '주선자 본인';
+    if (!isEdit && !managedCreate && !pin && currentUser && currentUser.pin) pin = currentUser.pin; /* 로그인(일반) 상태 본인 프로필: 기존 PIN 그대로 사용 (주선자 관리 프로필은 PIN 없음) */
     if (pin && pin.length < 4) {
       modalNotice('입력 오류', 'PIN은 4자리 이상이어야 해요.');
       return;
@@ -3386,10 +3417,11 @@
       modalNotice('입력 오류', '전화번호는 01012345678 형식으로 입력해주세요.');
       return;
     }
-    /* 닉네임 중복 확인 (본인 제외) */
+    /* 닉네임 중복 확인 (본인 제외). 주선자 본인 프로필은 주선자 계정과 같은 닉네임 허용 */
     var nickLower = nickname.toLowerCase();
+    var nickExemptId = ownerByMM ? currentUser.id : editingEntryId;
     var dup = (state.entries || []).concat(state.pendingEntries || []).some(function (e) {
-      return e.id !== editingEntryId && (e.nickname || '').trim().toLowerCase() === nickLower;
+      return e.id !== editingEntryId && e.id !== nickExemptId && (e.nickname || '').trim().toLowerCase() === nickLower;
     });
     if (dup) {
       modalNotice('닉네임 중복', '이미 사용 중인 닉네임이에요. 다른 닉네임을 사용해주세요.');
@@ -3411,7 +3443,7 @@
     var finalPhotos = photoDataUrls.slice();
 
     var selfPin = pin || (currentUser && currentUser.id === entryId ? currentUser.pin : null);
-    if (proxy && currentUser) selfPin = currentUser.pin; /* 대리 프로필 번호를 주선자 PIN으로 암호화 → sub 전환 시 번호 사용 가능 */
+    if (managedCreate && currentUser) selfPin = currentUser.pin; /* 관리 프로필(대리/주선자본인) 번호를 주선자 PIN으로 암호화 → 전환 시 번호 사용 가능 */
     var encPromises = [
       realName ? encryptForAdmin(pubJwk, realName) : Promise.resolve(null),
       contact ? encryptForAdmin(pubJwk, contact) : Promise.resolve(null),
@@ -3489,6 +3521,9 @@
             entry.managedBy = currentUser.id;      /* 이 프로필을 관리하는 주선자 */
             entry.isProxy = true;
             entry.proxyConsentAt = new Date().toISOString();
+          } else if (ownerByMM) {
+            entry.managedBy = currentUser.id;      /* 주선자 아래 '본인' 프로필 */
+            entry.ownerSelf = true;
           }
           return stateRef.update({
             pendingEntries: firebase.firestore.FieldValue.arrayUnion(entry)
@@ -3505,14 +3540,20 @@
         modalNotice('완료', '프로필이 수정되었어요.');
         activeTab = 'list';
         paint(currentState);
-      } else if (proxy) {
-        /* 대리 등록: 주선자는 로그인 유지, 새 프로필로 바꾸지 않음 */
+      } else if (managedCreate) {
+        /* 대리 등록 / 주선자 본인: 주선자는 로그인 유지, 새 프로필로 바꾸지 않음 */
         editingEntryId = null;
         proxyRegisterMode = false;
         var mgrNick = (currentUser && currentUser.nickname) || '주선자';
-        appendLog('signup', mgrNick, '친구 대신 소개 신청: ' + nickname);
-        notifyAdmin('새 신청서 📝 (대리)', mgrNick + '님이 ' + nickname + '님을 대신 소개했어요 (승인 대기).');
-        modalNotice('접수 완료 🤝', nickname + '님을 대신 소개했어요! 관리자 승인 후 명단에 올라가요. 승인되면 상단 "🔄 활동 중 프로필"에서 그 친구로 전환해 요청을 대신 승인·관리할 수 있어요.');
+        if (ownerByMM) {
+          appendLog('signup', mgrNick, '주선자 본인 프로필 등록: ' + nickname);
+          notifyAdmin('새 신청서 📝 (주선자 본인)', mgrNick + '님이 본인 프로필(' + nickname + ')을 등록했어요 (승인 대기).');
+          modalNotice('접수 완료 🙋', '본인 프로필을 등록했어요! 관리자 승인 후 명단에 올라가요. 상단 "🔄 활동 중 프로필"에서 본인으로 전환해 직접 요청·승인할 수 있어요.');
+        } else {
+          appendLog('signup', mgrNick, '친구 대신 소개 신청: ' + nickname);
+          notifyAdmin('새 신청서 📝 (대리)', mgrNick + '님이 ' + nickname + '님을 대신 소개했어요 (승인 대기).');
+          modalNotice('접수 완료 🤝', nickname + '님을 대신 소개했어요! 관리자 승인 후 명단에 올라가요. 승인되면 상단 "🔄 활동 중 프로필"에서 그 친구로 전환해 요청을 대신 승인·관리할 수 있어요.');
+        }
         activeTab = 'mine';
         paint(currentState);
       } else {
