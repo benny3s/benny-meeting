@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-99';
+  var APP_VERSION = '2026-09-07-100';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1914,7 +1914,7 @@
         } else {
           listEl.innerHTML = matches.map(function (o) {
             return '<div class="login-item' + (o.id === selectedId ? ' sel' : '') + '" data-cid="' + escapeHtml(o.id) + '">' +
-              '<b style="font-size:1.02rem;">' + escapeHtml(o.nickname) + '</b> <span style="color:var(--muted);font-size:0.76rem;font-variant-numeric:tabular-nums;">' + escapeHtml(o.uid || '승인대기') + '</span></div>';
+              '<span style="color:var(--muted);font-size:0.8rem;font-variant-numeric:tabular-nums;">' + escapeHtml(o.uid || '승인대기') + '</span> <b style="color:var(--ink);">' + escapeHtml(o.nickname) + '</b></div>';
           }).join('');
         }
       }
