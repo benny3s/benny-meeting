@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-83';
+  var APP_VERSION = '2026-09-07-84';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1787,7 +1787,7 @@
   }
 
   /* ---- activity log ---- */
-  var LOG_LIMIT = 300;
+  var LOG_LIMIT = 600;
   function appendLog(type, actor, detail) {
     var entry = { id: genId(), at: new Date().toISOString(), type: type, actor: actor || '', detail: detail || '' };
     stateRef.get().then(function (doc) {
@@ -1962,15 +1962,26 @@
   }
   function touchLastSeen(entryId) {
     var now = new Date().toISOString();
+    var today = now.slice(0, 10); /* YYYY-MM-DD (UTC) */
     db.runTransaction(function (tx) {
       return tx.get(stateRef).then(function (doc) {
         var s = doc.data();
-        var changed = false;
+        var changed = false, nick = '';
         var entries = (s.entries || []).map(function (e) {
-          if (e.id === entryId) { changed = true; var c = JSON.parse(JSON.stringify(e)); c.lastSeenAt = now; return c; }
+          if (e.id === entryId) { changed = true; nick = e.nickname; var c = JSON.parse(JSON.stringify(e)); c.lastSeenAt = now; return c; }
           return e;
         });
-        if (changed) tx.update(stateRef, { entries: entries });
+        if (!changed) return;
+        var update = { entries: entries };
+        /* 하루 1회 접속 로그 → 활동 기록에 접속 이력이 남게 (로그인 유지 상태로 열기만 해도 기록) */
+        var logs = s.logs || [];
+        var loggedToday = logs.some(function (l) { return l.type === 'access' && l.actor === nick && (l.at || '').slice(0, 10) === today; });
+        if (!loggedToday) {
+          logs = logs.concat([{ id: genId(), at: now, type: 'access', actor: nick, detail: '접속' }]);
+          if (logs.length > LOG_LIMIT) logs = logs.slice(logs.length - LOG_LIMIT);
+          update.logs = logs;
+        }
+        tx.update(stateRef, update);
       });
     }).catch(function () {});
   }
@@ -2863,16 +2874,21 @@
         '<div style="margin-top:3px;">' + levelBadge(e, state) + '</div>' +
         '</td>';
     }
+    /* 접속 칸 = 클릭하면 아래 활동 기록을 그 닉네임으로 필터링 */
+    function seenCell(e, isChild) {
+      var dateTxt = e.lastSeenAt ? new Date(e.lastSeenAt).toLocaleString('ko-KR') : (isChild ? '' : '기록 없음');
+      var inner = (dateTxt ? escapeHtml(dateTxt) + ' ' : '') + '<span style="text-decoration:underline dotted;white-space:nowrap;">📜 기록</span>';
+      return '<td class="seen-date" data-action="log-filter" data-nick="' + escapeHtml(e.nickname) + '" title="이 사람의 활동 기록 보기"' +
+        ' style="cursor:pointer;' + (isChild ? 'color:var(--muted);' : '') + '">' + inner + '</td>';
+    }
     var seenRows = tops.map(function (d) {
       var e = d.e;
-      var row = '<tr>' + nameCell(e, false) +
-        '<td class="seen-date">' + (e.lastSeenAt ? new Date(e.lastSeenAt).toLocaleString('ko-KR') : '기록 없음') + '</td>' +
+      var row = '<tr>' + nameCell(e, false) + seenCell(e, false) +
         permCell(e, d.photoN, 'photo') + permCell(e, d.contactN, 'contact') + '</tr>';
       var kids = (childrenByMgr[e.id] || []).slice().sort(function (a, b) { return (b.ownerSelf ? 1 : 0) - (a.ownerSelf ? 1 : 0); });
       row += kids.map(function (c) {
         var pc = permCounts(c);
-        return '<tr style="background:rgba(0,0,0,0.02);">' + nameCell(c, true) +
-          '<td class="seen-date" style="color:var(--muted);">—</td>' +
+        return '<tr style="background:rgba(0,0,0,0.02);">' + nameCell(c, true) + seenCell(c, true) +
           permCell(c, pc.photoN, 'photo') + permCell(c, pc.contactN, 'contact') + '</tr>';
       }).join('');
       return row;
@@ -2882,7 +2898,7 @@
     }
     var seenSection =
       '<h2>👥 회원 명단</h2>' +
-      '<p class="sub">로그인 계정이 상위, 그 아래 <span class="chip" style="background:#fdeef0;color:var(--accent);">🙋 본인</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 친구</span> 가 붙어요. <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자</span> <span class="chip" style="background:#f1f1f1;color:#777;">일반</span>. 헤더로 정렬 · 닉네임 클릭 = 프로필 · 📷/📱 = 볼 수 있는 사람 수(클릭해서 관리).</p>' +
+      '<p class="sub">로그인 계정이 상위, 그 아래 <span class="chip" style="background:#fdeef0;color:var(--accent);">🙋 본인</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 친구</span> 가 붙어요. <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자</span> <span class="chip" style="background:#f1f1f1;color:#777;">일반</span>. 헤더로 정렬 · 닉네임 클릭 = 프로필 · <b>접속(📜 기록) 클릭 = 활동 기록 보기</b> · 📷/📱 = 볼 수 있는 사람 수(클릭해서 관리).</p>' +
       (tops.length
         ? '<div class="admin-table-wrap"><table class="seen-table"><thead><tr>' +
             seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 권한') + seenTh('contact', '📱 권한') +
@@ -2938,7 +2954,7 @@
       return '<th data-action="log-sort" data-col="' + col + '" style="cursor:pointer;user-select:none;white-space:nowrap;">' + label + sortArrow(adminLogSort, col) + '</th>';
     }
     var logSection =
-      '<h2>📜 활동 기록</h2>' +
+      '<h2 id="activity-log-section">📜 활동 기록</h2>' +
       '<p class="sub">헤더로 정렬, 아래 칸으로 검색해요. 최근 ' + LOG_LIMIT + '건까지 보관. (관리자만)</p>' +
       (logData.length
         ? '<div class="admin-table-wrap"><table class="seen-table log-table"><thead>' +
@@ -4911,6 +4927,12 @@
       else if (action === 'perm-photo') { if (isAdminUnlocked) openPermPopup(id, 'photo'); }
       else if (action === 'perm-contact') { if (isAdminUnlocked) openPermPopup(id, 'contact'); }
       else if (action === 'seen-sort') { toggleSort(adminSeenSort, actionBtn.getAttribute('data-col'), 'desc'); paint(currentState); }
+      else if (action === 'log-filter') {
+        adminLogFilterActor = actionBtn.getAttribute('data-nick') || '';
+        adminLogFilterTime = '';
+        paint(currentState);
+        try { var sec = document.getElementById('activity-log-section'); if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e2) {}
+      }
       else if (action === 'log-sort') { toggleSort(adminLogSort, actionBtn.getAttribute('data-col'), 'desc'); paint(currentState); }
       else if (action === 'cancel-sent') handleCancelSent(id);
       else if (action === 'reapply') handleReapplyRequest(id);
