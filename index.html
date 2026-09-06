@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-97';
+  var APP_VERSION = '2026-09-07-98';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1722,7 +1722,9 @@
         var s = doc.data();
         var meNow = (s.entries || []).find(function (e) { return e.id === me.id; });
         if (!meNow) throw new Error('내 계정을 찾을 수 없어요.');
-        var mm = { id: mmId, nickname: meNow.nickname, isMatchmaker: true, pinAuth: meNow.pinAuth, contactEnc: meNow.contactEnc || null, submittedAt: new Date().toISOString() };
+        /* 기존 고유번호(serial+submittedAt)를 그대로 물려받아 번호가 바뀌지 않게 함 */
+        var mm = { id: mmId, nickname: meNow.nickname, isMatchmaker: true, pinAuth: meNow.pinAuth, contactEnc: meNow.contactEnc || null,
+          submittedAt: meNow.submittedAt || new Date().toISOString(), serial: (meNow.serial != null ? meNow.serial : null) };
         if (meNow.testAccount) mm.testAccount = true;
         var entries = (s.entries || []).map(function (e) {
           if (e.id === me.id) { var c = JSON.parse(JSON.stringify(e)); c.managedBy = mmId; c.ownerSelf = true; delete c.pinAuth; delete c.pinExpiresAt; return c; }
@@ -1912,7 +1914,7 @@
         } else {
           listEl.innerHTML = matches.map(function (o) {
             return '<div class="login-item' + (o.id === selectedId ? ' sel' : '') + '" data-cid="' + escapeHtml(o.id) + '">' +
-              '<b>' + escapeHtml(o.uid || '승인대기') + '</b> ' + escapeHtml(o.nickname) + (o.isMM ? ' <span class="chip" style="background:var(--gold-soft);color:var(--gold);">주선자</span>' : '') + '</div>';
+              '<b>' + escapeHtml(o.uid || '승인대기') + '</b> ' + escapeHtml(o.nickname) + (mode === 'mm' && o.isMM ? ' <span class="chip" style="background:var(--gold-soft);color:var(--gold);">주선자</span>' : '') + '</div>';
           }).join('');
         }
       }
