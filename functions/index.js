@@ -121,6 +121,23 @@ exports.onStateChange = functions
       if (!beforePend[p.id]) jobs.push(sendToAdmin('새 신청서 📝', (p.nickname || '누군가') + '님이 신청서를 냈어요 (승인 대기)'));
     });
 
+    /* 주선자 요청(joinRequests): 새 요청 → 주선자에게 / 승인(회원이 managedBy 얻음) → 회원에게 */
+    const beforeJoin = {};
+    (before.joinRequests || []).forEach((j) => { beforeJoin[j.id] = true; });
+    (after.joinRequests || []).forEach((j) => {
+      if (!beforeJoin[j.id]) jobs.push(sendTo(j.toId, '🤝 새 주선자 요청', (j.fromNick || '누군가') + '님이 주선자로 관리해 달라고 요청했어요'));
+    });
+    const beforeEntryMap = {};
+    (before.entries || []).forEach((e) => { beforeEntryMap[e.id] = e; });
+    (after.entries || []).forEach((e) => {
+      const prev = beforeEntryMap[e.id];
+      /* 주선자 요청 승인으로 관리 대상이 된 경우에만 알림.
+         본인이 주선자로 전환하면 자기 프로필이 ownerSelf 관리 프로필이 되는데(=자기 자신), 그건 승인이 아니므로 제외 */
+      if (prev && !prev.managedBy && e.managedBy && !e.ownerSelf) {
+        jobs.push(sendTo(e.id, '🤝 주선자 요청 승인', '주선자님이 요청을 승인했어요. 이제 함께 관리돼요'));
+      }
+    });
+
     /* 새 메시지 → 상대에게 (회원→관리자 / 관리자→회원) */
     const nickAny = (id) => {
       const e = (after.entries || []).find((x) => x.id === id) || (after.pendingEntries || []).find((x) => x.id === id);
