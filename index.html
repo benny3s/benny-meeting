@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-94';
+  var APP_VERSION = '2026-09-07-95';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1721,6 +1721,7 @@
         var meNow = (s.entries || []).find(function (e) { return e.id === me.id; });
         if (!meNow) throw new Error('내 계정을 찾을 수 없어요.');
         var mm = { id: mmId, nickname: meNow.nickname, isMatchmaker: true, pinAuth: meNow.pinAuth, contactEnc: meNow.contactEnc || null, submittedAt: new Date().toISOString() };
+        if (meNow.testAccount) mm.testAccount = true;
         var entries = (s.entries || []).map(function (e) {
           if (e.id === me.id) { var c = JSON.parse(JSON.stringify(e)); c.managedBy = mmId; c.ownerSelf = true; delete c.pinAuth; delete c.pinExpiresAt; return c; }
           if (e.managedBy === me.id) { var c2 = JSON.parse(JSON.stringify(e)); c2.managedBy = mmId; return c2; } /* 기존 친구들 재부모 */
@@ -1846,6 +1847,9 @@
     var mode = (opts && opts.matchmakerOnly) ? 'mm' : 'self'; /* 'self'=본인 | 'mm'=주선자 */
     var showTest = testAccountsShown() || meIsTest();
     var sortedEntries = (state.entries || []).slice().sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
+    /* 주선자 계정 중 "본인(ownerSelf) 프로필"이 있는 계정 → 본인 로그인 탭에도 노출 */
+    var mmWithSelf = {};
+    (state.entries || []).forEach(function (e) { if (e.managedBy && e.ownerSelf) mmWithSelf[e.managedBy] = true; });
     /* 후보 풀: 대리 프로필은 유효한 임시 PIN 있을 때만 포함 */
     var pool = sortedEntries.concat(state.pendingEntries || []).filter(function (e) {
       if (e.managedBy && (!e.pinAuth || subPinExpired(e))) return false;
@@ -1857,6 +1861,7 @@
         search: ((uid || '') + ' ' + (e.nickname || '')).toLowerCase(),
         isMM: isMatchmakerRole(e, state),      /* Lv2/Lv3 (주선자 역할) */
         isPureMM: isMatchmakerEntry(e),        /* Lv2 (본인 프로필 없는 매니저) */
+        hasOwnSelf: !!mmWithSelf[e.id],        /* 주선자지만 본인 프로필 있음 → 본인 탭에도 표시 */
         testAccount: !!e.testAccount
       };
     });
@@ -1886,7 +1891,7 @@
       function pooled() {
         return pool.filter(function (o) {
           if (mode === 'mm') return o.isMM; /* 주선자: Lv2/Lv3, 테스트 무관 */
-          return !o.isPureMM && (!o.testAccount || showTest); /* 본인: 순수 주선자(Lv2) 제외 */
+          return (!o.isPureMM || o.hasOwnSelf) && (!o.testAccount || showTest); /* 본인: 순수 주선자(본인 없는)만 제외, 본인 있으면 포함 */
         });
       }
       function syncToggle() {
@@ -3643,7 +3648,7 @@
   /* ---- 신청서 임시 저장 (새로고침/이동/오류로도 안 날아가게) ---- */
   var DRAFT_KEY = 'form-draft-v1';
   function saveDraft() {
-    if (editingEntryId || proxyRegisterMode) return; /* 신규 본인 작성만 (수정·대리등록 제외) */
+    if (editingEntryId || proxyRegisterMode || formRole !== 'self') return; /* 신규 본인 신청서 작성만 (수정·대리등록·주선자등록 제외) */
     var form = document.getElementById('entry-form');
     if (!form) return;
     try {
@@ -3668,7 +3673,7 @@
       d.gender || d.degreeChoice || (d.photos && d.photos.length)));
   }
   function maybeRestoreDraft() {
-    if (editingEntryId || proxyRegisterMode) return;
+    if (editingEntryId || proxyRegisterMode || formRole !== 'self') return; /* 본인 신청서에서만 복원 (주선자 등록·대리 제외) */
     var form = document.getElementById('entry-form');
     if (!form) return;
     var nick = form.querySelector('[name="nickname"]');
