@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-80';
+  var APP_VERSION = '2026-09-07-81';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -879,6 +879,21 @@
     if (s.col === col) s.dir = (s.dir === 'asc' ? 'desc' : 'asc');
     else { s.col = col; s.dir = defaultDir || 'desc'; }
   }
+  /* 닉네임 중복 검사에서 제외할 id들.
+     - 수정 중이면: 자기 자신 + (본인 프로필이면) 그 주선자 계정
+     - 새로 만드는 주선자 본인 프로필이면: 주선자 계정
+     주선자 계정과 그 "본인" 프로필은 같은 닉네임을 쓸 수 있음(표시는 (주선자)/(본인)로 구분). */
+  function nickExemptIds(state) {
+    var ids = [];
+    if (editingEntryId) {
+      ids.push(editingEntryId);
+      var ed = (state.entries || []).concat(state.pendingEntries || []).find(function (e) { return e.id === editingEntryId; });
+      if (ed && ed.ownerSelf && ed.managedBy) ids.push(ed.managedBy);
+    } else if (currentUser && isMatchmakerEntry(myAuthEntry(state))) {
+      ids.push(currentUser.id);
+    }
+    return ids;
+  }
   /* 닉네임 실시간 중복 체크 (입력 즉시 빨간 테두리) */
   function checkNicknameDup() {
     var el = document.getElementById('f-nickname');
@@ -887,10 +902,10 @@
     var err = document.getElementById('nick-err');
     var dup = false;
     if (v && currentState) {
-      /* 주선자가 본인 프로필을 만들 땐 주선자 계정과 같은 닉네임 허용 */
-      var exemptId = (!editingEntryId && currentUser && isMatchmakerEntry(myAuthEntry(currentState))) ? currentUser.id : null;
+      /* 주선자 본인 프로필 ↔ 주선자 계정은 같은 닉네임 허용 (새로 만들 때·수정할 때 모두) */
+      var exempt = nickExemptIds(currentState);
       var all = (currentState.entries || []).concat(currentState.pendingEntries || []);
-      dup = all.some(function (e) { return e.id !== editingEntryId && e.id !== exemptId && (e.nickname || '').trim().toLowerCase() === v; });
+      dup = all.some(function (e) { return exempt.indexOf(e.id) < 0 && (e.nickname || '').trim().toLowerCase() === v; });
     }
     if (dup) { el.classList.add('input-dup'); if (err) err.hidden = false; }
     else { el.classList.remove('input-dup'); if (err) err.hidden = true; }
@@ -3486,9 +3501,9 @@
     }
     /* 닉네임 중복 확인 (본인 제외). 주선자 본인 프로필은 주선자 계정과 같은 닉네임 허용 */
     var nickLower = nickname.toLowerCase();
-    var nickExemptId = ownerByMM ? currentUser.id : editingEntryId;
+    var nickExempt = nickExemptIds(state); /* 주선자 본인 프로필 ↔ 주선자 계정 동일 닉네임 허용 (신규·수정 공통) */
     var dup = (state.entries || []).concat(state.pendingEntries || []).some(function (e) {
-      return e.id !== editingEntryId && e.id !== nickExemptId && (e.nickname || '').trim().toLowerCase() === nickLower;
+      return nickExempt.indexOf(e.id) < 0 && (e.nickname || '').trim().toLowerCase() === nickLower;
     });
     if (dup) {
       modalNotice('닉네임 중복', '이미 사용 중인 닉네임이에요. 다른 닉네임을 사용해주세요.');
