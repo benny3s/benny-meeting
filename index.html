@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-92';
+  var APP_VERSION = '2026-09-07-93';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1475,52 +1475,66 @@
     });
   }
   /* 임시 PIN 연장 (같은 PIN 유지, 만료시각만 24시간 뒤로) */
-  function handleExtendSubPin(subId) {
-    if (!currentUser) return;
+  function doExtendSubPin(subId) {
     var sub = ((currentState && currentState.entries) || []).find(function (e) { return e.id === subId && e.managedBy === currentUser.id; });
     if (!sub) return;
-    if (!sub.pinAuth) return handleIssueSubPin(subId); /* 발급된 게 없으면 새로 발급으로 */
-    modalConfirm('임시 PIN 연장', sub.nickname + '님의 임시 로그인 PIN을 지금부터 24시간 더 연장할까요? (PIN은 그대로 유지돼요)', '연장', 'approve').then(function (ok) {
-      if (!ok) return;
-      var expiresAt = new Date(Date.now() + SUB_PIN_TTL_MS).toISOString();
-      db.runTransaction(function (tx) {
-        return tx.get(stateRef).then(function (doc) {
-          var s = doc.data();
-          var entries = (s.entries || []).map(function (e) {
-            if (e.id !== subId) return e;
-            var c = JSON.parse(JSON.stringify(e)); c.pinExpiresAt = expiresAt; return c;
-          });
-          tx.update(stateRef, { entries: entries });
+    if (!sub.pinAuth) return handleIssueSubPin(subId);
+    var expiresAt = new Date(Date.now() + SUB_PIN_TTL_MS).toISOString();
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var entries = (s.entries || []).map(function (e) {
+          if (e.id !== subId) return e;
+          var c = JSON.parse(JSON.stringify(e)); c.pinExpiresAt = expiresAt; return c;
         });
-      }).then(function () {
-        appendLog('request', currentUser.nickname, '(대리) ' + sub.nickname + ' 임시 PIN 연장(24시간)');
-        return refreshNow();
-      }).then(function () {
-        modalNotice('연장 완료 🔑', sub.nickname + '님 임시 PIN이 ' + subPinUntilText({ pinExpiresAt: expiresAt }) + ' 연장됐어요.');
-      }).catch(function (err) { modalNotice('오류', '연장 실패: ' + (err.message || err)); });
-    });
+        tx.update(stateRef, { entries: entries });
+      });
+    }).then(function () {
+      appendLog('request', currentUser.nickname, '(대리) ' + sub.nickname + ' 임시 PIN 연장(24시간)');
+      return refreshNow();
+    }).then(function () {
+      modalNotice('연장 완료 🔑', sub.nickname + '님 임시 PIN이 ' + subPinUntilText({ pinExpiresAt: expiresAt }) + ' 연장됐어요.');
+    }).catch(function (err) { modalNotice('오류', '연장 실패: ' + (err.message || err)); });
   }
-  function handleRevokeSubPin(subId) {
+  function doRevokeSubPin(subId) {
+    var sub = ((currentState && currentState.entries) || []).find(function (e) { return e.id === subId && e.managedBy === currentUser.id; });
+    if (!sub) return;
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var entries = (s.entries || []).map(function (e) {
+          if (e.id !== subId) return e;
+          var c = JSON.parse(JSON.stringify(e)); delete c.pinAuth; delete c.pinExpiresAt; return c;
+        });
+        tx.update(stateRef, { entries: entries });
+      });
+    }).then(function () {
+      appendLog('request', currentUser.nickname, '(대리) ' + sub.nickname + ' 임시 PIN 회수');
+      return refreshNow();
+    }).then(function () { modalNotice('회수 완료', sub.nickname + '님은 더 이상 새로 로그인할 수 없어요.'); })
+      .catch(function (err) { modalNotice('오류', '회수 실패: ' + (err.message || err)); });
+  }
+  function handleExtendSubPin(subId) { if (currentUser) doExtendSubPin(subId); }
+  function handleRevokeSubPin(subId) { if (currentUser) doRevokeSubPin(subId); }
+  /* 활성 임시 PIN 클릭 → 연장/회수 통합 팝업 */
+  function handleManageSubPin(subId) {
     if (!currentUser) return;
     var sub = ((currentState && currentState.entries) || []).find(function (e) { return e.id === subId && e.managedBy === currentUser.id; });
     if (!sub) return;
-    modalConfirm('임시 PIN 회수', sub.nickname + '님의 임시 로그인 PIN을 회수할까요? 새로 로그인할 수 없게 돼요. (이미 로그인 중이면 앱을 닫을 때까지 유지될 수 있어요)', '회수', 'danger').then(function (ok) {
-      if (!ok) return;
-      db.runTransaction(function (tx) {
-        return tx.get(stateRef).then(function (doc) {
-          var s = doc.data();
-          var entries = (s.entries || []).map(function (e) {
-            if (e.id !== subId) return e;
-            var c = JSON.parse(JSON.stringify(e)); delete c.pinAuth; delete c.pinExpiresAt; return c;
-          });
-          tx.update(stateRef, { entries: entries });
-        });
-      }).then(function () {
-        appendLog('request', currentUser.nickname, '(대리) ' + sub.nickname + ' 임시 PIN 회수');
-        return refreshNow();
-      }).then(function () { modalNotice('회수 완료', sub.nickname + '님은 더 이상 새로 로그인할 수 없어요.'); })
-        .catch(function (err) { modalNotice('오류', '회수 실패: ' + (err.message || err)); });
-    });
+    if (!sub.pinAuth || subPinExpired(sub)) return handleIssueSubPin(subId);
+    var overlay = openModal(
+      '<h3>🔑 임시 로그인 PIN</h3>' +
+      '<p class="modal-msg">' + escapeHtml(sub.nickname) + '님의 임시 PIN이 ' + escapeHtml(subPinUntilText(sub)) + ' 유효해요. (' + escapeHtml(subPinRemainText(sub)) + ')</p>' +
+      '<div style="display:flex;flex-direction:column;gap:8px;">' +
+        '<button type="button" class="card-btn approve" id="pin-extend" style="justify-content:center;">🔑 24시간 연장</button>' +
+        '<button type="button" class="card-btn danger" id="pin-revoke" style="justify-content:center;">🔑 지금 회수</button>' +
+        '<button type="button" class="card-btn" id="modal-cancel" style="justify-content:center;">닫기</button>' +
+      '</div>'
+    );
+    overlay.querySelector('#pin-extend').addEventListener('click', function () { closeModal(overlay); doExtendSubPin(subId); });
+    overlay.querySelector('#pin-revoke').addEventListener('click', function () { closeModal(overlay); doRevokeSubPin(subId); });
+    overlay.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(overlay); });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(overlay); });
   }
   /* 주선자가 관리하던 친구(sub)를 독립(일반) 계정으로 분리 — 친구가 자기 PIN으로 직접 관리 */
   function handleDetachSub(subId) {
@@ -3062,8 +3076,7 @@
       /* 주선자가 친구(sub)로 전환해서 볼 때: 1일 임시 PIN 발급/연장 + 독립(일반) 계정 전환 */
       var pinOn = me.pinAuth && !subPinExpired(me);
       var pinBtn = pinOn
-        ? '<button type="button" class="card-btn approve" data-action="sub-pin-extend" data-id="' + escapeHtml(me.id) + '" style="flex:none;" title="눌러서 24시간 연장">🔑 임시PIN ' + escapeHtml(subPinUntilText(me)) + ' · 연장</button>' +
-          '<button type="button" class="card-btn danger" data-action="sub-pin-revoke" data-id="' + escapeHtml(me.id) + '" style="flex:none;">🔑 회수</button>'
+        ? '<button type="button" class="card-btn approve" data-action="sub-pin-manage" data-id="' + escapeHtml(me.id) + '" style="flex:none;" title="눌러서 연장/회수">🔑 임시 PIN (' + escapeHtml(subPinUntilText(me)) + ')</button>'
         : '<button type="button" class="card-btn" data-action="sub-pin-issue" data-id="' + escapeHtml(me.id) + '" style="flex:none;">🔑 1일 PIN 발급</button>';
       headBtns = '<button type="button" class="card-btn primary" data-action="edit" data-id="' + escapeHtml(me.id) + '" style="flex:none;">✏️ 프로필 수정</button>' +
         pinBtn +
@@ -3092,7 +3105,7 @@
           '<h2 style="margin:0;">메시지함</h2>' +
           (headBtns ? '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + headBtns + '</div>' : '') +
         '</div>' +
-        '<div class="my-uid">고유번호 ' + escapeHtml(formatUid(me) || '—') + (isSubProfile ? ' · 🤝 대리' : '') + '</div>' +
+        '<div class="my-uid" style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px;">고유번호 ' + escapeHtml(formatUid(me) || '—') + '</div>' +
         actingBanner +
         '<p class="sub">' + escapeHtml(me.nickname) + '님, 반가워요! 받은 요청은 직접 승인하거나 거절할 수 있어요.</p>' +
         (isSubProfile ? '' : joinRequestSectionHtml(state, false)) + /* 나에게 온 주선자 요청 있으면 표시 */
@@ -3873,8 +3886,10 @@
     var blurPhoto = form.querySelector('#f-blur') ? form.querySelector('#f-blur').checked : false;
 
     var isEdit = !!editingEntryId;
-    var proxy = proxyRegisterMode && !isEdit; /* 친구 대신 소개(대리 등록) */
-    /* 주선자(Lv2)가 [본인] 탭에서 자기 소개팅 프로필을 만드는 경우 → 주선자 아래 관리 프로필로 생성(별도 로그인 없음) */
+    /* 친구 대신 소개(대리 등록) — renderForm과 동일한 판정: proxyRegisterMode 이거나, 주선자가 주선자 탭(formRole)으로 온 경우.
+       (소개자는 곧 그 회원이므로 소개자 입력을 요구하지 않음 → 아래에서 자동 설정) */
+    var proxy = (proxyRegisterMode || (formRole === 'matchmaker' && currentUser)) && !isEdit;
+    /* 주선자(Lv2)가 [본인] 탭(formRole='self')에서 자기 소개팅 프로필을 만드는 경우 → 주선자 아래 관리 프로필로 생성 */
     var ownerByMM = !proxy && !isEdit && !!(currentUser && isMatchmakerEntry(myAuthEntry(state)));
     var managedCreate = proxy || ownerByMM; /* 주선자 아래 관리 프로필 생성(managedBy 설정, 로그인 전환 안 함) */
     var origEntry = isEdit ? (state.entries || []).find(function (e) { return e.id === editingEntryId; }) : null;
@@ -4042,7 +4057,7 @@
         else appendLog('edit', nickname, '프로필 수정');
         notifyAdmin('프로필 수정', nickname + '님이 프로필을 수정했어요.');
         modalNotice('완료', '프로필이 수정되었어요.');
-        activeTab = 'list';
+        activeTab = currentUser ? 'mine' : 'list'; /* 회원이 메시지함에서 수정 → 저장 후 메시지함 복귀 */
         paint(currentState);
       } else if (managedCreate) {
         /* 대리 등록 / 주선자 본인: 주선자는 로그인 유지, 새 프로필로 바꾸지 않음 */
@@ -5264,7 +5279,7 @@
     if (e.target.id === 'cancel-edit' || e.target.id === 'cancel-edit-bottom') {
       editingEntryId = null;
       photoDataUrls = [];
-      activeTab = 'list';
+      activeTab = currentUser ? 'mine' : 'list'; /* 로그인 회원이 메시지함에서 수정 → 취소 시 메시지함 복귀 */
       paint(currentState);
       return;
     }
@@ -5307,6 +5322,7 @@
       else if (action === 'user-reject') handleUserRejectRequest(id);
       else if (action === 'switch-profile') handleSwitchProfile(id);
       else if (action === 'sub-pin-issue') handleIssueSubPin(id);
+      else if (action === 'sub-pin-manage') handleManageSubPin(id);
       else if (action === 'sub-pin-extend') handleExtendSubPin(id);
       else if (action === 'sub-detach') handleDetachSub(id);
       else if (action === 'join-approve') handleApproveJoin(id);
