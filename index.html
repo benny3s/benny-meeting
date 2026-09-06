@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-84';
+  var APP_VERSION = '2026-09-07-85';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -792,8 +792,9 @@
   /* 관리자 표 정렬/필터 상태 */
   var adminSeenSort = { col: 'uid', dir: 'desc' };   /* 최근 접속·권한 표 (기본: 고유번호 내림차순) */
   var adminLogSort = { col: 'time', dir: 'desc' };   /* 활동 기록 표 (기본: 시간 내림차순) */
-  var adminLogFilterActor = '';                       /* 활동 기록 고유번호/닉네임 필터 */
+  var adminLogFilterActor = '';                       /* 활동 기록 고유번호/닉네임 필터 (검색창, 부분일치) */
   var adminLogFilterTime = '';                        /* 활동 기록 시간 필터 */
+  var adminLogFilterNick = '';                        /* 접속칸 클릭 시 정확히 그 닉네임만 (완전일치) */
   var currentState = null;
   var photoDataUrls = [];
   var formPhotosReady = true; /* 수정 시 원본 사진 로드 완료 여부 */
@@ -862,12 +863,14 @@
     if (!rows.length) return;
     var fa = (adminLogFilterActor || '').toLowerCase().trim();
     var ft = (adminLogFilterTime || '').toLowerCase().trim();
+    var fn = (adminLogFilterNick || '').toLowerCase().trim();
     var shown = 0;
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
       var okA = !fa || (r.getAttribute('data-actor') || '').indexOf(fa) >= 0;
       var okT = !ft || (r.getAttribute('data-time') || '').indexOf(ft) >= 0;
-      var show = okA && okT;
+      var okN = !fn || (r.getAttribute('data-nick') || '') === fn; /* 완전일치 (비슷한 닉네임 섞임 방지) */
+      var show = okA && okT && okN;
       r.hidden = !show;
       if (show) shown++;
     }
@@ -2874,21 +2877,22 @@
         '<div style="margin-top:3px;">' + levelBadge(e, state) + '</div>' +
         '</td>';
     }
-    /* 접속 칸 = 클릭하면 아래 활동 기록을 그 닉네임으로 필터링 */
-    function seenCell(e, isChild) {
-      var dateTxt = e.lastSeenAt ? new Date(e.lastSeenAt).toLocaleString('ko-KR') : (isChild ? '' : '기록 없음');
-      var inner = (dateTxt ? escapeHtml(dateTxt) + ' ' : '') + '<span style="text-decoration:underline dotted;white-space:nowrap;">📜 기록</span>';
-      return '<td class="seen-date" data-action="log-filter" data-nick="' + escapeHtml(e.nickname) + '" title="이 사람의 활동 기록 보기"' +
-        ' style="cursor:pointer;' + (isChild ? 'color:var(--muted);' : '') + '">' + inner + '</td>';
+    /* 접속 칸 = 클릭하면 아래 활동 기록을 그 닉네임으로 필터링 (날짜/기록없음 자체를 누름).
+       sub(대리 프로필)은 자체 활동 기록이 없으므로 클릭 없이 "—"만 표시. */
+    function seenCell(e) {
+      var dateTxt = e.lastSeenAt ? new Date(e.lastSeenAt).toLocaleString('ko-KR') : '기록 없음';
+      return '<td class="seen-date" data-action="log-filter" data-nick="' + escapeHtml(e.nickname) + '" title="눌러서 이 사람 활동 기록 보기"' +
+        ' style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(dateTxt) + '</td>';
     }
     var seenRows = tops.map(function (d) {
       var e = d.e;
-      var row = '<tr>' + nameCell(e, false) + seenCell(e, false) +
+      var row = '<tr>' + nameCell(e, false) + seenCell(e) +
         permCell(e, d.photoN, 'photo') + permCell(e, d.contactN, 'contact') + '</tr>';
       var kids = (childrenByMgr[e.id] || []).slice().sort(function (a, b) { return (b.ownerSelf ? 1 : 0) - (a.ownerSelf ? 1 : 0); });
       row += kids.map(function (c) {
         var pc = permCounts(c);
-        return '<tr style="background:rgba(0,0,0,0.02);">' + nameCell(c, true) + seenCell(c, true) +
+        return '<tr style="background:rgba(0,0,0,0.02);">' + nameCell(c, true) +
+          '<td class="seen-date" style="color:var(--muted);">—</td>' +
           permCell(c, pc.photoN, 'photo') + permCell(c, pc.contactN, 'contact') + '</tr>';
       }).join('');
       return row;
@@ -2898,7 +2902,7 @@
     }
     var seenSection =
       '<h2>👥 회원 명단</h2>' +
-      '<p class="sub">로그인 계정이 상위, 그 아래 <span class="chip" style="background:#fdeef0;color:var(--accent);">🙋 본인</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 친구</span> 가 붙어요. <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자</span> <span class="chip" style="background:#f1f1f1;color:#777;">일반</span>. 헤더로 정렬 · 닉네임 클릭 = 프로필 · <b>접속(📜 기록) 클릭 = 활동 기록 보기</b> · 📷/📱 = 볼 수 있는 사람 수(클릭해서 관리).</p>' +
+      '<p class="sub">로그인 계정이 상위, 그 아래 <span class="chip" style="background:#fdeef0;color:var(--accent);">🙋 본인</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 친구</span> 가 붙어요. <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자</span> <span class="chip" style="background:#f1f1f1;color:#777;">일반</span>. 헤더로 정렬 · 닉네임 클릭 = 프로필 · <b>접속 시간 클릭 = 그 사람 활동 기록</b> · 📷/📱 = 볼 수 있는 사람 수(클릭해서 관리).</p>' +
       (tops.length
         ? '<div class="admin-table-wrap"><table class="seen-table"><thead><tr>' +
             seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 권한') + seenTh('contact', '📱 권한') +
@@ -2944,7 +2948,7 @@
         : '<b>' + escapeHtml(d.actor || '-') + '</b>';
       var fActor = (d.uid + ' ' + d.actor).toLowerCase();
       var fTime = d.timeStr.toLowerCase();
-      return '<tr class="log-trow" data-actor="' + escapeHtml(fActor) + '" data-time="' + escapeHtml(fTime) + '">' +
+      return '<tr class="log-trow" data-actor="' + escapeHtml(fActor) + '" data-time="' + escapeHtml(fTime) + '" data-nick="' + escapeHtml((d.actor || '').toLowerCase()) + '">' +
         '<td style="font-size:0.84rem;">' + actorHtml + '</td>' +
         '<td style="font-size:0.84rem;color:var(--ink);">' + escapeHtml(d.detail) + '</td>' +
         '<td class="seen-date" style="font-size:0.76rem;color:var(--muted);">' + escapeHtml(d.timeStr) + '</td>' +
@@ -2956,6 +2960,12 @@
     var logSection =
       '<h2 id="activity-log-section">📜 활동 기록</h2>' +
       '<p class="sub">헤더로 정렬, 아래 칸으로 검색해요. 최근 ' + LOG_LIMIT + '건까지 보관. (관리자만)</p>' +
+      ((adminLogFilterActor || adminLogFilterTime || adminLogFilterNick)
+        ? '<p class="sub" style="margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+            '<span class="chip" style="background:var(--gold-soft);color:var(--gold);">🔎 ' + escapeHtml(adminLogFilterNick || adminLogFilterActor || adminLogFilterTime) + '</span>' +
+            '<button type="button" class="card-btn" data-action="log-clear" style="flex:none;padding:2px 10px;">✕ 필터 해제</button>' +
+          '</p>'
+        : '') +
       (logData.length
         ? '<div class="admin-table-wrap"><table class="seen-table log-table"><thead>' +
             '<tr>' + logTh('actor', '고유번호 · 닉네임') + logTh('detail', '변경 내용') + logTh('time', '시간') + '</tr>' +
@@ -3017,7 +3027,9 @@
         '<h2>📬 요청함<span class="pending-count">' + activeReqs.length + '</span></h2>' +
         '<p class="sub">아직 처리하지 않은 사진/번호 요청이에요.</p>' +
         (activeReqs.length ? activeItems : '<p class="sub">처리할 요청이 없어요.</p>') +
+        '<hr class="perforation">' +
         adminMsgSection +
+        '<hr class="perforation">' +
         doneSection +
         '<hr class="perforation">' +
         capSection +
@@ -4928,11 +4940,12 @@
       else if (action === 'perm-contact') { if (isAdminUnlocked) openPermPopup(id, 'contact'); }
       else if (action === 'seen-sort') { toggleSort(adminSeenSort, actionBtn.getAttribute('data-col'), 'desc'); paint(currentState); }
       else if (action === 'log-filter') {
-        adminLogFilterActor = actionBtn.getAttribute('data-nick') || '';
-        adminLogFilterTime = '';
+        adminLogFilterNick = actionBtn.getAttribute('data-nick') || ''; /* 완전일치 필터 */
+        adminLogFilterActor = ''; adminLogFilterTime = '';
         paint(currentState);
         try { var sec = document.getElementById('activity-log-section'); if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e2) {}
       }
+      else if (action === 'log-clear') { adminLogFilterActor = ''; adminLogFilterTime = ''; adminLogFilterNick = ''; paint(currentState); }
       else if (action === 'log-sort') { toggleSort(adminLogSort, actionBtn.getAttribute('data-col'), 'desc'); paint(currentState); }
       else if (action === 'cancel-sent') handleCancelSent(id);
       else if (action === 'reapply') handleReapplyRequest(id);
@@ -4958,6 +4971,7 @@
       var which = e.target.getAttribute('data-logfilter');
       if (which === 'actor') adminLogFilterActor = e.target.value;
       else if (which === 'time') adminLogFilterTime = e.target.value;
+      adminLogFilterNick = ''; /* 직접 검색 시 클릭 필터(완전일치) 해제 */
       applyLogFilter(); /* paint 없이 즉시 필터 → 입력 포커스 유지 */
     }
   });
