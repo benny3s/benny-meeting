@@ -755,7 +755,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-06-73';
+  var APP_VERSION = '2026-09-06-74';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -3034,7 +3034,7 @@
               (isStandalone() ? '' : '<button type="button" class="admin-link" id="add-home">&#128241; 홈에 추가</button>') +
               '<button type="button" class="admin-link' + (notifOn() ? ' unlocked' : '') + '" id="notif-toggle">' +
                 (notifOn() ? '&#128276; 알림 ON' : '&#128276; 알림 OFF') + '</button>' +
-              '<button type="button" class="admin-link" id="notif-help">&#128214; 가이드</button>' +
+              '<button type="button" class="admin-link" id="notif-help">&#128718; 가이드</button>' +
             '</div>'
           : '') +
         '<div class="admin-bar-row">' +
@@ -3047,7 +3047,7 @@
         '</div>' +
       '</div></div>' +
       '<div class="notice-bar">' +
-        '<span class="notice-icon">&#128227;</span> 요청이 오거나 승인·거절되면 알림으로 바로 알려드려요. 위 <b>&#128276; 알림</b> 버튼으로 켜보세요! (방법은 <b>&#128214; 가이드</b>)' +
+        '<span class="notice-icon">&#128227;</span> 요청이 오거나 승인·거절되면 알림으로 바로 알려드려요. 위 <b>&#128276; 알림</b> 버튼으로 켜보세요! (방법은 <b>&#128718; 가이드</b>)' +
       '</div>' +
       '<div class="page">' +
         '<div class="tabs" role="tablist">' + tabs + '</div>' +
@@ -5022,7 +5022,7 @@
           '&#128276; <b>알림</b><br>' +
           '<ol style="padding-left:18px;margin:6px 0;">' +
             '<li>요청·승인·메시지가 오면 <b>기기로 바로 알림</b> (앱 꺼둬도 와요).</li>' +
-            '<li>상단 <b>&#128276; 알림</b> 버튼으로 켜기. 방법은 <b>&#128214; 가이드</b>.</li>' +
+            '<li>상단 <b>&#128276; 알림</b> 버튼으로 켜기. 방법은 <b>&#128718; 가이드</b>.</li>' +
             '<li>아이폰은 <b>"홈 화면에 추가"한 앱(사파리)</b>에서만 돼요. (크롬 앱 ❌)</li>' +
           '</ol>' +
         '</div>' +
