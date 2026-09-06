@@ -778,10 +778,11 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-104';
+  var APP_VERSION = '2026-09-07-105';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
+  var switcherExpanded = false;  /* 전환창 친구 목록 펼침 여부 */
 
   var ROOT_NAME = '베니';
   var listFilter = 'all';
@@ -863,6 +864,18 @@
   function sortArrow(s, col) {
     if (!s || s.col !== col) return ' <span style="color:var(--line);font-size:0.72rem;">↕</span>';
     return ' <span style="color:var(--accent);font-size:0.72rem;">' + (s.dir === 'asc' ? '▲' : '▼') + '</span>';
+  }
+  /* 전환창 친구 목록: 실제 높이가 2줄을 넘으면 접고 "모두 보기" 토글 표시 (화면 폭 무관) */
+  function adjustSwitcherClip() {
+    var kids = document.getElementById('ps-children');
+    var btn = document.getElementById('ps-expand');
+    if (!kids || !btn) return;
+    kids.classList.remove('ps-clip');           /* 자연 높이 측정 위해 잠시 해제 */
+    var TWO_ROWS = 82;                            /* 대략 2줄 (칩높이~34 + gap 6, 여유 포함) */
+    if (kids.scrollHeight <= TWO_ROWS + 4) { btn.hidden = true; return; }
+    btn.hidden = false;
+    if (switcherExpanded) { btn.textContent = '▴ 접기'; }
+    else { kids.classList.add('ps-clip'); btn.textContent = '▾ 친구 모두 보기'; }
   }
   /* 활동 기록 행을 필터값으로 즉시 숨김/표시 (paint 없이 → 입력 포커스 유지) */
   function applyLogFilter() {
@@ -3587,15 +3600,12 @@
           return '<button type="button" class="pf-switch-chip' + (on ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '">🤝 ' + escapeHtml(s.nickname) + '</button>';
         }).join('');
         childChips += '<button type="button" class="pf-switch-chip pf-switch-add" data-action="switch-add">＋ 추가</button>';
-        /* 친구가 많아 두 줄 이상이면 접기(기본 접힘) + 더보기 토글 */
-        var manyFriends = friendSubs.length > 6;
-        var childrenCls = 'ps-children' + (manyFriends ? ' ps-clip' : '');
-        var expandBtn = manyFriends
-          ? '<button type="button" class="ps-expand-btn" id="ps-expand" data-count="' + friendSubs.length + '">▾ 친구 ' + friendSubs.length + '명 모두 보기</button>'
-          : '';
+        /* 접기 여부는 렌더 후 실제 높이로 판단(adjustSwitcherClip) — 화면 폭에 따라 2줄 넘칠 때만 */
         switcher = '<div class="profile-switch">' +
             '<span class="ps-label">🔄 누구로 활동할까요? <span class="ps-hint">눌러서 전환</span></span>' +
-            '<div class="ps-tree">' + ownerRow + '<div class="' + childrenCls + '">' + childChips + '</div>' + expandBtn + '</div>' +
+            '<div class="ps-tree">' + ownerRow + '<div class="ps-children" id="ps-children">' + childChips + '</div>' +
+              '<button type="button" class="ps-expand-btn" id="ps-expand" hidden></button>' +
+            '</div>' +
           '</div>';
       }
     }
@@ -3662,6 +3672,7 @@
       }
     } catch (e) {}
     try { applyLogFilter(); } catch (e) {} /* 활동기록 필터 재적용 */
+    try { adjustSwitcherClip(); } catch (e) {} /* 전환창 친구 2줄 초과 시 접기 */
     try { updateCharCounts(); } catch (e) {} /* 자기소개 등 글자수 카운터 */
     maybeRestoreDraft();
   }
@@ -5332,15 +5343,7 @@
     if (e.target.closest('#cancel-mm-req')) { handleCancelMmReq(); return; }
     if (e.target.closest('#convert-mm')) { handleConvertToMatchmaker(); return; }
     if (e.target.closest('#convert-member')) { handleConvertToMember(); return; }
-    var psExp = e.target.closest('#ps-expand');
-    if (psExp) {
-      var kids = psExp.parentNode.querySelector('.ps-children');
-      if (kids) {
-        var clipped = kids.classList.toggle('ps-clip');
-        psExp.textContent = clipped ? ('▾ 친구 ' + (psExp.getAttribute('data-count') || '') + '명 모두 보기') : '▴ 접기';
-      }
-      return;
-    }
+    if (e.target.closest('#ps-expand')) { switcherExpanded = !switcherExpanded; adjustSwitcherClip(); return; }
     if (e.target.closest('#cancel-proxy')) {
       proxyRegisterMode = false;
       formRole = 'self';
