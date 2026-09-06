@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-91';
+  var APP_VERSION = '2026-09-07-92';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1695,6 +1695,33 @@
   /* ---- 일반 ↔ 주선자 계정 전환 ----
      모델: 주선자는 "매니저 계정(로그인·PIN) + 본인(ownerSelf) 프로필 sub" 구조.
      전환은 새 매니저 래퍼를 만들거나 지우고 로그인 대상을 옮길 뿐 — 프로필/사진은 그대로 유지(같은 PIN). */
+  /* 실제 전환 DB 작업 (매니저 래퍼 생성 + 내 프로필→본인 sub + 기존 친구 재부모 + 로그인 대상 이동).
+     Promise 반환 — 성공 안내는 호출부에서. */
+  function convertToMatchmakerTx() {
+    var me = myAuthEntry(currentState);
+    if (!me || isMatchmakerEntry(me) || me.managedBy) return Promise.reject(new Error('전환할 수 없는 계정이에요.'));
+    var mmId = genId();
+    return db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var meNow = (s.entries || []).find(function (e) { return e.id === me.id; });
+        if (!meNow) throw new Error('내 계정을 찾을 수 없어요.');
+        var mm = { id: mmId, nickname: meNow.nickname, isMatchmaker: true, pinAuth: meNow.pinAuth, contactEnc: meNow.contactEnc || null, submittedAt: new Date().toISOString() };
+        var entries = (s.entries || []).map(function (e) {
+          if (e.id === me.id) { var c = JSON.parse(JSON.stringify(e)); c.managedBy = mmId; c.ownerSelf = true; delete c.pinAuth; delete c.pinExpiresAt; return c; }
+          if (e.managedBy === me.id) { var c2 = JSON.parse(JSON.stringify(e)); c2.managedBy = mmId; return c2; } /* 기존 친구들 재부모 */
+          return e;
+        });
+        entries.push(mm);
+        tx.update(stateRef, { entries: entries });
+      });
+    }).then(function () {
+      currentUser = { id: mmId, nickname: me.nickname, pin: currentUser.pin }; saveSession();
+      actingResolved = false; actingAs = null; formRole = 'matchmaker';
+      appendLog('edit', me.nickname, '일반→주선자 계정 전환');
+      return refreshNow();
+    });
+  }
   function handleConvertToMatchmaker() {
     if (!currentUser) return;
     var me = myAuthEntry(currentState);
@@ -1705,31 +1732,29 @@
       '주선자 계정이 되면 다른 회원이 나에게 "주선자 요청"을 보낼 수 있어요. 지금 내 소개팅 프로필은 "본인" 프로필로 그대로 유지되고 명단에도 계속 보여요. 로그인 PIN도 그대로예요. (언제든 되돌릴 수 있어요) 전환할까요?',
       '주선자로 전환', 'primary').then(function (ok) {
       if (!ok) return;
-      var mmId = genId();
-      db.runTransaction(function (tx) {
-        return tx.get(stateRef).then(function (doc) {
-          var s = doc.data();
-          var meNow = (s.entries || []).find(function (e) { return e.id === me.id; });
-          if (!meNow) throw new Error('내 계정을 찾을 수 없어요.');
-          var mm = { id: mmId, nickname: meNow.nickname, isMatchmaker: true, pinAuth: meNow.pinAuth, contactEnc: meNow.contactEnc || null, submittedAt: new Date().toISOString() };
-          var entries = (s.entries || []).map(function (e) {
-            if (e.id === me.id) { var c = JSON.parse(JSON.stringify(e)); c.managedBy = mmId; c.ownerSelf = true; delete c.pinAuth; delete c.pinExpiresAt; return c; }
-            if (e.managedBy === me.id) { var c2 = JSON.parse(JSON.stringify(e)); c2.managedBy = mmId; return c2; } /* 기존 친구들 재부모 */
-            return e;
-          });
-          entries.push(mm);
-          tx.update(stateRef, { entries: entries });
-        });
-      }).then(function () {
-        currentUser = { id: mmId, nickname: me.nickname, pin: currentUser.pin }; saveSession();
-        actingResolved = false; actingAs = null; formRole = 'matchmaker';
-        appendLog('edit', me.nickname, '일반→주선자 계정 전환');
-        return refreshNow();
-      }).then(function () {
+      convertToMatchmakerTx().then(function () {
         activeTab = 'mine'; paint(currentState);
         modalNotice('전환 완료 🤝', '주선자 계정이 되었어요. 내 소개팅 프로필은 "본인"으로 유지돼요. 이제 다른 회원의 주선자 요청을 받을 수 있어요.');
       }).catch(function (err) { modalNotice('오류', '전환 실패: ' + (err.message || err)); });
     });
+  }
+  /* 친구 대신 소개 시작 — 일반 회원이면 "주선자 전환" 안내 후 전환하고 소개 폼 열기 */
+  function startProxyIntro() {
+    if (!currentUser) { modalNotice('로그인 필요', '친구 대신 소개하려면 먼저 로그인해주세요.'); return; }
+    var openProxyForm = function () {
+      proxyRegisterMode = true; formRole = 'matchmaker'; editingEntryId = null; photoDataUrls = []; activeTab = 'form'; paint(currentState);
+    };
+    var meAuth = myAuthEntry(currentState);
+    if (meAuth && !isMatchmakerEntry(meAuth) && !meAuth.managedBy) {
+      modalConfirm('주선자 계정으로 전환',
+        '친구를 소개하면 주선자 계정으로 전환돼요. 내 소개팅 프로필은 "본인"으로 그대로 유지되고, 소개(주선)가 끝나면 언제든 일반 계정으로 되돌릴 수 있어요. 계속할까요?',
+        '전환하고 소개하기', 'primary').then(function (ok) {
+        if (!ok) { formRole = 'self'; if (activeTab === 'form') paint(currentState); return; }
+        convertToMatchmakerTx().then(openProxyForm).catch(function (err) { modalNotice('오류', '전환 실패: ' + (err.message || err)); });
+      });
+      return;
+    }
+    openProxyForm();
   }
   function handleConvertToMember() {
     if (!currentUser) return;
@@ -5123,8 +5148,11 @@
       var rmode = roleBtn.getAttribute('data-role'); /* 'self' | 'matchmaker' */
       proxyRegisterMode = false;
       photoDataUrls = [];
-      if (rmode === 'self') { openSelfForm(); } /* 이미 본인 프로필 있으면 수정으로 */
-      else { formRole = rmode; editingEntryId = null; paint(currentState); } /* 주선자 전환 시 수정모드 해제 → 친구 소개 폼 */
+      if (rmode === 'self') { openSelfForm(); return; } /* 이미 본인 프로필 있으면 수정으로 */
+      /* 주선자 탭: 로그인한 일반 회원이면 "친구 소개 = 주선자 전환" 흐름으로, 그 외(미로그인/이미 주선자)는 기존대로 */
+      var meRole = currentUser && myAuthEntry(currentState);
+      if (meRole && !isMatchmakerEntry(meRole) && !meRole.managedBy) { startProxyIntro(); return; }
+      formRole = rmode; editingEntryId = null; paint(currentState);
       return;
     }
     if (e.target.closest('#mm-new-btn')) { formRole = 'mm-new'; photoDataUrls = []; paint(currentState); return; }
@@ -5240,16 +5268,7 @@
       paint(currentState);
       return;
     }
-    if (e.target.closest('#start-proxy')) {
-      if (!currentUser) { modalNotice('로그인 필요', '친구 대신 소개하려면 먼저 로그인해주세요.'); return; }
-      proxyRegisterMode = true;
-      formRole = 'matchmaker'; /* 토글도 주선자로 맞춤 */
-      editingEntryId = null;
-      photoDataUrls = [];
-      activeTab = 'form';
-      paint(currentState);
-      return;
-    }
+    if (e.target.closest('#start-proxy')) { startProxyIntro(); return; }
     if (e.target.closest('#request-mm')) { handleRequestMatchmaker(); return; }
     if (e.target.closest('#cancel-mm-req')) { handleCancelMmReq(); return; }
     if (e.target.closest('#convert-mm')) { handleConvertToMatchmaker(); return; }
