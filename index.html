@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-88';
+  var APP_VERSION = '2026-09-07-89';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -2001,6 +2001,17 @@
       return stateRef.update({ logs: logs });
     }).catch(function () {});
   }
+  /* 관리자: 활동 기록 한 줄 삭제 */
+  function handleDeleteLog(logId) {
+    if (!isAdminUnlocked || !logId) return;
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var logs = (s.logs || []).filter(function (l) { return l.id !== logId; });
+        tx.update(stateRef, { logs: logs });
+      });
+    }).then(function () { return refreshNow(); }).catch(function (err) { modalNotice('오류', '삭제 실패: ' + (err.message || err)); });
+  }
   /* ---- 관리자 <-> 회원 메시지 ---- */
   function sendMessageTo(entryId, from, text) {
     text = (text || '').trim();
@@ -2837,29 +2848,11 @@
     var authMM = isMatchmakerEntry(myAuthEntry(state));
     var mmHome = '';
     if (authMM) {
-      var subs = entriesManagedByMe(state);
       var subPend = (state.pendingEntries || []).filter(function (e) { return e.managedBy === currentUser.id; });
-      var subList = (subs.length || subPend.length)
-        ? subs.slice().sort(function (a, b) { return (b.ownerSelf ? 1 : 0) - (a.ownerSelf ? 1 : 0); }).map(function (s) {
-            var pend = (state.dateRequests || []).filter(function (r) { return r.toId === s.id && (function(x){return x==='pending'||x==='held';})(reqStatus(r)); }).length;
-            var isOwn = !!s.ownerSelf;
-            var pinActive = s.pinAuth && !subPinExpired(s);
-            var pinExpiredNow = s.pinAuth && subPinExpired(s);
-            var pinBadge = isOwn ? '' : (pinActive ? '<span class="chip" style="background:#e6f4ea;color:#137333;">🔑 임시로그인 ' + escapeHtml(subPinUntilText(s)) + '</span>'
-              : (pinExpiredNow ? '<span class="chip" style="background:#f1f1f1;color:#888;">🔑 임시로그인 만료됨</span>' : ''));
-            var pinBtns = isOwn ? '' : (pinActive
-              ? '<button type="button" class="card-btn approve" data-action="sub-pin-extend" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">🔑 연장</button>' +
-                '<button type="button" class="card-btn danger" data-action="sub-pin-revoke" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">🔑 회수</button>'
-              : '<button type="button" class="card-btn" data-action="sub-pin-issue" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">🔑 ' + (pinExpiredNow ? '임시 PIN 다시 발급' : '임시 PIN 발급') + '</button>');
-            return '<div style="border:1px solid ' + (pend ? 'var(--accent)' : 'var(--line)') + ';border-radius:10px;padding:10px 12px;margin-top:8px;">' +
-              (isOwn ? '🙋 ' : '🤝 ') + '<b>' + escapeHtml(s.nickname) + '</b>' + (isOwn ? ' <span class="chip" style="background:#fdeef0;color:var(--accent);">본인</span>' : '') + ' <span style="color:var(--muted);font-size:0.8rem;">' + escapeHtml(formatUid(s) || '') + '</span>' + (pend ? '<span class="count">받은요청 ' + pend + '</span>' : '') + ' ' + pinBadge +
-              '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">' +
-                '<button type="button" class="card-btn" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '" style="flex:none;padding:3px 10px;">' + (isOwn ? '내 프로필로 전환' : '이 친구로 전환') + '</button>' +
-                pinBtns +
-              '</div></div>';
-          }).join('') +
-          subPend.map(function (s) { return '<div style="border:1px dashed var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;color:var(--muted);">⏳ <b>' + escapeHtml(s.nickname) + '</b> — 관리자 승인 대기</div>'; }).join('')
-        : '<p class="sub" style="margin:0;">아직 소개한 친구가 없어요. 아래 버튼으로 시작해보세요.</p>';
+      /* 친구 목록·전환은 위 "누구로 활동할까요" 전환창이 대신함. 여기선 승인 대기 친구만 간단히 표시 */
+      var pendNote = subPend.length
+        ? '<p class="sub" style="margin:0 0 10px;color:var(--accent);">⏳ 승인 대기 친구: ' + subPend.map(function (s) { return escapeHtml(s.nickname); }).join(', ') + '</p>'
+        : '';
       var mmThread = threadFor(state, currentUser.id, 'user');
       /* 일반 회원이 "내 밑으로 들어오고 싶다"고 보낸 요청 */
       var joinReqs = (state.joinRequests || []).filter(function (j) { return j.toId === currentUser.id; });
@@ -2880,9 +2873,9 @@
       mmHome =
           '<h2 style="margin:0 0 4px;">🤝 주선자 홈</h2>' +
           '<div class="my-uid">' + escapeHtml(currentUser.nickname) + ' · 주선자</div>' +
-          '<p class="sub">친구들을 대신 소개하고 요청을 관리해요.</p>' +
-          '<button type="button" class="submit-btn" id="start-proxy" style="width:100%;box-sizing:border-box;margin:4px 0 14px;">🤝 새 친구 소개하기</button>' +
-          '<div class="mine-section"><h3>내가 소개한 사람<span class="count">' + (subs.length + subPend.length) + '</span></h3>' + subList + '</div>' +
+          '<p class="sub">친구 전환·임시 PIN은 위 <b>🔄 누구로 활동할까요</b>에서 친구를 고르면 돼요.</p>' +
+          '<button type="button" class="submit-btn" id="start-proxy" style="width:100%;box-sizing:border-box;margin:4px 0 12px;">🤝 새 친구 소개하기</button>' +
+          pendNote +
           joinSection +
           '<div class="mine-section"><h3>💬 관리자 메시지<span class="count">' + mmThread.length + '</span></h3>' +
             (mmThread.length ? mmThread.map(function (m) { return msgLineHtml(m, false); }).join('') : '<p class="sub" style="margin:0;">아직 없어요.</p>') +
@@ -2957,7 +2950,8 @@
       /* 주선자가 친구(sub)로 전환해서 볼 때: 1일 임시 PIN 발급/연장 + 독립(일반) 계정 전환 */
       var pinOn = me.pinAuth && !subPinExpired(me);
       var pinBtn = pinOn
-        ? '<button type="button" class="card-btn approve" data-action="sub-pin-extend" data-id="' + escapeHtml(me.id) + '" style="flex:none;" title="눌러서 24시간 연장">🔑 임시PIN ' + escapeHtml(subPinUntilText(me)) + ' · 연장</button>'
+        ? '<button type="button" class="card-btn approve" data-action="sub-pin-extend" data-id="' + escapeHtml(me.id) + '" style="flex:none;" title="눌러서 24시간 연장">🔑 임시PIN ' + escapeHtml(subPinUntilText(me)) + ' · 연장</button>' +
+          '<button type="button" class="card-btn danger" data-action="sub-pin-revoke" data-id="' + escapeHtml(me.id) + '" style="flex:none;">🔑 회수</button>'
         : '<button type="button" class="card-btn" data-action="sub-pin-issue" data-id="' + escapeHtml(me.id) + '" style="flex:none;">🔑 1일 PIN 발급</button>';
       headBtns = pinBtn +
         '<button type="button" class="card-btn" data-action="sub-detach" data-id="' + escapeHtml(me.id) + '" style="flex:none;">🪪 일반 계정 전환</button>';
@@ -3216,6 +3210,7 @@
         '<td style="font-size:0.84rem;">' + actorHtml + '</td>' +
         '<td style="font-size:0.84rem;color:var(--ink);">' + escapeHtml(d.detail) + '</td>' +
         '<td class="seen-date" style="font-size:0.76rem;color:var(--muted);">' + escapeHtml(d.timeStr) + '</td>' +
+        '<td style="text-align:center;">' + (d.l.id ? '<button type="button" data-action="log-del" data-id="' + escapeHtml(d.l.id) + '" title="이 기록 삭제" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:0.95rem;padding:2px 6px;">✕</button>' : '') + '</td>' +
         '</tr>';
     }).join('');
     function logTh(col, label) {
@@ -3232,11 +3227,12 @@
         : '') +
       (logData.length
         ? '<div class="admin-table-wrap"><table class="seen-table log-table"><thead>' +
-            '<tr>' + logTh('actor', '고유번호 · 닉네임') + logTh('detail', '변경 내용') + logTh('time', '시간') + '</tr>' +
+            '<tr>' + logTh('actor', '고유번호 · 닉네임') + logTh('detail', '변경 내용') + logTh('time', '시간') + '<th style="width:34px;"></th></tr>' +
             '<tr class="filter-row">' +
               '<th><input type="text" class="log-filter-input" data-logfilter="actor" placeholder="🔍 번호·닉네임" value="' + escapeHtml(adminLogFilterActor) + '"></th>' +
               '<th></th>' +
               '<th><input type="text" class="log-filter-input" data-logfilter="time" placeholder="🔍 시간" value="' + escapeHtml(adminLogFilterTime) + '"></th>' +
+              '<th></th>' +
             '</tr>' +
           '</thead><tbody>' + logRows + '</tbody></table></div>' +
           '<p class="sub" id="log-empty-note" hidden>검색 결과가 없어요.</p>'
@@ -5216,6 +5212,7 @@
         try { var sec = document.getElementById('activity-log-section'); if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e2) {}
       }
       else if (action === 'log-clear') { adminLogFilterActor = ''; adminLogFilterTime = ''; adminLogFilterNick = ''; paint(currentState); }
+      else if (action === 'log-del') { if (isAdminUnlocked) handleDeleteLog(id); }
       else if (action === 'log-sort') { toggleSort(adminLogSort, actionBtn.getAttribute('data-col'), 'desc'); paint(currentState); }
       else if (action === 'cancel-sent') handleCancelSent(id);
       else if (action === 'reapply') handleReapplyRequest(id);
