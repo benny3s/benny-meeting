@@ -772,9 +772,10 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-102';
+  var APP_VERSION = '2026-09-07-103';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
+  var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
 
   var ROOT_NAME = '베니';
   var listFilter = 'all';
@@ -2093,8 +2094,9 @@
         reloadPrompted = true;
         verifyPropagation(sv, 0);
       }
-    } else if (!sv || verNewer(APP_VERSION, sv)) {
-      /* 내 버전이 서버 기록보다 최신 → 서버 갱신 (다른 기기가 새로고침 배너를 받도록) */
+    } else if ((!sv || verNewer(APP_VERSION, sv)) && !appVersionWritten) {
+      /* 내 버전이 서버 기록보다 최신 → 서버 갱신 (다른 기기가 새로고침 배너를 받도록). 세션당 1회만. */
+      appVersionWritten = true;
       stateRef.update({ appVersion: APP_VERSION }).catch(function () {});
     }
   }
