@@ -755,7 +755,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-06-75';
+  var APP_VERSION = '2026-09-06-76';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1308,6 +1308,14 @@
   }
   /* 주선자 역할(친구를 대신 등록·관리하는 계정) = Lv2 또는 Lv3 */
   function isMatchmakerRole(entry, state) { var lv = memberLevel(entry, state); return lv === 2 || lv === 3; }
+  /* 관리자용 등급 배지 (회원 명단에서 구분) */
+  function levelBadge(entry, state) {
+    var lv = memberLevel(entry, state);
+    if (lv === 0) return '<span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 친구</span>';
+    if (lv === 2) return '<span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자</span>';
+    if (lv === 3) return '<span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자·본인</span>';
+    return '<span class="chip" style="background:#f1f1f1;color:#777;">일반</span>';
+  }
   /* sub 임시 로그인 PIN 유효기간(1일) */
   var SUB_PIN_TTL_MS = 24 * 60 * 60 * 1000;
   function subPinExpired(e) {
@@ -2272,7 +2280,7 @@
       formRole = 'matchmaker';
       appendLog('signup', nickname, '주선자 등록 신청');
       notifyAdmin('새 주선자 📝', nickname + '님이 주선자 등록을 신청했어요 (승인 대기).');
-      modalNotice('접수 완료 🤝', '주선자 등록을 신청했어요! 관리자 승인 후, 신청 탭에서 친구를 대신 소개(sub 추가)할 수 있어요.');
+      modalNotice('접수 완료 🤝', '주선자 등록을 신청했어요! 관리자 승인 후, 신청 탭에서 친구를 대신 소개할 수 있어요.');
       activeTab = 'mine';
       paint(currentState);
     }).catch(function (err) {
@@ -2307,7 +2315,7 @@
       : '';
     var proxyNote = proxy
       ? (formRole === 'matchmaker'
-        ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">🤝 <b>친구 대신 소개 (sub 추가)</b> — 소개할 친구의 정보를 입력하세요. 친구는 앱에 가입하지 않아도 되고, 요청·승인은 주선자(' + escapeHtml((currentUser && currentUser.nickname) || '나') + ')님이 대신 처리해요.</div>'
+        ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">🤝 <b>친구 대신 소개</b> — 소개할 친구의 정보를 입력하세요. 친구는 앱에 가입하지 않아도 되고, 요청·승인은 주선자(' + escapeHtml((currentUser && currentUser.nickname) || '나') + ')님이 대신 처리해요.</div>'
         : '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">🤝 <b>친구 대신 소개하기</b> — 아래는 <b>소개할 친구의 정보</b>예요. 친구는 앱에 가입하지 않아도 되고, 요청·승인은 주선자(' + escapeHtml((currentUser && currentUser.nickname) || '나') + ')님이 대신 처리해요. <button type="button" class="card-btn" id="cancel-proxy" style="margin-left:8px;padding:4px 12px;">일반 신청으로</button></div>')
       : '';
     var roleToggle = isEdit ? '' : roleToggleHtml();
@@ -2558,7 +2566,7 @@
           '<h2 style="margin:0 0 4px;">🤝 주선자 홈</h2>' +
           '<div class="my-uid">' + escapeHtml(me.nickname) + ' · 주선자</div>' +
           '<p class="sub">친구들을 대신 소개하고 요청을 관리하는 계정이에요. 주선자 본인은 명단에 노출되지 않아요.</p>' +
-          '<button type="button" class="submit-btn" id="start-proxy" style="width:100%;box-sizing:border-box;margin:4px 0 14px;">🤝 새 친구 소개하기 (sub 추가)</button>' +
+          '<button type="button" class="submit-btn" id="start-proxy" style="width:100%;box-sizing:border-box;margin:4px 0 14px;">🤝 새 친구 소개하기</button>' +
           '<div class="mine-section"><h3>내가 소개한 사람<span class="count">' + (subs.length + subPend.length) + '</span></h3>' + subList + '</div>' +
           '<div class="mine-section"><h3>💬 관리자 메시지<span class="count">' + mmThread.length + '</span></h3>' +
             (mmThread.length ? mmThread.map(function (m) { return msgLineHtml(m, false); }).join('') : '<p class="sub" style="margin:0;">아직 없어요.</p>') +
@@ -2764,6 +2772,7 @@
       return '<tr><td data-action="card-detail" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer;">' +
         '<div style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(e) || '—') + (e.testAccount ? ' 🧪' : '') + '</div>' +
         '<div style="text-decoration:underline dotted;">' + escapeHtml(e.nickname) + '</div>' +
+        '<div style="margin-top:3px;">' + levelBadge(e, state) + '</div>' +
         '</td>' +
         '<td class="seen-date">' + (e.lastSeenAt ? new Date(e.lastSeenAt).toLocaleString('ko-KR') : '기록 없음') + '</td>' +
         '<td style="text-align:center;"><button type="button" class="card-btn" data-action="perm-photo" data-id="' + escapeHtml(e.id) + '" style="flex:none;padding:3px 9px;">📷 ' + d.photoN + '</button></td>' +
@@ -2774,8 +2783,8 @@
       return '<th data-action="seen-sort" data-col="' + col + '" style="cursor:pointer;user-select:none;white-space:nowrap;">' + label + sortArrow(adminSeenSort, col) + '</th>';
     }
     var seenSection =
-      '<h2>👣 최근 접속 · 권한</h2>' +
-      '<p class="sub">헤더를 눌러 정렬해요. 닉네임 클릭 = 프로필 보기. 📷/📱 숫자 = 그 회원의 사진/번호를 볼 수 있는 사람 수 (클릭해서 관리).</p>' +
+      '<h2>👥 회원 명단</h2>' +
+      '<p class="sub">구분: <span class="chip" style="background:#f1f1f1;color:#777;">일반</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 친구</span> <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자</span>. 헤더로 정렬 · 닉네임 클릭 = 프로필 · 📷/📱 = 볼 수 있는 사람 수(클릭해서 관리).</p>' +
       (allEntries.length
         ? '<div class="admin-table-wrap"><table class="seen-table"><thead><tr>' +
             seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 권한') + seenTh('contact', '📱 권한') +
@@ -3667,7 +3676,7 @@
     requireLogin().then(function (fromEntry) {
       if (!fromEntry) return;
       if (isMatchmakerEntry(fromEntry)) {
-        return modalNotice('프로필 선택 필요', '주선자 본인은 소개팅 요청을 보낼 수 없어요. 상단 "🔄 활동 중 프로필"에서 소개할 친구를 선택하거나, 먼저 소개할 친구(sub)를 등록해 주세요.');
+        return modalNotice('프로필 선택 필요', '주선자 본인은 소개팅 요청을 보낼 수 없어요. 상단 "🔄 활동 중 프로필"에서 소개할 친구를 선택하거나, 먼저 소개할 친구를 등록해 주세요.');
       }
       if (fromEntry.id === toId) return modalNotice('안내', '본인에게는 요청할 수 없어요.');
       var existingReq = (state.dateRequests || []).find(function (req) {
@@ -5012,7 +5021,7 @@
           '&#129309; <b>주선자로 친구 소개</b><br>' +
           '<ol style="padding-left:18px;margin:6px 0;">' +
             '<li>내가 소개팅을 안 해도, <b>친구를 대신 등록·관리</b>할 수 있어요.</li>' +
-            '<li>신청서 위 <b>[주선자]</b> → <b>새 등록</b> 또는 <b>로그인</b> → <b>친구(sub) 추가</b>.</li>' +
+            '<li>신청서 위 <b>[주선자]</b> → <b>새 등록</b> 또는 <b>로그인</b> → <b>친구 추가</b>.</li>' +
             '<li>상단 <b>&#128260; 활동 중 프로필</b>에서 <b>각 친구로 전환</b>해 대신 요청·승인.</li>' +
             '<li>친구가 직접 보게 하려면 <b>&#128273; 임시 로그인 PIN(1일)</b> 발급.</li>' +
           '</ol>' +
