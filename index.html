@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-93';
+  var APP_VERSION = '2026-09-07-94';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -2992,7 +2992,10 @@
       var mmThread = threadFor(state, currentUser.id, 'user');
       var joinSection = joinRequestSectionHtml(state, true); /* 주선자는 항상 표시 */
       mmHome =
-          '<h2 style="margin:0 0 4px;">🤝 주선자 홈</h2>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
+            '<h2 style="margin:0 0 4px;">🤝 주선자 홈</h2>' +
+            '<button type="button" class="card-btn" id="convert-member" style="flex:none;">🙋 일반 계정으로 전환</button>' +
+          '</div>' +
           '<div class="my-uid">' + escapeHtml(currentUser.nickname) + ' · 주선자</div>' +
           '<p class="sub">친구 전환·임시 PIN은 위 <b>🔄 누구로 활동할까요</b>에서 친구를 고르면 돼요.</p>' +
           '<button type="button" class="submit-btn" id="start-proxy" style="width:100%;box-sizing:border-box;margin:4px 0 12px;">🤝 새 친구 소개하기</button>' +
@@ -3003,9 +3006,7 @@
             '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">' +
               '<button type="button" class="card-btn primary" id="member-msg-open" style="flex:none;">✍️ 관리자에게 메시지</button>' +
               (mmThread.length ? '<button type="button" class="card-btn" id="member-msg-delall" style="flex:none;">전체 삭제</button>' : '') +
-            '</div></div>' +
-          '<div class="mine-section" style="margin-top:14px;"><button type="button" class="card-btn" id="convert-member" style="flex:none;">🙋 일반 계정으로 전환</button>' +
-            '<p class="sub" style="margin:6px 0 0;">친구 없이 본인 프로필만 있을 때, 주선자를 그만두고 일반 소개팅 계정으로 돌아가요.</p></div>';
+            '</div></div>';
     }
     /* Case A: 주선자 계정 자체로 보고 있음(본인 미전환/미등록) → 관리 홈만 */
     if (isMatchmakerEntry(me)) {
