@@ -90,7 +90,7 @@
   .admin-bar { max-width: 880px; margin: 14px auto 0; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
   .admin-bar-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .notice-bar {
-    max-width: 880px; margin: 12px auto 0; padding: 10px 16px; border-radius: 10px;
+    max-width: 880px; margin: 4px auto 0; padding: 9px 16px; border-radius: 10px;
     background: var(--gold-soft); color: var(--ink); font-size: 0.85rem;
     text-align: center; border: 1px solid var(--gold);
   }
@@ -104,18 +104,21 @@
   .admin-link.unlocked { background: var(--accent); border-color: var(--accent); opacity: 1; }
 
   /* ---------- Tabs ---------- */
+  /* 탭 + 프로필 전환 바를 함께 상단 고정 */
+  .sticky-head {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--paper);
+    box-shadow: 0 6px 10px -8px rgba(0,0,0,0.25);
+  }
   .tabs {
     display: flex;
     gap: 8px;
     margin-bottom: 0;
     border-bottom: 1px solid var(--line);
-    position: sticky;
-    top: 0;
-    z-index: 20;
     background: var(--paper);
     flex-wrap: wrap;
   }
-  #tab-panel { padding-top: 24px; }
+  #tab-panel { padding-top: 18px; }
   .tab-btn {
     background: none;
     border: none;
@@ -755,7 +758,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-06-76';
+  var APP_VERSION = '2026-09-06-77';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -2379,7 +2382,7 @@
               : (function () {
                   var loggedIn = !isEdit && !!currentUser; /* 로그인 상태로 본인 프로필 작성 시 PIN 재입력 생략 */
                   var pinLabelExtra = isEdit ? '<span class="opt">(비우면 유지)</span>' : (loggedIn ? '<span class="opt">(비우면 로그인 PIN 사용)</span>' : '<span class="req">필수</span>');
-                  var pinAttrs = isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : (loggedIn ? ' class="keep-ph" placeholder="(비우면 ' + escapeHtml((currentUser && currentUser.nickname) || '') + ' 로그인 PIN 그대로)"' : ' placeholder="숫자 4~8자리" required');
+                  var pinAttrs = isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : (loggedIn ? ' class="keep-ph" placeholder="(비우면 로그인 PIN 그대로 사용)"' : ' placeholder="숫자 4~8자리" required');
                   return '<div class="field"><label for="f-pin">개인 PIN ' + pinLabelExtra + '</label>' +
                     '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8"' + pinAttrs + '>' +
                     '<span class="hint">나중에 본인이 신청을 취소하거나 데이트를 신청할 때 필요해요.</span></div>';
@@ -3059,8 +3062,10 @@
         '<span class="notice-icon">&#128227;</span> 요청이 오거나 승인·거절되면 알림으로 바로 알려드려요. 위 <b>&#128276; 알림</b> 버튼으로 켜보세요! (방법은 <b>&#128718; 가이드</b>)' +
       '</div>' +
       '<div class="page">' +
-        '<div class="tabs" role="tablist">' + tabs + '</div>' +
-        switcher +
+        '<div class="sticky-head">' +
+          '<div class="tabs" role="tablist">' + tabs + '</div>' +
+          switcher +
+        '</div>' +
         '<div id="tab-panel">' + panel + '</div>' +
       '</div>'
     );
