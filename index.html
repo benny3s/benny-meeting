@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-96';
+  var APP_VERSION = '2026-09-07-97';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -893,7 +893,9 @@
       var ed = (state.entries || []).concat(state.pendingEntries || []).find(function (e) { return e.id === editingEntryId; });
       if (ed && ed.ownerSelf && ed.managedBy) ids.push(ed.managedBy);
     } else if (currentUser && isMatchmakerEntry(myAuthEntry(state))) {
-      ids.push(currentUser.id);
+      /* 주선자 "본인" 프로필 작성일 때만 주선자 닉네임 허용. 친구 소개(proxy)는 닉네임 달라야 함 */
+      var isProxyNow = proxyRegisterMode || (formRole === 'matchmaker');
+      if (!isProxyNow) ids.push(currentUser.id);
     }
     return ids;
   }
