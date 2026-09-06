@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-81';
+  var APP_VERSION = '2026-09-07-82';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -2120,7 +2120,7 @@
             '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
             (entry.height ? '<span class="chip">' + escapeHtml(entry.height) + 'cm</span>' : '') +
             (entry.testAccount && isAdminUnlocked ? '<span class="chip" style="background:#e8eaed;color:#5f6368;">🧪 테스트</span>' : '') +
-            (isProxyEntry(entry) ? '<span class="chip" style="background:var(--gold-soft);color:var(--gold);border-color:var(--gold);">🤝 ' + escapeHtml(managerNickOf(state, entry)) + '님이 소개</span>' : '') +
+            (isAdminUnlocked && isProxyEntry(entry) && !entry.ownerSelf ? '<span class="chip" style="background:var(--gold-soft);color:var(--gold);border-color:var(--gold);">🤝 ' + escapeHtml(managerNickOf(state, entry)) + '님이 소개</span>' : '') +
           '</div>' +
           '<ul class="pf-meta">' +
             '<li>' + ICON_PIN + '<span>' + escapeHtml(entry.region) + '</span></li>' +
@@ -4573,7 +4573,7 @@
     var rows = '<div class="detail-grid">';
     rows += '<div class="detail-row"><div class="detail-label">고유번호</div><div class="detail-value">' + escapeHtml(formatUid(entry) || '—') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">닉네임</div><div class="detail-value">' + escapeHtml(entry.nickname) + '</div></div>';
-    if (isProxyEntry(entry)) rows += '<div class="detail-row"><div class="detail-label">등록 형태</div><div class="detail-value">🤝 대리 등록 (주선자: ' + escapeHtml(managerNickOf(state, entry)) + ')' + (entry.proxyConsentAt ? ' · 본인 동의 확인' : '') + '</div></div>';
+    if (isProxyEntry(entry)) rows += '<div class="detail-row"><div class="detail-label">등록 형태</div><div class="detail-value">' + (entry.ownerSelf ? '🙋 주선자 본인 프로필 (주선자: ' + escapeHtml(managerNickOf(state, entry)) + ')' : '🤝 대리 등록 (주선자: ' + escapeHtml(managerNickOf(state, entry)) + ')' + (entry.proxyConsentAt ? ' · 본인 동의 확인' : '')) + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">실명</div><div class="detail-value" id="detail-realname">복호화 중...</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">연락처</div><div class="detail-value" id="detail-contact">복호화 중...</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">소개자</div><div class="detail-value" id="detail-referrer">복호화 중...</div></div>';
