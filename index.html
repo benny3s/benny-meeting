@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-90';
+  var APP_VERSION = '2026-09-07-91';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -3016,7 +3016,10 @@
         '<div class="admin-panel">' +
           mmHome +
           '<hr class="perforation">' +
-          '<h2 style="margin:12px 0 4px;">🙋 내 소개팅 (본인)</h2>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
+            '<h2 style="margin:12px 0 4px;">🙋 내 소개팅 (본인)</h2>' +
+            '<button type="button" class="card-btn primary" data-action="edit" data-id="' + escapeHtml(me.id) + '" style="flex:none;">✏️ 프로필 수정</button>' +
+          '</div>' +
           '<div class="my-uid">고유번호 ' + escapeHtml(formatUid(me) || '—') + '</div>' +
           '<p class="sub">내 소개팅 프로필로 받고 보낸 요청이에요.</p>' +
           sections +
@@ -3037,12 +3040,14 @@
         ? '<button type="button" class="card-btn approve" data-action="sub-pin-extend" data-id="' + escapeHtml(me.id) + '" style="flex:none;" title="눌러서 24시간 연장">🔑 임시PIN ' + escapeHtml(subPinUntilText(me)) + ' · 연장</button>' +
           '<button type="button" class="card-btn danger" data-action="sub-pin-revoke" data-id="' + escapeHtml(me.id) + '" style="flex:none;">🔑 회수</button>'
         : '<button type="button" class="card-btn" data-action="sub-pin-issue" data-id="' + escapeHtml(me.id) + '" style="flex:none;">🔑 1일 PIN 발급</button>';
-      headBtns = pinBtn +
+      headBtns = '<button type="button" class="card-btn primary" data-action="edit" data-id="' + escapeHtml(me.id) + '" style="flex:none;">✏️ 프로필 수정</button>' +
+        pinBtn +
         '<button type="button" class="card-btn" data-action="sub-detach" data-id="' + escapeHtml(me.id) + '" style="flex:none;">🪪 일반 계정 전환</button>';
     } else if (isSubProfile) {
-      /* 친구(sub)가 임시 PIN으로 직접 로그인한 경우: 만료 시각 표시 */
+      /* 친구(sub)가 임시 PIN으로 직접 로그인한 경우: 프로필 수정 + 만료 시각 표시 */
+      headBtns = '<button type="button" class="card-btn primary" data-action="edit" data-id="' + escapeHtml(me.id) + '" style="flex:none;">✏️ 프로필 수정</button>';
       if (me.pinAuth && !subPinExpired(me)) {
-        headBtns = '<span class="chip" style="background:#e6f4ea;color:#137333;align-self:center;">🔑 임시 로그인 ' + escapeHtml(subPinUntilText(me)) + ' (' + escapeHtml(subPinRemainText(me)) + ')</span>';
+        headBtns += '<span class="chip" style="background:#e6f4ea;color:#137333;align-self:center;">🔑 임시 로그인 ' + escapeHtml(subPinUntilText(me)) + ' (' + escapeHtml(subPinRemainText(me)) + ')</span>';
       }
     } else if (!isSubProfile) {
       /* 일반/주선자 본인 계정: 주선자 요청(내가 관리하는 사람이 없을 때만) + 친구 대신 소개 */
@@ -3053,7 +3058,8 @@
         : (myJoinReq
             ? '<button type="button" class="card-btn" id="cancel-mm-req" style="flex:none;">⏳ 주선자 승인 대기 (취소)</button>'
             : '<button type="button" class="card-btn" id="request-mm" style="flex:none;">🤝 주선자 요청</button>');
-      headBtns = reqBtn + '<button type="button" class="card-btn" id="start-proxy" style="flex:none;">🤝 친구 대신 소개하기</button>';
+      headBtns = '<button type="button" class="card-btn primary" data-action="edit" data-id="' + escapeHtml(me.id) + '" style="flex:none;">✏️ 프로필 수정</button>' +
+        reqBtn + '<button type="button" class="card-btn" id="start-proxy" style="flex:none;">🤝 친구 대신 소개하기</button>';
     }
     return (
       '<div class="admin-panel">' +
