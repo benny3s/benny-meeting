@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-82';
+  var APP_VERSION = '2026-09-07-83';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -2698,12 +2698,11 @@
     var actingBanner = viaMatchmaker
       ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">🤝 지금 <b>' + escapeHtml(me.nickname) + '</b>님(내가 소개한 친구)으로 활동 중이에요. 위 프로필 전환에서 <b>내 프로필</b>로 돌아갈 수 있어요.</div>'
       : (isSubProfile ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">🤝 <b>' + escapeHtml(me.nickname) + '</b>님, 주선자가 소개해 준 후보들을 둘러보고 마음에 드는 분께 요청을 보내보세요.</div>' : '');
-    var pinBtn = isSubProfile ? '' : '<button type="button" class="card-btn" id="change-my-pin" style="flex:none;">🔑 PIN 변경</button>';
     var proxyBtn = isSubProfile ? '' : '<button type="button" class="card-btn" id="start-proxy" style="margin-bottom:6px;">🤝 친구 대신 소개하기</button>';
     return (
       '<div class="admin-panel">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
-          '<h2 style="margin:0;">메시지함</h2>' + pinBtn +
+          '<h2 style="margin:0;">메시지함</h2>' +
         '</div>' +
         '<div class="my-uid">고유번호 ' + escapeHtml(formatUid(me) || '—') + (isSubProfile ? ' · 🤝 대리' : '') + '</div>' +
         actingBanner +
@@ -3017,11 +3016,12 @@
           '<b style="font-size:0.9rem;">테스트 계정 표시 (관리자 명단)</b>' +
           '<button type="button" class="card-btn' + (testAccountsShown() ? ' approve' : '') + '" id="toggle-show-test" style="flex:none;">' + (testAccountsShown() ? '켜짐' : '꺼짐') + '</button>' +
         '</div>' +
-        '<div class="test-acct-list" style="border:1px solid var(--line);border-radius:12px;overflow:hidden;">' +
-          (allEntries.slice().sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); }).map(function (e) {
+        '<div class="test-acct-list" style="border:1px solid var(--line);border-radius:12px;max-height:340px;overflow-y:auto;">' +
+          (allEntries.filter(function (e) { return !e.isMatchmaker; }).sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); }).map(function (e) {
+            var kind = e.ownerSelf ? '🙋 주선자 본인' : (e.managedBy ? '🤝 주선자 친구' : '일반 회원');
             return '<label style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);cursor:pointer;">' +
               '<input type="checkbox" data-testtoggle="' + escapeHtml(e.id) + '"' + (e.testAccount ? ' checked' : '') + ' style="width:17px;height:17px;accent-color:var(--accent);flex:none;">' +
-              '<span style="font-variant-numeric:tabular-nums;"><b>' + escapeHtml(formatUid(e) || '—') + '</b> ' + escapeHtml(e.nickname) + (e.testAccount ? ' <span class="chip" style="background:#e8eaed;color:#5f6368;">🧪</span>' : '') + '</span>' +
+              '<span style="font-variant-numeric:tabular-nums;"><b>' + escapeHtml(formatUid(e) || '—') + '</b> ' + escapeHtml(e.nickname) + ' <span style="color:var(--muted);font-size:0.78rem;">' + kind + '</span>' + (e.testAccount ? ' <span class="chip" style="background:#e8eaed;color:#5f6368;">🧪</span>' : '') + '</span>' +
             '</label>';
           }).join('') || '<p class="sub" style="padding:12px 14px;margin:0;">등록된 계정이 없어요.</p>') +
         '</div>' +
@@ -3134,6 +3134,11 @@
           '</div>';
       }
     }
+    /* 헤더 로그인/PIN 버튼 상태: 회원 로그인 ↔ 관리자 로그인은 한 번에 하나만 노출.
+       - 회원 로그인 중: 관리자 버튼 숨기고 그 자리에 'PIN 변경' (로그인 계정이 본인 소유일 때만)
+       - 관리자 로그인 중: 회원 로그인 버튼 숨김 */
+    var authE = myAuthEntry(state);
+    var canChangePin = !!(currentUser && authE && !authE.managedBy);
     var panel;
     if (activeTab === 'list') panel = renderList(state);
     else if (activeTab === 'mine' && currentUser) panel = renderMine(state);
@@ -3161,10 +3166,11 @@
         '<div class="admin-bar-row">' +
           (currentUser
             ? '<button type="button" class="admin-link unlocked" id="user-logout">' + ICON_UNLOCK + ' ' + escapeHtml(currentUser.nickname) + ' · 로그아웃</button>'
-            : '<button type="button" class="admin-link" id="user-login">' + ICON_LOCK + ' 로그인</button>') +
-          '<button type="button" class="admin-link' + (isAdminUnlocked ? ' unlocked' : '') + '" id="admin-toggle">' +
-            (isAdminUnlocked ? ICON_UNLOCK + ' 관리자 모드' : ICON_LOCK + ' 관리자') +
-          '</button>' +
+            : (isAdminUnlocked ? '' : '<button type="button" class="admin-link" id="user-login">' + ICON_LOCK + ' 로그인</button>')) +
+          (currentUser
+            ? (canChangePin ? '<button type="button" class="admin-link" id="header-change-pin">&#128273; PIN 변경</button>' : '')
+            : '<button type="button" class="admin-link' + (isAdminUnlocked ? ' unlocked' : '') + '" id="admin-toggle">' +
+                (isAdminUnlocked ? ICON_UNLOCK + ' 관리자 모드' : ICON_LOCK + ' 관리자') + '</button>') +
         '</div>' +
       '</div></div>' +
       '<div class="notice-bar">' +
@@ -3382,38 +3388,46 @@
     });
   }
 
-  /* 로그인한 본인이 개인 PIN 변경 (연락처 자가암호화도 새 PIN으로 재암호화) */
+  /* 로그인한 본인이 개인(로그인) PIN 변경.
+     - 항상 로그인 계정(myAuthEntry) 기준으로 바꿈 (주선자가 친구로 전환해 있어도 로그인 PIN을 바꿈)
+     - 내 연락처 + 내가 관리하는 프로필(친구/본인)의 연락처도 새 PIN으로 재암호화해 계속 열람 가능하게 함 */
   function handleChangeMyPin() {
-    var me = findMyEntry(currentState);
+    var me = myAuthEntry(currentState);
     if (!me) return modalNotice('로그인 필요', '먼저 로그인해주세요.');
     modalNumericPinSetup('PIN 변경', '새로 사용할 개인 PIN을 입력해주세요.').then(function (r) {
       if (!r) return;
       if (!/^[0-9]{4,8}$/.test(r.p1)) return modalNotice('입력 오류', 'PIN은 숫자 4~8자리예요.');
       if (r.p1 !== r.p2) return modalNotice('오류', 'PIN이 일치하지 않아요.');
-      myContact().then(function (contact) {
-        return Promise.all([
-          makePinAuth(r.p1),
-          contact ? encryptForSelf(r.p1, contact) : Promise.resolve(null)
-        ]).then(function (res) {
+      var oldPin = currentUser.pin, newPin = r.p1;
+      /* 내가 관리하는 프로필들(친구·본인) — 연락처가 내 옛 PIN으로 암호화돼 있음 */
+      var subs = (currentState.entries || []).filter(function (e) { return e.managedBy === me.id && e.contactSelfEnc; });
+      var decJobs = [ me.contactSelfEnc ? decryptForSelf(oldPin, me.contactSelfEnc).catch(function () { return null; }) : Promise.resolve(null) ];
+      subs.forEach(function (s) { decJobs.push(decryptForSelf(oldPin, s.contactSelfEnc).catch(function () { return null; })); });
+      Promise.all(decJobs).then(function (contacts) {
+        var encJobs = [ makePinAuth(newPin), contacts[0] ? encryptForSelf(newPin, contacts[0]) : Promise.resolve(null) ];
+        subs.forEach(function (s, i) { var c = contacts[i + 1]; encJobs.push(c ? encryptForSelf(newPin, c) : Promise.resolve(null)); });
+        return Promise.all(encJobs).then(function (res) {
           var newAuth = res[0], newSelf = res[1];
+          var subEnc = {}; subs.forEach(function (s, i) { if (res[i + 2]) subEnc[s.id] = res[i + 2]; });
           return db.runTransaction(function (tx) {
             return tx.get(stateRef).then(function (doc) {
               var s = doc.data();
               var entries = (s.entries || []).map(function (e) {
-                if (e.id !== me.id) return e;
-                var c = JSON.parse(JSON.stringify(e));
-                c.pinAuth = newAuth;
-                delete c.pinHash;
-                delete c.pinEnc;
-                if (newSelf) c.contactSelfEnc = newSelf;
-                return c;
+                if (e.id === me.id) {
+                  var c = JSON.parse(JSON.stringify(e));
+                  c.pinAuth = newAuth; delete c.pinHash; delete c.pinEnc;
+                  if (newSelf) c.contactSelfEnc = newSelf;
+                  return c;
+                }
+                if (subEnc[e.id]) { var c2 = JSON.parse(JSON.stringify(e)); c2.contactSelfEnc = subEnc[e.id]; return c2; }
+                return e;
               });
               tx.update(stateRef, { entries: entries });
             });
           });
         });
       }).then(function () {
-        currentUser.pin = r.p1; saveSession();
+        currentUser.pin = newPin; saveSession();
         appendLog('edit', me.nickname, 'PIN 변경');
         return refreshNow();
       }).then(function () {
@@ -4832,7 +4846,7 @@
       handleChangeAdminPw();
       return;
     }
-    if (e.target.closest('#change-my-pin')) {
+    if (e.target.closest('#change-my-pin') || e.target.closest('#header-change-pin')) {
       handleChangeMyPin();
       return;
     }
