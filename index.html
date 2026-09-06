@@ -772,7 +772,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-87';
+  var APP_VERSION = '2026-09-07-88';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
 
@@ -1428,11 +1428,9 @@
     var authE = myAuthEntry(state);
     if (!isMatchmakerEntry(authE)) { actingAs = null; return; }
     var mySubs = entriesManagedByMe(state);
-    if (!mySubs.length) { actingAs = null; return; }
     var self = mySubs.find(function (e) { return e.ownerSelf; });
-    if (self) { actingAs = self.id; return; }
-    var sorted = mySubs.slice().sort(function (a, b) { return (a.submittedAt || '').localeCompare(b.submittedAt || ''); });
-    actingAs = sorted[0].id;
+    /* 주선자 기본: 본인 프로필 있으면 본인(주선자 홈+본인 메시지함 합친 화면), 없으면 주선자 홈(self) */
+    actingAs = self ? self.id : null;
   }
   /* 프로필 전환 (내 프로필 ↔ 내가 소개한 sub 프로필) */
   function handleSwitchProfile(id) {
@@ -2835,8 +2833,10 @@
     if (!me) {
       return '<div class="admin-panel"><h2>메시지함</h2><p class="sub">신청 정보를 찾을 수 없어요. 다시 로그인해주세요.</p></div>';
     }
-    /* 주선자(본인)로 보고 있을 때: 소개팅 요청함 대신 안내 + 내가 소개한 사람 요약 */
-    if (isMatchmakerEntry(me)) {
+    /* 주선자 계정으로 로그인했으면 "주선자 홈(관리)" 블록을 만들어 둠 → 본인 메시지함 위에 얹는다 */
+    var authMM = isMatchmakerEntry(myAuthEntry(state));
+    var mmHome = '';
+    if (authMM) {
       var subs = entriesManagedByMe(state);
       var subPend = (state.pendingEntries || []).filter(function (e) { return e.managedBy === currentUser.id; });
       var subList = (subs.length || subPend.length)
@@ -2877,11 +2877,10 @@
               }).join('')
             : '<p class="sub" style="margin:0;">받은 요청이 없어요.</p>') +
         '</div>';
-      return (
-        '<div class="admin-panel">' +
+      mmHome =
           '<h2 style="margin:0 0 4px;">🤝 주선자 홈</h2>' +
-          '<div class="my-uid">' + escapeHtml(me.nickname) + ' · 주선자</div>' +
-          '<p class="sub">친구들을 대신 소개하고 요청을 관리하는 계정이에요. 주선자 본인은 명단에 노출되지 않아요.</p>' +
+          '<div class="my-uid">' + escapeHtml(currentUser.nickname) + ' · 주선자</div>' +
+          '<p class="sub">친구들을 대신 소개하고 요청을 관리해요.</p>' +
           '<button type="button" class="submit-btn" id="start-proxy" style="width:100%;box-sizing:border-box;margin:4px 0 14px;">🤝 새 친구 소개하기</button>' +
           '<div class="mine-section"><h3>내가 소개한 사람<span class="count">' + (subs.length + subPend.length) + '</span></h3>' + subList + '</div>' +
           joinSection +
@@ -2890,9 +2889,13 @@
             '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">' +
               '<button type="button" class="card-btn primary" id="member-msg-open" style="flex:none;">✍️ 관리자에게 메시지</button>' +
               (mmThread.length ? '<button type="button" class="card-btn" id="member-msg-delall" style="flex:none;">전체 삭제</button>' : '') +
-            '</div></div>' +
-        '</div>'
-      );
+            '</div></div>';
+    }
+    /* Case A: 주선자 계정 자체로 보고 있음(본인 미전환/미등록) → 관리 홈만 */
+    if (isMatchmakerEntry(me)) {
+      var ownExists = (state.entries || []).some(function (e) { return e.managedBy === currentUser.id && e.ownerSelf; });
+      var selfNote = ownExists ? '' : '<div class="mine-section"><p class="sub" style="margin:0;">🙋 아직 본인 소개팅 프로필이 없어요. 상단 "신청서 작성 → 본인"에서 등록하면 여기 함께 표시돼요.</p></div>';
+      return '<div class="admin-panel">' + mmHome + selfNote + '</div>';
     }
     var reqs = state.dateRequests || [];
     var groups = [
@@ -2930,6 +2933,19 @@
           (thread.length ? '<button type="button" class="card-btn" id="member-msg-delall" style="flex:none;">전체 삭제</button>' : '') +
         '</div>' +
       '</div>';
+    /* Case B: 주선자의 "본인" 프로필로 보고 있음 → 주선자 홈(위) + 본인 메시지함(아래) 합쳐서 */
+    if (authMM && me.ownerSelf && me.managedBy === currentUser.id) {
+      return (
+        '<div class="admin-panel">' +
+          mmHome +
+          '<hr class="perforation">' +
+          '<h2 style="margin:12px 0 4px;">🙋 내 소개팅 (본인)</h2>' +
+          '<div class="my-uid">고유번호 ' + escapeHtml(formatUid(me) || '—') + '</div>' +
+          '<p class="sub">내 소개팅 프로필로 받고 보낸 요청이에요.</p>' +
+          sections +
+        '</div>'
+      );
+    }
     var isSubProfile = isProxyEntry(me); /* me가 대리(sub) 프로필인가 */
     var viaMatchmaker = !!actingAs && actingAs !== currentUser.id; /* 주선자가 전환해서 보는 중 */
     var actingBanner = viaMatchmaker
@@ -3388,20 +3404,20 @@
       var meSelfAny = (state.entries || []).concat(state.pendingEntries || []).find(function (e) { return e.id === currentUser.id; });
       var iAmMM = isMatchmakerEntry(meSelfAny);
       if (mySubs.length || iAmMM) {
-        var selfActive = !actingAs || actingAs === currentUser.id;
-        var selfSuffix = iAmMM ? ' (주선자)' : ' (나)';
+        /* 주선자 본인(ownerSelf)은 "주선자 홈 = 본인 메시지함"으로 합쳐졌으므로, owner 칩 하나로 표현 */
+        var ownEntry = iAmMM ? mySubs.find(function (e) { return e.ownerSelf; }) : null;
+        var ownerTargetId = ownEntry ? ownEntry.id : currentUser.id;
+        var ownerActive = !actingAs || actingAs === currentUser.id || (ownEntry && actingAs === ownEntry.id);
         var selfIcon = iAmMM ? '🧑‍💼' : '🙋';
-        /* 본인(ownerSelf) 먼저, 그다음 친구들(등록순) */
-        var sortedSubs = mySubs.slice().sort(function (a, b) {
-          if (!!a.ownerSelf !== !!b.ownerSelf) return a.ownerSelf ? -1 : 1;
-          return (a.submittedAt || '').localeCompare(b.submittedAt || '');
-        });
-        var ownerRow = '<button type="button" class="pf-owner-chip' + (selfActive ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(currentUser.id) + '">' +
-          selfIcon + ' ' + escapeHtml(currentUser.nickname) + selfSuffix + (selfActive && iAmMM ? ' · 홈' : '') + '</button>';
-        var childChips = sortedSubs.map(function (s) {
+        var selfSuffix = iAmMM ? (ownEntry ? ' (주선자·본인)' : ' (주선자)') : ' (나)';
+        /* 친구들(등록순) — 주선자 본인은 owner 칩에 합쳐졌으니 목록에서 제외 */
+        var friendSubs = mySubs.filter(function (s) { return !(iAmMM && s.ownerSelf); })
+          .sort(function (a, b) { return (a.submittedAt || '').localeCompare(b.submittedAt || ''); });
+        var ownerRow = '<button type="button" class="pf-owner-chip' + (ownerActive ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(ownerTargetId) + '">' +
+          selfIcon + ' ' + escapeHtml(currentUser.nickname) + selfSuffix + (ownerActive && iAmMM ? ' · 홈' : '') + '</button>';
+        var childChips = friendSubs.map(function (s) {
           var on = actingAs === s.id;
-          var lbl = s.ownerSelf ? ('🙋 ' + escapeHtml(s.nickname) + ' (본인)') : ('🤝 ' + escapeHtml(s.nickname));
-          return '<button type="button" class="pf-switch-chip' + (on ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '">' + lbl + '</button>';
+          return '<button type="button" class="pf-switch-chip' + (on ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '">🤝 ' + escapeHtml(s.nickname) + '</button>';
         }).join('');
         childChips += '<button type="button" class="pf-switch-chip pf-switch-add" data-action="switch-add">＋ 추가</button>';
         switcher = '<div class="profile-switch">' +
