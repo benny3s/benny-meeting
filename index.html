@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-115';
+  var APP_VERSION = '2026-09-07-116';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -4477,7 +4477,7 @@
       var icon = isPhoto ? '📷' : '📱';
       var noteOverlay = openModal(
         '<h3>' + icon + ' ' + escapeHtml(target.nickname) + '님 ' + typeLabel + ' 요청</h3>' +
-        '<p class="modal-msg">상대가 승인하면 확인할 수 있어요. 간단한 인사·요청 이유를 꼭 남겨주세요 <b>(최소 10자)</b>.</p>' +
+        '<p class="modal-msg">' + (isPhoto ? '수락하면 <b>서로 사진이 공개</b>돼요. ' : '상대가 수락하면 진행돼요. ') + '간단한 인사·요청 이유를 꼭 남겨주세요 <b>(최소 10자)</b>.</p>' +
         '<textarea class="modal-input" id="modal-note" rows="3" maxlength="200" placeholder="예) 안녕하세요! 프로필 잘 봤어요, 꼭 한번 대화해보고 싶어요 :)"></textarea>' +
         '<p id="modal-note-warn" class="modal-msg" style="color:var(--accent);margin:4px 0 0;font-size:0.82rem;" hidden>최소 10자 이상 남겨주세요.</p>' +
         '<div class="modal-actions">' +
@@ -4686,7 +4686,8 @@
   function canViewPhotoOf(state, viewerId, targetId) {
     return (state.dateRequests || []).some(function (req) {
       if ((req.type || 'contact') !== 'photo') return false;
-      if (req.approved && req.fromId === viewerId && req.toId === targetId) return true;
+      /* 승인된 사진 요청은 양방향 상호 공개 (요청자·수신자 모두 서로 사진을 봄) — "보고 튀기" 방지 */
+      if (req.approved && ((req.fromId === viewerId && req.toId === targetId) || (req.fromId === targetId && req.toId === viewerId))) return true;
       if (req.fromRevealed && req.fromId === targetId && req.toId === viewerId) return true;
       return false;
     });
