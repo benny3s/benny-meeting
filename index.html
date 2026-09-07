@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-124';
+  var APP_VERSION = '2026-09-07-125';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -5492,49 +5492,11 @@
         pinEl.innerHTML = '<span style="color:var(--muted);">보안상 표시하지 않아요</span>' +
           ' <button type="button" class="card-btn" data-action="reset-pin" data-id="' + escapeHtml(entry.id) + '" style="flex:none;padding:2px 10px;margin-left:6px;">PIN 재설정</button>';
       }
-      /* 관리자: 실명 입력/수정 (기존 주선자 등 실명이 없는 계정에 채워넣기) */
       var rnEl = document.getElementById('detail-realname');
-      if (rnEl) {
-        if (!entry.realNameEnc) rnEl.textContent = '(없음)';
-        rnEl.insertAdjacentHTML('afterend', ' <button type="button" class="card-btn" data-action="edit-realname" data-id="' + escapeHtml(entry.id) + '" style="flex:none;padding:2px 10px;margin-left:6px;">✏️ 실명 입력/수정</button>');
-      }
+      if (rnEl && !entry.realNameEnc) rnEl.textContent = '(없음)';
     }
   }
 
-  /* 관리자가 실명(realNameEnc) 입력/수정 — 기존 주선자처럼 실명이 없는 계정에 채워넣기 */
-  function handleEditRealName(id) {
-    if (!isAdminUnlocked || !adminPrivateKey) return modalNotice('안내', '관리자 모드에서만 가능해요.');
-    var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
-    if (!entry) return;
-    var pubJwk = currentState.adminAuth && currentState.adminAuth.publicKeyJwk;
-    if (!pubJwk) return modalNotice('오류', '관리자 키를 찾을 수 없어요.');
-    var curP = entry.realNameEnc ? decryptWithAdmin(adminPrivateKey, entry.realNameEnc).catch(function () { return ''; }) : Promise.resolve('');
-    curP.then(function (curName) {
-      return modalMessage('실명 입력/수정', entry.nickname + '님의 실명을 입력하세요.' + (curName ? ' (현재: ' + curName + ')' : ''), '저장', 'primary', '예: 김베니');
-    }).then(function (name) {
-      if (name === null || name === undefined) return;
-      name = (name || '').trim();
-      if (!name) return modalNotice('안내', '이름을 입력해주세요.');
-      if (name.length > 20) return modalNotice('안내', '이름은 20자 이내로 입력해주세요.');
-      return encryptForAdmin(pubJwk, name).then(function (enc) {
-        return db.runTransaction(function (tx) {
-          return tx.get(stateRef).then(function (doc) {
-            var s = doc.data();
-            var entries = (s.entries || []).map(function (e) {
-              if (e.id !== id) return e;
-              var c = JSON.parse(JSON.stringify(e)); c.realNameEnc = enc; return c;
-            });
-            tx.update(stateRef, { entries: entries });
-          });
-        });
-      }).then(function () {
-        appendLog('admin', '관리자', '실명 입력/수정 · ' + entry.nickname);
-        return refreshNow();
-      }).then(function () {
-        modalNotice('저장 완료', entry.nickname + '님 실명을 저장했어요.');
-      });
-    }).catch(function (err) { modalNotice('오류', '저장 실패: ' + (err.message || err)); });
-  }
   /* 관리자가 회원 PIN을 새로 재설정 (원본 열람 불가한 기존 회원용) */
   function handleAdminResetPin(id) {
     if (!isAdminUnlocked || !adminPrivateKey) return modalNotice('안내', '관리자 모드에서만 가능해요.');
@@ -5776,7 +5738,6 @@
       else if (action === 'reapply') handleReapplyRequest(id);
       else if (action === 'hide-request') handleHideRequest(id);
       else if (action === 'reset-pin') handleAdminResetPin(id);
-      else if (action === 'edit-realname') handleEditRealName(id);
       else if (action === 'admin-msg') handleAdminMessageCompose(id);
       else if (action === 'admin-msg-reply') handleAdminMessageCompose(id);
       else if (action === 'msg-del') { if (isAdminUnlocked) deleteAdminMessage(id); }
