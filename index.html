@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-125';
+  var APP_VERSION = '2026-09-07-126';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -799,6 +799,7 @@
   var decryptedRequests = {};
   /* 관리자 표 정렬/필터 상태 */
   var adminSeenSort = { col: 'uid', dir: 'desc' };   /* 최근 접속·권한 표 (기본: 고유번호 내림차순) */
+  var adminSeenType = 'all';                          /* 회원 명단 계정 유형 필터: all|general|mm|managed */
   var adminLogSort = { col: 'time', dir: 'desc' };   /* 활동 기록 표 (기본: 시간 내림차순) */
   var adminLogFilterActor = '';                       /* 활동 기록 고유번호/닉네임 필터 (검색창, 부분일치) */
   var adminLogFilterTime = '';                        /* 활동 기록 시간 필터 */
@@ -3636,25 +3637,45 @@
       return '<td class="seen-date" data-action="log-filter" data-nick="' + escapeHtml(e.nickname) + '" title="눌러서 이 사람 활동 기록 보기"' +
         ' style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(dateTxt) + '</td>';
     }
-    var seenRows = tops.map(function (d) {
-      var e = d.e;
-      var row = '<tr>' + nameCell(e, false) + seenCell(e) +
-        permCell(e, d.photoN, 'photo') + permCell(e, d.contactN, 'contact') + '</tr>';
-      var kids = (childrenByMgr[e.id] || []).slice().sort(function (a, b) { return (b.ownerSelf ? 1 : 0) - (a.ownerSelf ? 1 : 0); });
-      row += kids.map(function (c) {
-        var pc = permCounts(c);
-        return '<tr style="background:rgba(0,0,0,0.02);">' + nameCell(c, true) +
-          '<td class="seen-date" style="color:var(--muted);">—</td>' +
-          permCell(c, pc.photoN, 'photo') + permCell(c, pc.contactN, 'contact') + '</tr>';
+    /* 계정 유형 분류: 일반(general) / 주선자(mm) / 주선자 관리 프로필(managed=대리·본인) */
+    var acctType = function (e) { return e.isMatchmaker ? 'mm' : (e.managedBy ? 'managed' : 'general'); };
+    var seenRows;
+    if (adminSeenType === 'all') {
+      seenRows = tops.map(function (d) {
+        var e = d.e;
+        var row = '<tr>' + nameCell(e, false) + seenCell(e) +
+          permCell(e, d.photoN, 'photo') + permCell(e, d.contactN, 'contact') + '</tr>';
+        var kids = (childrenByMgr[e.id] || []).slice().sort(function (a, b) { return (b.ownerSelf ? 1 : 0) - (a.ownerSelf ? 1 : 0); });
+        row += kids.map(function (c) {
+          var pc = permCounts(c);
+          return '<tr style="background:rgba(0,0,0,0.02);">' + nameCell(c, true) +
+            '<td class="seen-date" style="color:var(--muted);">—</td>' +
+            permCell(c, pc.photoN, 'photo') + permCell(c, pc.contactN, 'contact') + '</tr>';
+        }).join('');
+        return row;
       }).join('');
-      return row;
-    }).join('');
+    } else {
+      /* 특정 유형만: 트리 없이 평면 목록으로 (고유번호 내림차순) */
+      var flat = allEntries.filter(function (e) { return acctType(e) === adminSeenType; })
+        .sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
+      seenRows = flat.map(function (e) {
+        var pc = permCounts(e);
+        return '<tr>' + nameCell(e, false) + seenCell(e) +
+          permCell(e, pc.photoN, 'photo') + permCell(e, pc.contactN, 'contact') + '</tr>';
+      }).join('') || '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:14px;">해당 유형의 회원이 없어요.</td></tr>';
+    }
+    var typeFilterBtns = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 10px;">' +
+      [['all', '전체'], ['general', '일반 회원'], ['mm', '주선자'], ['managed', '소개·본인']].map(function (f) {
+        var on = adminSeenType === f[0];
+        return '<button type="button" class="filter-btn" data-action="seen-type" data-type="' + f[0] + '" aria-pressed="' + on + '">' + f[1] + '</button>';
+      }).join('') + '</div>';
     function seenTh(col, label) {
       return '<th data-action="seen-sort" data-col="' + col + '" style="cursor:pointer;user-select:none;white-space:nowrap;">' + label + sortArrow(adminSeenSort, col) + '</th>';
     }
     var seenSection =
       '<h2>👥 회원 명단</h2>' +
       '<p class="sub">로그인 계정이 상위, 그 아래 <span class="chip" style="background:#fdeef0;color:var(--accent);">🙋 본인</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 친구</span> 가 붙어요. <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자</span> <span class="chip" style="background:#f1f1f1;color:#777;">일반</span>. 헤더로 정렬 · 닉네임 클릭 = 프로필 · <b>접속 시간 클릭 = 그 사람 활동 기록</b> · 📷/📱 = <b>이 사람이 볼 수 있는</b> 사진·번호 수(클릭해서 관리).</p>' +
+      typeFilterBtns +
       (tops.length
         ? '<div class="admin-table-wrap"><table class="seen-table"><thead><tr>' +
             seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 볼 수 있는 사진') + seenTh('contact', '💬 채팅 가능') +
@@ -5725,6 +5746,7 @@
       else if (action === 'perm-photo') { if (isAdminUnlocked) openPermPopup(id, 'photo'); }
       else if (action === 'perm-contact') { if (isAdminUnlocked) openPermPopup(id, 'contact'); }
       else if (action === 'seen-sort') { toggleSort(adminSeenSort, actionBtn.getAttribute('data-col'), 'desc'); paint(currentState); }
+      else if (action === 'seen-type') { adminSeenType = actionBtn.getAttribute('data-type') || 'all'; paint(currentState); }
       else if (action === 'log-filter') {
         adminLogFilterNick = actionBtn.getAttribute('data-nick') || ''; /* 완전일치 필터 */
         adminLogFilterActor = ''; adminLogFilterTime = '';
