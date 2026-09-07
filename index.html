@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-123';
+  var APP_VERSION = '2026-09-07-124';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -1194,9 +1194,12 @@
   var overlayStack = [];
   var handlingPop = false; /* popstate 처리 중 (뒤로가기로 닫는 중) */
   var selfPop = false;     /* 우리가 정리용으로 부른 history.back() */
+  var pendingBack = 0;     /* 닫기로 예약됐지만 아직 실행 안 한 back() 수 (같은 클릭의 열기와 상쇄용) */
   function pushOverlay(el, dismiss) {
     overlayStack.push({ el: el, dismiss: dismiss });
     document.body.classList.add('modal-open'); /* 배경 스크롤 잠금 */
+    /* 같은 클릭에서 방금 닫힌 모달의 back()이 예약돼 있으면, 이 열기와 상쇄 → 히스토리 어긋남/사이트 이탈 방지 */
+    if (pendingBack > 0) { pendingBack--; return; }
     try { history.pushState({ meetOverlay: overlayStack.length }, ''); } catch (e) {}
   }
   function popOverlay(el) {
@@ -1208,8 +1211,15 @@
     overlayStack.splice(idx, 1);
     if (!overlayStack.length) document.body.classList.remove('modal-open'); /* 스크롤 잠금 해제 */
     if (!handlingPop) {
-      selfPop = true;
-      try { history.back(); } catch (e) { selfPop = false; }
+      /* back()을 마이크로태스크로 미룸: 같은 클릭에서 곧바로 새 모달이 열리면(pushOverlay) 상쇄됨 */
+      pendingBack++;
+      Promise.resolve().then(function () {
+        if (pendingBack > 0) {
+          pendingBack--;
+          selfPop = true;
+          try { history.back(); } catch (e) { selfPop = false; }
+        }
+      });
     }
   }
   window.addEventListener('popstate', function () {
