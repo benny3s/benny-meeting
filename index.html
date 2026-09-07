@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-117';
+  var APP_VERSION = '2026-09-07-118';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -4544,7 +4544,16 @@
     requireLogin().then(function (fromEntry) {
       if (!fromEntry) return;
       if (isMatchmakerEntry(fromEntry)) {
-        return modalNotice('프로필 선택 필요', '주선자 본인은 소개팅 요청을 보낼 수 없어요. 상단 "🔄 활동 중 프로필"에서 소개할 친구를 선택하거나, 먼저 소개할 친구를 등록해 주세요.');
+        var mmOv = openModal(
+          '<h3>소개팅 요청은 프로필로 보내요</h3>' +
+          '<p class="modal-msg">주선자 계정은 <b>친구를 소개·관리하는 역할</b>이라, 소개팅 요청(사진·데이트)은 <b>본인 프로필</b>이나 <b>소개한 친구 프로필</b>로만 보낼 수 있어요.</p>' +
+          '<p class="modal-msg" style="margin-bottom:8px;">✅ <b>이미 프로필이 있으면</b> — 화면 위쪽 <b>“🔄 누구로 활동할까요”</b>를 눌러 그 프로필로 바꾼 뒤 요청하세요.</p>' +
+          '<p class="modal-msg">➕ <b>아직 없으면</b> — <b>“신청서 작성”</b> 탭에서 본인 프로필을 만들거나 친구를 소개(등록)하면 요청할 수 있어요.</p>' +
+          '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">확인</button></div>'
+        );
+        mmOv.querySelector('#modal-ok').addEventListener('click', function () { closeModal(mmOv); });
+        mmOv.addEventListener('click', function (e) { if (e.target === mmOv) closeModal(mmOv); });
+        return;
       }
       if (fromEntry.id === toId) return modalNotice('안내', '본인에게는 요청할 수 없어요.');
       if (isPhoto && canViewPhotoOf(state, fromEntry.id, toId)) {
