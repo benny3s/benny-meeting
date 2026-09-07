@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-108';
+  var APP_VERSION = '2026-09-07-109';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -935,8 +935,8 @@
     if (dup) { el.classList.add('input-dup'); if (err) err.hidden = false; }
     else { el.classList.remove('input-dup'); if (err) err.hidden = true; }
   }
-  /* 자기소개/이성조건/비선호 글자수 카운터 갱신 (최소 20자) */
-  var CC_MIN = 20;
+  /* 자기소개/이성조건/비선호 글자수 카운터 갱신 (필드별 최소 글자수) */
+  var CC_MIN = { 'f-intro': 20, 'f-idealtype': 10, 'f-dealbreaker': 10 };
   function updateCharCounts() {
     var ids = ['f-intro', 'f-idealtype', 'f-dealbreaker'];
     for (var i = 0; i < ids.length; i++) {
@@ -946,8 +946,9 @@
       if (!cc) continue;
       var len = (ta.value || '').trim().length;
       var max = ta.getAttribute('maxlength') || '';
-      var short = len < CC_MIN;
-      cc.textContent = len + ' / ' + max + (short ? ' · 최소 ' + CC_MIN + '자' : ' ✓');
+      var min = CC_MIN[ids[i]] || 20;
+      var short = len < min;
+      cc.textContent = len + ' / ' + max + (short ? ' · 최소 ' + min + '자' : ' ✓');
       cc.className = 'char-count' + (short ? ' short' : '');
     }
   }
@@ -2899,10 +2900,10 @@
               '<span class="hint">정보가 자세할수록 매칭 성공률이 올라가요!</span>' +
               '<textarea id="f-intro" name="intro" rows="5" maxlength="500" placeholder="예: MBTI ENFP · 비흡연 · 취미는 요리·등산 ..."></textarea>' +
               '<div class="char-count" data-cc="f-intro">0 / 500</div></div>' +
-            '<div class="field"><label for="f-idealtype">원하는 이성 조건 <span class="req">필수</span> <span class="opt">최소 20자</span></label>' +
-              '<textarea id="f-idealtype" name="idealType" rows="5" maxlength="500" placeholder="예: 키 170+ · 90~97년생 · 비흡연 · 자기관리 잘하는 분 ..."></textarea>' +
-              '<div class="char-count" data-cc="f-idealtype">0 / 500</div></div>' +
-            '<div class="field"><label for="f-dealbreaker">피하고 싶은 조건 <span class="req">필수</span> <span class="opt">최소 20자</span></label>' +
+            '<div class="field"><label for="f-idealtype">원하는 이성 조건 <span class="req">필수</span> <span class="opt">최소 10자</span></label>' +
+              '<textarea id="f-idealtype" name="idealType" rows="5" maxlength="300" placeholder="예: 키 170+ · 90~97년생 · 비흡연 · 자기관리 잘하는 분 ..."></textarea>' +
+              '<div class="char-count" data-cc="f-idealtype">0 / 300</div></div>' +
+            '<div class="field"><label for="f-dealbreaker">피하고 싶은 조건 <span class="req">필수</span> <span class="opt">최소 10자</span></label>' +
               '<textarea id="f-dealbreaker" name="dealbreaker" rows="3" maxlength="300" placeholder="예: 흡연자 · 종교 강요 · 연락 안 되는 사람 ..."></textarea>' +
               '<div class="char-count" data-cc="f-dealbreaker">0 / 300</div></div>' +
           '</div>' +
@@ -4000,8 +4001,8 @@
       if (!managedCreate && !referrerText) missing.push('소개자'); /* 대리/주선자본인 등록은 소개자 선택 */
       if (!managedCreate && !pin && !currentUser) missing.push('개인 PIN'); /* 로그인 상태면 기존 PIN 재사용 가능 */
       if (intro.length < 20) missing.push('자기소개(20자 이상)');
-      if (idealType.length < 20) missing.push('원하는 이성 조건(20자 이상)');
-      if (dealbreaker.length < 20) missing.push('피하고 싶은 조건(20자 이상)');
+      if (idealType.length < 10) missing.push('원하는 이성 조건(10자 이상)');
+      if (dealbreaker.length < 10) missing.push('피하고 싶은 조건(10자 이상)');
     }
     if (missing.length > 0) {
       modalNotice('입력 오류', '다음 항목을 채워주세요: ' + missing.join(', '));
@@ -5699,7 +5700,7 @@
             '<li>신청서에서 <b>[본인]</b> 선택 → 정보 채워 제출 → 관리자 승인 후 명단에 올라가요.</li>' +
             '<li>명단에서 마음에 드는 사람에게 <b>&#128247; 사진 / &#128241; 번호 요청</b> (간단한 인사·이유 <b>필수, 최소 10자</b>).</li>' +
             '<li>받은 요청은 <b>승인 / 보류 / 거절 + 답장</b>. 예: "보류 + 사진 보여주세요".</li>' +
-            '<li>자기소개·원하는 이성·피하고 싶은 조건은 <b>필수(각 20자↑)</b>. 자세할수록 매칭이 잘 돼요!</li>' +
+            '<li>자기소개·원하는 이성·피하고 싶은 조건은 <b>필수</b> (자기소개 20자↑, 나머지 각 10자↑). 자세할수록 매칭이 잘 돼요!</li>' +
           '</ol>' +
         '</div>' +
         '<div style="' + box + '">' +
