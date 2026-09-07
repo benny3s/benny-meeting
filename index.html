@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-122';
+  var APP_VERSION = '2026-09-07-123';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -1473,7 +1473,7 @@
     if (!currentUser) return;
     var sub = ((currentState && currentState.entries) || []).find(function (e) { return e.id === subId && e.managedBy === currentUser.id; });
     if (!sub) return modalNotice('안내', '내가 소개한 친구만 임시 PIN을 발급할 수 있어요.');
-    modalNumericPinSetup('🔑 1일 임시 로그인 PIN 발급', '주선자(' + currentUser.nickname + ')님이 계속 관리하는 상태는 그대로 유지돼요. 다만 ' + sub.nickname + '님이 직접 로그인할 수 있도록 1일 동안만 쓰는 임시 PIN을 발급해요. 예를 들어 ' + sub.nickname + '님에게 온 사진/번호 요청이 승인되면, 친구가 직접 로그인해 상대를 보고 대화할 수 있어요. 사용할 PIN을 정해주세요 (숫자 4~8자리).').then(function (r) {
+    modalNumericPinSetup('🔑 1일 임시 로그인 PIN 발급', '주선자(' + currentUser.nickname + ')님이 계속 관리하는 상태는 그대로 유지돼요. 다만 ' + sub.nickname + '님이 직접 로그인할 수 있도록 1일 동안만 쓰는 임시 PIN을 발급해요. 예를 들어 ' + sub.nickname + '님에게 온 사진 요청·데이트 신청이 수락되면, 친구가 직접 로그인해 상대와 대화할 수 있어요. 사용할 PIN을 정해주세요 (숫자 4~8자리).').then(function (r) {
       if (!r) return;
       if (!/^[0-9]{4,8}$/.test(r.p1)) return modalNotice('입력 오류', 'PIN은 숫자 4~8자리예요.');
       if (r.p1 !== r.p2) return modalNotice('오류', 'PIN이 일치하지 않아요.');
@@ -2703,7 +2703,7 @@
       (listView === 'compact' ? '🖼 사진으로' : '☰ 간단히') + '</button>';
     var permBtns = me
       ? '<button type="button" class="filter-btn" data-filter="photo" aria-pressed="' + (listFilter === 'photo') + '">📷 사진</button>' +
-        '<button type="button" class="filter-btn" data-filter="contact" aria-pressed="' + (listFilter === 'contact') + '">📱 번호</button>'
+        '<button type="button" class="filter-btn" data-filter="contact" aria-pressed="' + (listFilter === 'contact') + '">💬 채팅</button>'
       : '';
     return (
       '<div class="list-toolbar">' +
@@ -3130,7 +3130,7 @@
                   '동의를 거부할 권리가 있으며, 거부 시 신청이 불가합니다.</p>' +
               '</div>' +
               '<div class="consent-box">' +
-                '<p class="consent-detail" style="margin:0;">&#128276; <b>알림을 켜면</b> 사진/번호 요청과 승인 소식을 기기로 바로 받아볼 수 있어요. 신청 후 상단의 <b>&#128276; 알림</b> 버튼을 눌러주세요! (방법은 <b>&#128718; 가이드</b>)</p>' +
+                '<p class="consent-detail" style="margin:0;">&#128276; <b>알림을 켜면</b> 사진 요청·데이트 신청과 승인 소식을 기기로 바로 받아볼 수 있어요. 신청 후 상단의 <b>&#128276; 알림</b> 버튼을 눌러주세요! (방법은 <b>&#128718; 가이드</b>)</p>' +
               '</div>')) +
           '<div class="submit-row">' +
             '<button type="submit" class="submit-btn" id="submit-btn">' + (isEdit ? '수정 저장하기' : (proxy ? '🤝 친구 소개 제출하기' : '도장 찍고 제출하기')) + '</button>' +
@@ -3316,7 +3316,7 @@
           '<div class="mine-status-box">' +
             '<div class="mine-status-icon">⏳</div>' +
             '<h3>승인 대기 중이에요</h3>' +
-            '<p class="sub">관리자(베니)가 신청서를 확인하고 있어요. 승인되면 명단에 등록되고, 사진/번호 요청을 주고받을 수 있어요.</p>' +
+            '<p class="sub">관리자(베니)가 신청서를 확인하고 있어요. 승인되면 명단에 등록되고, 사진 요청·데이트 신청을 주고받을 수 있어요.</p>' +
             '<p class="sub" style="margin-top:8px;">신청일: ' + fmtDate(myPending.submittedAt) + '</p>' +
           '</div>' +
         '</div>'
@@ -3528,7 +3528,7 @@
       var reqType = r.type || 'contact';
       var typeBadge = reqType === 'photo'
         ? '<span class="chip" style="background:#e8f0fe;color:#1a73e8;">📷 사진</span>'
-        : '<span class="chip" style="background:#fce8e6;color:#d93025;">📱 번호</span>';
+        : '<span class="chip" style="background:#fce8e6;color:#d93025;">💌 데이트</span>';
       var fromId = r.fromId || (d && d.fromId);
       var toId = r.toId || (d && d.toId);
       var fromName = (d && d.fromName) || nameOf(fromId);
@@ -3647,7 +3647,7 @@
       '<p class="sub">로그인 계정이 상위, 그 아래 <span class="chip" style="background:#fdeef0;color:var(--accent);">🙋 본인</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 친구</span> 가 붙어요. <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자</span> <span class="chip" style="background:#f1f1f1;color:#777;">일반</span>. 헤더로 정렬 · 닉네임 클릭 = 프로필 · <b>접속 시간 클릭 = 그 사람 활동 기록</b> · 📷/📱 = <b>이 사람이 볼 수 있는</b> 사진·번호 수(클릭해서 관리).</p>' +
       (tops.length
         ? '<div class="admin-table-wrap"><table class="seen-table"><thead><tr>' +
-            seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 볼 수 있는 사진') + seenTh('contact', '📱 볼 수 있는 번호') +
+            seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 볼 수 있는 사진') + seenTh('contact', '💬 채팅 가능') +
           '</tr></thead><tbody>' + seenRows + '</tbody></table></div>'
         : '<p class="sub">등록된 사람이 없어요.</p>');
 
@@ -3769,7 +3769,7 @@
         pendingSection +
         '<hr class="perforation">' +
         '<h2>📬 요청함<span class="pending-count">' + activeReqs.length + '</span></h2>' +
-        '<p class="sub">아직 처리하지 않은 사진/번호 요청이에요.</p>' +
+        '<p class="sub">아직 처리하지 않은 사진 요청·데이트 신청이에요.</p>' +
         (activeReqs.length ? activeItems : '<p class="sub">처리할 요청이 없어요.</p>') +
         '<hr class="perforation">' +
         adminMsgSection +
@@ -4867,9 +4867,10 @@
       '</label>';
     }).join('');
     var overlay = openModal(
-      '<h3>' + (isPhoto ? '📷 사진' : '📱 번호') + ' 열람 권한</h3>' +
-      '<p class="modal-msg"><b>' + escapeHtml(target.nickname) + '</b>님이 볼 수 있는 ' + (isPhoto ? '사진' : '번호') + '이에요. 체크한 사람의 ' + (isPhoto ? '사진' : '번호') + '을 ' + escapeHtml(target.nickname) + '님이 볼 수 있어요.' +
-        (isPhoto ? '' : '<br><span style="color:var(--muted);font-size:0.82rem;">번호는 회원끼리 요청·승인으로만 공유돼요. 여기선 <b>해제(회수)</b>만 가능해요.</span>') + '</p>' +
+      '<h3>' + (isPhoto ? '📷 사진 열람 권한' : '💬 채팅(데이트 성사) 권한') + '</h3>' +
+      (isPhoto
+        ? '<p class="modal-msg"><b>' + escapeHtml(target.nickname) + '</b>님이 볼 수 있는 사진이에요. 체크한 사람의 사진을 ' + escapeHtml(target.nickname) + '님이 볼 수 있어요.</p>'
+        : '<p class="modal-msg"><b>' + escapeHtml(target.nickname) + '</b>님이 채팅할 수 있는(데이트 성사된) 사람이에요. <span style="color:var(--muted);font-size:0.82rem;">회원끼리 데이트 신청·수락으로만 성사돼요. 여기선 <b>해제(회수)</b>만 가능해요.</span></p>') +
       '<div style="max-height:48vh;overflow-y:auto;">' + (rows || '<p class="sub">다른 회원이 없어요.</p>') + '</div>' +
       '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">닫기</button></div>'
     );
@@ -5985,7 +5986,7 @@
         showNotification('새 접수!', '새로운 인연 신청서가 도착했어요. (' + state.pendingEntries.length + '건 대기중)');
       }
       if (prevRequestCount >= 0 && state.dateRequests.length > prevRequestCount) {
-        showNotification('새 요청!', '새로운 사진/번호 요청이 도착했어요.');
+        showNotification('새 요청!', '새로운 사진 요청·데이트 신청이 도착했어요.');
       }
       prevPendingCount = state.pendingEntries.length;
       prevRequestCount = state.dateRequests.length;
