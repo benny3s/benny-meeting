@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-113';
+  var APP_VERSION = '2026-09-07-114';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -2802,6 +2802,87 @@
     });
   }
 
+  /* 주선자 계정 수정 폼 (닉네임·실명·연락처만. 소개팅 프로필 항목 없음) */
+  function renderMatchmakerEdit(state, entry) {
+    return (
+      '<div class="form-card">' +
+        '<div class="form-lede"><h2>🤝 주선자 정보 수정</h2><p>주선자 계정 정보만 수정해요. 소개하는 친구 정보는 각 친구 프로필에서 따로 수정해요.</p></div>' +
+        '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">실명·연락처는 <b>비우면 기존 값이 유지</b>돼요. PIN은 상단 <b>🔑 PIN 변경</b>에서 바꿔요. <button type="button" class="card-btn" id="cancel-edit" style="margin-left:8px;padding:4px 12px;">수정 취소</button></div>' +
+        '<form id="entry-form" autocomplete="off">' +
+          '<div class="field"><label for="f-nickname">주선자 닉네임 <span class="req">필수</span></label>' +
+            '<input type="text" id="f-nickname" name="nickname" maxlength="20" placeholder="예: 베니" required>' +
+            '<div class="field-error" id="nick-err" hidden>이미 사용 중인 닉네임이에요. 다른 닉네임을 써주세요.</div></div>' +
+          '<div class="field"><label for="f-realname">본인 이름(실명) <span class="opt">(비우면 유지)</span></label>' +
+            '<input type="text" id="f-realname" name="realName" maxlength="20" class="keep-ph" placeholder="(비우면 기존 값 유지)">' +
+            '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
+          '<div class="field"><label for="f-contact">전화번호 <span class="opt">(비우면 유지)</span></label>' +
+            '<input type="tel" id="f-contact" name="contact" maxlength="11" inputmode="numeric" data-numeric class="keep-ph" placeholder="(비우면 기존 값 유지)">' +
+            '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
+          '<div class="submit-row"><button type="submit" class="submit-btn" id="submit-btn">💾 수정 저장하기</button>' +
+            '<button type="button" class="cancel-btn" id="cancel-edit-bottom">수정 취소</button>' +
+            '<span class="status-msg" id="status-msg"></span></div>' +
+        '</form>' +
+      '</div>'
+    );
+  }
+  function handleMatchmakerEditSubmit(entry) {
+    var state = currentState;
+    var form = document.getElementById('entry-form');
+    if (!form) return;
+    var nickname = (form.querySelector('[name="nickname"]').value || '').trim();
+    var realName = (form.querySelector('[name="realName"]').value || '').trim();
+    var contact = (form.querySelector('[name="contact"]').value || '').trim();
+    if (!nickname) return modalNotice('입력 오류', '닉네임을 입력해주세요.');
+    if (contact && !/^01[0-9]{8,9}$/.test(contact)) return modalNotice('입력 오류', '전화번호는 01012345678 형식으로 입력해주세요.');
+    var nickLower = nickname.toLowerCase();
+    var exempt = nickExemptIds(state);
+    var dup = (state.entries || []).concat(state.pendingEntries || []).some(function (e) {
+      return e.id !== entry.id && exempt.indexOf(e.id) < 0 && (e.nickname || '').trim().toLowerCase() === nickLower;
+    });
+    if (dup) return modalNotice('닉네임 중복', '이미 사용 중인 닉네임이에요.');
+    var pubJwk = state.adminAuth && state.adminAuth.publicKeyJwk;
+    if (!pubJwk) return modalNotice('오류', '관리자 설정을 찾을 수 없어요.');
+    var btn = document.getElementById('submit-btn'), msg = document.getElementById('status-msg');
+    if (btn) btn.disabled = true;
+    if (msg) { msg.textContent = '수정 중...'; msg.className = 'status-msg'; }
+    var selfPin = (currentUser && currentUser.id === entry.id) ? currentUser.pin : null;
+    Promise.all([
+      realName ? encryptForAdmin(pubJwk, realName) : Promise.resolve(null),
+      contact ? encryptForAdmin(pubJwk, contact) : Promise.resolve(null),
+      (contact && selfPin) ? encryptForSelf(selfPin, contact) : Promise.resolve(null)
+    ]).then(function (r) {
+      return db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var upd = function (list) {
+            return (list || []).map(function (e) {
+              if (e.id !== entry.id) return e;
+              var u = JSON.parse(JSON.stringify(e));
+              u.nickname = nickname;
+              if (r[0]) u.realNameEnc = r[0];
+              if (r[1]) u.contactEnc = r[1];
+              if (r[2]) u.contactSelfEnc = r[2];
+              return u;
+            });
+          };
+          var patch = { entries: upd(s.entries) };
+          if ((s.pendingEntries || []).some(function (e) { return e.id === entry.id; })) patch.pendingEntries = upd(s.pendingEntries);
+          tx.update(stateRef, patch);
+        });
+      });
+    }).then(function () {
+      if (currentUser && currentUser.id === entry.id) { currentUser.nickname = nickname; saveSession(); }
+      appendLog('edit', nickname, '주선자 정보 수정');
+      editingEntryId = null;
+      activeTab = 'mine';
+      modalNotice('완료', '주선자 정보를 수정했어요.');
+      return refreshNow();
+    }).catch(function (err) {
+      if (btn) btn.disabled = false;
+      if (msg) { msg.textContent = '오류: ' + (err.message || err); msg.className = 'status-msg error'; }
+    });
+  }
+
   /* 카카오톡 인앱 브라우저 감지 + 기본(외부) 브라우저로 열기 — 카톡 웹뷰는 사진 첨부(파일 선택)가 막힘 */
   function isKakaoInApp() { return /kakaotalk/i.test(navigator.userAgent || ''); }
   function isIOSDevice() { return /iphone|ipad|ipod/i.test(navigator.userAgent || ''); }
@@ -2813,6 +2894,11 @@
     var isEdit = !!editingEntryId;
     if (!isEdit && formRole === 'mm-new') return renderMatchmakerNew(state);
     if (!isEdit && formRole === 'matchmaker' && !currentUser) return renderMatchmakerAuth(state);
+    /* 주선자 계정 수정: 소개팅 프로필 필드 없이 계정 정보(닉네임·실명·연락처)만 */
+    if (isEdit) {
+      var _mmEdit = (state.entries || []).concat(state.pendingEntries || []).find(function (e) { return e.id === editingEntryId; });
+      if (_mmEdit && _mmEdit.isMatchmaker) return renderMatchmakerEdit(state, _mmEdit);
+    }
     var proxy = (proxyRegisterMode || (formRole === 'matchmaker' && currentUser)) && !isEdit; /* 친구 대신 소개(대리 등록) */
     /* 승인 대기 중인 계정(로그인은 됐지만 아직 명단에 없음)은 친구 소개 불가 → 본인 버튼과 동일하게 막음 */
     if (proxy && currentUser && !myAuthEntry(state) && findMyPending(state)) {
@@ -3985,6 +4071,10 @@
 
   function handleFormSubmit() {
     if (formRole === 'mm-new' && !editingEntryId) { handleMatchmakerSubmit(); return; } /* 새 주선자 등록 */
+    if (editingEntryId) { /* 주선자 계정 수정은 최소 폼 전용 핸들러로 */
+      var _mmE = (currentState.entries || []).concat(currentState.pendingEntries || []).find(function (e) { return e.id === editingEntryId; });
+      if (_mmE && _mmE.isMatchmaker) { handleMatchmakerEditSubmit(_mmE); return; }
+    }
     var state = currentState;
     if (!state.adminAuth) {
       modalNotice('안내', '관리자가 아직 PIN을 설정하지 않았어요. 관리자에게 문의해주세요.');
