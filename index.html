@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-110';
+  var APP_VERSION = '2026-09-07-111';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -2532,8 +2532,14 @@
       : '';
     /* 내 프로필이거나 내가 관리하는 친구면 사진/번호 "요청" 버튼은 숨김 (자기 자신에게 요청은 무의미) */
     var mineOrManaged = !!(currentUser && (entry.id === currentUser.id || entry.managedBy === currentUser.id));
+    /* 이미 이 사람 사진을 볼 수 있으면(상대가 공개했거나 내 요청이 승인됨) 요청 대신 "볼 수 있어요"(초록) 표시 → 중복 요청 방지 */
+    var viewer = currentUser ? findMyEntry(state) : null;
+    var canSeePhoto = !!(viewer && pCount > 0 && canViewPhotoOf(state, viewer.id, entry.id));
+    var photoBtn = canSeePhoto
+      ? '<button type="button" class="card-btn approve" data-action="gallery" data-id="' + escapeHtml(entry.id) + '">📷 사진 볼 수 있어요</button>'
+      : '<button type="button" class="card-btn orange" data-action="request-photo" data-id="' + escapeHtml(entry.id) + '">📷 사진 요청</button>';
     var reqBtns = mineOrManaged ? '' :
-      '<button type="button" class="card-btn orange" data-action="request-photo" data-id="' + escapeHtml(entry.id) + '">📷 사진 요청</button>' +
+      photoBtn +
       '<button type="button" class="card-btn primary" data-action="request-contact" data-id="' + escapeHtml(entry.id) + '">📱 번호 요청</button>';
     return (
       '<article class="pf-card" data-id="' + escapeHtml(entry.id) + '">' +
@@ -2725,6 +2731,9 @@
           '<div class="field"><label for="f-nickname">주선자 닉네임 <span class="req">필수</span></label>' +
             '<input type="text" id="f-nickname" name="nickname" maxlength="20" placeholder="예: 베니" required>' +
             '<div class="field-error" id="nick-err" hidden>이미 사용 중인 닉네임이에요. 다른 닉네임을 써주세요.</div></div>' +
+          '<div class="field"><label for="f-realname">본인 이름(실명) <span class="req">필수</span></label>' +
+            '<input type="text" id="f-realname" name="realName" maxlength="20" placeholder="예: 김베니" required>' +
+            '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
           '<div class="field"><label for="f-contact">전화번호 <span class="req">필수</span></label>' +
             '<input type="tel" id="f-contact" name="contact" maxlength="11" inputmode="numeric" data-numeric placeholder="예: 01012345678" required>' +
             '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
@@ -2732,7 +2741,7 @@
             '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8" placeholder="숫자 4~8자리" required>' +
             '<span class="hint">로그인할 때 필요해요.</span></div>' +
           '<div class="consent-box"><label class="consent-label"><input type="checkbox" id="f-consent"> <span>개인정보 수집 및 이용에 동의합니다.</span></label>' +
-            '<p class="consent-detail">수집 항목: 닉네임, 연락처 · 목적: 주선자 관리·연락 · 동의 거부 시 등록 불가.</p></div>' +
+            '<p class="consent-detail">수집 항목: 닉네임, 실명, 연락처 · 목적: 주선자 관리·연락 · 동의 거부 시 등록 불가.</p></div>' +
           '<div class="submit-row"><button type="submit" class="submit-btn" id="submit-btn">🤝 주선자 등록</button>' +
             '<button type="button" class="cancel-btn" id="mm-back">뒤로</button>' +
             '<span class="status-msg" id="status-msg"></span></div>' +
@@ -2744,10 +2753,12 @@
     if (!state.adminAuth) { modalNotice('안내', '관리자가 아직 PIN을 설정하지 않았어요.'); return; }
     var form = document.getElementById('entry-form');
     var nickname = (form.querySelector('[name="nickname"]').value || '').trim();
+    var realName = (form.querySelector('[name="realName"]').value || '').trim();
     var contact = (form.querySelector('[name="contact"]').value || '').trim();
     var pin = (form.querySelector('[name="pin"]').value || '').trim();
     var missing = [];
     if (!nickname) missing.push('닉네임');
+    if (!realName) missing.push('본인 이름');
     if (!contact) missing.push('전화번호');
     if (!pin) missing.push('개인 PIN');
     if (missing.length) return modalNotice('입력 오류', '다음을 채워주세요: ' + missing.join(', '));
@@ -2766,11 +2777,12 @@
     Promise.all([
       encryptForAdmin(pubJwk, contact),
       makePinAuth(pin),
-      encryptForSelf(pin, contact)
+      encryptForSelf(pin, contact),
+      encryptForAdmin(pubJwk, realName)
     ]).then(function (r) {
       var entry = {
         id: entryId, nickname: nickname, isMatchmaker: true,
-        contactEnc: r[0], pinAuth: r[1], contactSelfEnc: r[2],
+        contactEnc: r[0], pinAuth: r[1], contactSelfEnc: r[2], realNameEnc: r[3],
         submittedAt: new Date().toISOString()
       };
       return stateRef.update({ pendingEntries: firebase.firestore.FieldValue.arrayUnion(entry) });
@@ -4355,6 +4367,9 @@
         return modalNotice('프로필 선택 필요', '주선자 본인은 소개팅 요청을 보낼 수 없어요. 상단 "🔄 활동 중 프로필"에서 소개할 친구를 선택하거나, 먼저 소개할 친구를 등록해 주세요.');
       }
       if (fromEntry.id === toId) return modalNotice('안내', '본인에게는 요청할 수 없어요.');
+      if (isPhoto && canViewPhotoOf(state, fromEntry.id, toId)) {
+        return modalNotice('안내', escapeHtml(target.nickname) + '님 사진을 이미 볼 수 있어요. 명단에서 바로 확인하세요.');
+      }
       var existingReq = (state.dateRequests || []).find(function (req) {
         return req.fromId === fromEntry.id && req.toId === toId && (req.type || 'contact') === type &&
           (req.hiddenBy || []).indexOf(fromEntry.id) < 0;
@@ -5110,11 +5125,17 @@
       var mrows = '<div class="detail-grid">' +
         '<div class="detail-row"><div class="detail-label">구분</div><div class="detail-value">🤝 주선자(매니저) — 명단 비노출</div></div>' +
         '<div class="detail-row"><div class="detail-label">닉네임</div><div class="detail-value">' + escapeHtml(entry.nickname) + '</div></div>' +
+        '<div class="detail-row"><div class="detail-label">실명</div><div class="detail-value" id="detail-realname">복호화 중...</div></div>' +
         '<div class="detail-row"><div class="detail-label">연락처</div><div class="detail-value" id="detail-contact">복호화 중...</div></div>' +
         '</div>';
       modalNotice(escapeHtml(entry.nickname) + ' (주선자) 상세', '').then(function () {});
       var mbox = document.querySelector('.modal-box');
       if (mbox) { var me2 = mbox.querySelector('.modal-msg'); if (me2) me2.innerHTML = mrows; }
+      if (adminPrivateKey && entry.realNameEnc) {
+        decryptWithAdmin(adminPrivateKey, entry.realNameEnc).then(function (n) {
+          var el = document.getElementById('detail-realname'); if (el) el.textContent = n;
+        }).catch(function () { var el = document.getElementById('detail-realname'); if (el) el.textContent = '(복호화 실패)'; });
+      } else { var elr = document.getElementById('detail-realname'); if (elr) elr.textContent = '(없음 — 기존 주선자)'; }
       if (adminPrivateKey && entry.contactEnc) {
         decryptWithAdmin(adminPrivateKey, entry.contactEnc).then(function (c) {
           var el = document.getElementById('detail-contact'); if (el) el.textContent = c;
