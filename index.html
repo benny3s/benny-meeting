@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-114';
+  var APP_VERSION = '2026-09-07-115';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -2990,7 +2990,7 @@
               : '<div class="field"><label for="f-referrer">누구를 통해 알게 되셨나요? ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
                   '<input type="text" id="f-referrer" name="referrerText" maxlength="60"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 홍길동 (관리자 친구 통해)" required') + '>' +
                   '<span class="hint">예: <span class="ex">홍길동 (관리자 친구)</span> · <span class="ex">김철수 (소개한 친구)</span> · <span class="ex">우연히·SNS</span><br>' + ICON_LOCK + ' 연락용이며, 암호화되어 관리자만 볼 수 있어요.</span></div>') +
-            '<div class="field"><label>사진 <span class="opt">(선택, 최대 3장)</span></label>' +
+            '<div class="field"><label>사진 ' + (isEdit ? '<span class="opt">(최대 3장)</span>' : '<span class="req">필수</span> <span class="opt">1~3장</span>') + '</label>' +
               '<span class="hint">기본은 <b class="ex">흐리게(비공개)</b> — 요청을 승인한 사람에게만 보여요. 아래 체크를 풀면 <b class="ex">전체 공개</b>가 됩니다.</span>' +
               '<div class="photo-upload-area" id="photo-upload-area"></div>' +
               '<div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap;">' +
@@ -4138,6 +4138,10 @@
         modalNotice('동의 필요', proxy ? '소개 대상 본인의 등록 동의를 확인해 주세요.' : '개인정보 수집 및 이용에 동의해 주세요.');
         return;
       }
+    }
+    if (!isEdit && photoDataUrls.length < 1) { /* 신규 등록은 사진 최소 1장 필수 (최대 3장) */
+      modalNotice('사진 필요', '사진을 최소 1장 등록해 주세요. (최대 3장)');
+      return;
     }
     if (proxy && !referrerText) referrerText = '주선자: ' + ((currentUser && currentUser.nickname) || '');
     if (ownerByMM && !referrerText) referrerText = '주선자 본인';
