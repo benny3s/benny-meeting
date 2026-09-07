@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-116';
+  var APP_VERSION = '2026-09-07-117';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -2229,6 +2229,77 @@
       || (state.pendingEntries || []).find(function (x) { return x.id === entryId; });
     return e ? e.nickname : '(알 수 없음)';
   }
+
+  /* ── 회원↔회원 데이트 채팅 (성사된 데이트 신청 사이). state.dm 배열, 쪽지처럼 단순·모달 기반(비실시간) ── */
+  function dmPairKey(a, b) { return [a, b].sort().join('__'); }
+  function dmThread(state, meId, otherId) {
+    var key = dmPairKey(meId, otherId);
+    return (state.dm || []).filter(function (m) { return m.pair === key; })
+      .sort(function (a, b) { return (a.at || '').localeCompare(b.at || ''); });
+  }
+  function dmUnreadFrom(state, meId, otherId) {
+    if (!meId) return 0;
+    var seen = ''; try { seen = localStorage.getItem('dmseen_' + meId + '_' + otherId) || ''; } catch (e) {}
+    var key = dmPairKey(meId, otherId);
+    return (state.dm || []).filter(function (m) { return m.pair === key && m.toId === meId && (m.at || '') > seen; }).length;
+  }
+  function markDmSeen(meId, otherId) { try { localStorage.setItem('dmseen_' + meId + '_' + otherId, new Date().toISOString()); } catch (e) {} }
+  function sendDm(meId, otherId, text) {
+    text = (text || '').trim();
+    if (!text || !meId || !otherId) return Promise.resolve();
+    var m = { id: genId(), pair: dmPairKey(meId, otherId), fromId: meId, toId: otherId, text: text, at: new Date().toISOString() };
+    return db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var dm = (s.dm || []).concat([m]);
+        if (dm.length > 3000) dm = dm.slice(dm.length - 3000);
+        tx.update(stateRef, { dm: dm });
+      });
+    });
+  }
+  function dmLineHtml(m, meId) {
+    var mine = m.fromId === meId;
+    return '<div style="display:flex;justify-content:' + (mine ? 'flex-end' : 'flex-start') + ';margin:4px 0;">' +
+      '<div style="max-width:78%;padding:7px 11px;border-radius:13px;background:' + (mine ? 'var(--accent)' : '#efefef') + ';color:' + (mine ? '#fff' : 'var(--ink)') + ';white-space:pre-wrap;word-break:break-word;">' +
+        escapeHtml(m.text) +
+        '<div style="font-size:0.66rem;opacity:0.75;margin-top:3px;text-align:right;">' + fmtDate(m.at) + '</div>' +
+      '</div></div>';
+  }
+  function openDmChat(otherId) {
+    var me = findMyEntry(currentState);
+    if (!me) { modalNotice('로그인 필요', '먼저 로그인해주세요.'); return; }
+    if (!canViewContactOf(currentState, me.id, otherId)) { modalNotice('안내', '데이트 신청이 수락되면 채팅할 수 있어요.'); return; }
+    var otherNick = nickForEntry(currentState, otherId);
+    var overlay = openModal(
+      '<h3>💬 ' + escapeHtml(otherNick) + '님과의 채팅</h3>' +
+      '<div id="dm-body" style="max-height:44vh;overflow-y:auto;margin:6px 0 10px;padding:0 2px;"></div>' +
+      '<textarea class="modal-input" id="dm-text" rows="2" maxlength="500" placeholder="메시지 입력 (최대 500자)"></textarea>' +
+      '<div class="modal-actions">' +
+        '<button type="button" class="card-btn" id="modal-cancel">닫기</button>' +
+        '<button type="button" class="card-btn primary" id="dm-send">보내기</button>' +
+      '</div>'
+    );
+    overlay.classList.add('wide-modal');
+    function draw() {
+      var thread = dmThread(currentState, me.id, otherId);
+      var el = overlay.querySelector('#dm-body');
+      el.innerHTML = thread.length ? thread.map(function (m) { return dmLineHtml(m, me.id); }).join('') : '<p class="modal-msg" style="margin:0;">아직 대화가 없어요. 먼저 인사를 건네보세요!</p>';
+      el.scrollTop = el.scrollHeight;
+    }
+    draw(); markDmSeen(me.id, otherId);
+    function close() { closeModal(overlay); paint(currentState); }
+    overlay.querySelector('#modal-cancel').addEventListener('click', close);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    overlay.querySelector('#dm-send').addEventListener('click', function () {
+      var ta = overlay.querySelector('#dm-text'); var t = ta.value.trim();
+      if (!t) return;
+      var btn = overlay.querySelector('#dm-send'); btn.disabled = true;
+      sendDm(me.id, otherId, t).then(function () {
+        ta.value = ''; return refreshNow();
+      }).then(function () { draw(); markDmSeen(me.id, otherId); btn.disabled = false; })
+        .catch(function (err) { btn.disabled = false; modalNotice('오류', '전송 실패: ' + (err.message || err)); });
+    });
+  }
   function msgLineHtml(m, canDelete) {
     var who = m.from === 'admin' ? '관리자' : '회원';
     var col = m.from === 'admin' ? 'var(--accent)' : 'var(--ink)';
@@ -2510,11 +2581,13 @@
     if (entry.intro) extras += '<div class="pf-extra"><b>소개</b> ' + escapeHtml(entry.intro) + '</div>';
     if (entry.idealType) extras += '<div class="pf-extra"><b>선호</b> ' + escapeHtml(entry.idealType) + '</div>';
     if (entry.dealbreaker) extras += '<div class="pf-extra"><b>비선호</b> ' + escapeHtml(entry.dealbreaker) + '</div>';
+    /* 번호는 서로 공개하지 않음 — 데이트 신청이 수락되면 앱 내 채팅으로 대화 */
     var contactHtml;
-    if (decryptedContacts[entry.id]) {
-      contactHtml = '<div class="pf-contact open">' + ICON_UNLOCK + '<span>' + escapeHtml(decryptedContacts[entry.id]) + '</span></div>';
+    var meView = currentUser ? findMyEntry(state) : null;
+    if (meView && meView.id !== entry.id && canViewContactOf(state, meView.id, entry.id)) {
+      contactHtml = '<div class="pf-contact open" style="cursor:pointer;" data-action="dm-chat" data-id="' + escapeHtml(entry.id) + '">💬 <span>채팅하기 (데이트 성사됨)</span></div>';
     } else {
-      contactHtml = '<div class="pf-contact" style="cursor:pointer;" data-action="reveal-contact" data-id="' + escapeHtml(entry.id) + '">' + ICON_LOCK + '<span>연락처 보기 (승인된 사람에게만 공개)</span></div>';
+      contactHtml = '<div class="pf-contact"><span style="color:var(--muted);">💌 데이트 신청이 수락되면 채팅할 수 있어요</span></div>';
     }
     /* 상세 팝업에서 관리자에게만: 최근 접속 시간 + 알람 설정 여부 */
     var adminInfoHtml = '';
@@ -2538,9 +2611,12 @@
     var photoBtn = canSeePhoto
       ? '<button type="button" class="card-btn approve" data-action="gallery" data-id="' + escapeHtml(entry.id) + '">📷 사진 볼 수 있어요</button>'
       : '<button type="button" class="card-btn orange" data-action="request-photo" data-id="' + escapeHtml(entry.id) + '">📷 사진 요청</button>';
-    var reqBtns = mineOrManaged ? '' :
-      photoBtn +
-      '<button type="button" class="card-btn primary" data-action="request-contact" data-id="' + escapeHtml(entry.id) + '">📱 번호 요청</button>';
+    /* 데이트 신청(구 번호 요청): 성사되면 앱 내 채팅. 이미 성사면 "채팅하기" */
+    var matched = !!(viewer && canViewContactOf(state, viewer.id, entry.id));
+    var dateBtn = matched
+      ? '<button type="button" class="card-btn approve" data-action="dm-chat" data-id="' + escapeHtml(entry.id) + '">💬 채팅하기</button>'
+      : '<button type="button" class="card-btn primary" data-action="request-contact" data-id="' + escapeHtml(entry.id) + '">💌 데이트 신청</button>';
+    var reqBtns = mineOrManaged ? '' : photoBtn + dateBtn;
     return (
       '<article class="pf-card" data-id="' + escapeHtml(entry.id) + '">' +
         '<div class="pf-num">' + escapeHtml(formatUid(entry) || ('No. ' + String(num).padStart(3, '0'))) + '</div>' +
@@ -3071,7 +3147,7 @@
     var isPhoto = (r.type || 'contact') === 'photo';
     var typeBadge = isPhoto
       ? '<span class="chip" style="background:#fdf0e3;color:#b06000;">📷 사진</span>'
-      : '<span class="chip" style="background:#fce8e6;color:#d93025;">📱 번호</span>';
+      : '<span class="chip" style="background:#fce8e6;color:#d93025;">💌 데이트</span>';
     var actions = '';
     if (incoming && (st === 'pending' || st === 'held')) {
       /* 받은 요청: 승인/보류/거절 (보류 상태에서도 다시 결정 가능) */
@@ -3130,6 +3206,13 @@
     if (incoming && isPhoto && r.fromRevealed) {
       revealMine += '<div class="mine-note" style="color:#137333;">📷 상대가 사진을 공개했어요! 명단에서 이 분의 사진을 볼 수 있어요.</div>';
     }
+    /* 데이트 신청(구 번호 요청)이 수락됨 → 채팅 버튼 (번호 대신 앱 내 채팅) */
+    var chatBtn = '';
+    if (!isPhoto && st === 'approved') {
+      var meNow = findMyEntry(state);
+      var unread = meNow ? dmUnreadFrom(state, meNow.id, otherId) : 0;
+      chatBtn = '<div class="mine-actions"><button type="button" class="card-btn primary" data-action="dm-chat" data-id="' + escapeHtml(otherId) + '">💬 채팅하기' + (unread ? ' <span class="count blink">' + unread + '</span>' : '') + '</button></div>';
+    }
     /* 주의가 필요한 항목 강조: 받은 대기/보류(응답 필요), 보낸 보류/거절(다시 요청 가능) */
     var needAction = (incoming && (st === 'pending' || st === 'held')) || (!incoming && (st === 'held' || st === 'rejected'));
     return (
@@ -3139,6 +3222,7 @@
         (note ? '<div class="mine-note">"' + escapeHtml(note) + '"</div>' : '') +
         replyMsg +
         actions +
+        chatBtn +
         revealMine +
       '</div>'
     );
@@ -3221,9 +3305,9 @@
     var reqs = state.dateRequests || [];
     var groups = [
       { key: 'in-photo', title: '📷 받은 사진 요청', incoming: true, type: 'photo' },
-      { key: 'in-contact', title: '📱 받은 번호 요청', incoming: true, type: 'contact' },
+      { key: 'in-contact', title: '💌 받은 데이트 신청', incoming: true, type: 'contact' },
       { key: 'out-photo', title: '📷 보낸 사진 요청', incoming: false, type: 'photo' },
-      { key: 'out-contact', title: '📱 보낸 번호 요청', incoming: false, type: 'contact' }
+      { key: 'out-contact', title: '💌 보낸 데이트 신청', incoming: false, type: 'contact' }
     ];
     var sections = groups.map(function (g) {
       var items = reqs.filter(function (r) {
@@ -4455,7 +4539,8 @@
     var target = state.entries.find(function (e) { return e.id === toId; });
     if (!target) return;
     var isPhoto = type === 'photo';
-    var typeLabel = isPhoto ? '사진 보기' : '번호 보기';
+    var typeLabel = isPhoto ? '사진 보기' : '데이트 신청';
+    var actionText = isPhoto ? '사진 보기 요청' : '데이트 신청';
     requireLogin().then(function (fromEntry) {
       if (!fromEntry) return;
       if (isMatchmakerEntry(fromEntry)) {
@@ -4472,12 +4557,12 @@
       if (existingReq) {
         var st = reqStatus(existingReq);
         if (st === 'rejected') return modalNotice('안내', escapeHtml(target.nickname) + '님이 이 요청을 거절했어요.');
-        return modalNotice('안내', '이미 ' + escapeHtml(target.nickname) + '님에게 ' + typeLabel + ' 요청을 보냈어요. "메시지함" 탭에서 확인할 수 있어요.');
+        return modalNotice('안내', '이미 ' + escapeHtml(target.nickname) + '님에게 ' + actionText + '을 보냈어요. "메시지함" 탭에서 확인할 수 있어요.');
       }
-      var icon = isPhoto ? '📷' : '📱';
+      var icon = isPhoto ? '📷' : '💌';
       var noteOverlay = openModal(
-        '<h3>' + icon + ' ' + escapeHtml(target.nickname) + '님 ' + typeLabel + ' 요청</h3>' +
-        '<p class="modal-msg">' + (isPhoto ? '수락하면 <b>서로 사진이 공개</b>돼요. ' : '상대가 수락하면 진행돼요. ') + '간단한 인사·요청 이유를 꼭 남겨주세요 <b>(최소 10자)</b>.</p>' +
+        '<h3>' + icon + ' ' + escapeHtml(target.nickname) + '님에게 ' + actionText + '</h3>' +
+        '<p class="modal-msg">' + (isPhoto ? '수락하면 <b>서로 사진이 공개</b>돼요. ' : '수락하면 <b>앱 안에서 채팅</b>으로 대화할 수 있어요 (번호는 공개되지 않아요). ') + '간단한 인사·요청 이유를 꼭 남겨주세요 <b>(최소 10자)</b>.</p>' +
         '<textarea class="modal-input" id="modal-note" rows="3" maxlength="200" placeholder="예) 안녕하세요! 프로필 잘 봤어요, 꼭 한번 대화해보고 싶어요 :)"></textarea>' +
         '<p id="modal-note-warn" class="modal-msg" style="color:var(--accent);margin:4px 0 0;font-size:0.82rem;" hidden>최소 10자 이상 남겨주세요.</p>' +
         '<div class="modal-actions">' +
@@ -4498,24 +4583,19 @@
         noteOverlay.addEventListener('click', function (e) { if (e.target === noteOverlay) finish(null); });
       }).then(function (note) {
         if (note === null || note === undefined) return;
-        /* 번호 요청이면 내 번호를 함께 담아둔다 (상대가 승인하면 서로 공개) */
-        var contactPromise = isPhoto ? Promise.resolve(null) : ensureMyContact();
-        return contactPromise.then(function (myNum) {
-          if (!isPhoto && !myNum) return;
-          var req = {
-            id: genId(), type: type, fromId: fromEntry.id, toId: toId,
-            note: note || '', submittedAt: new Date().toISOString()
-          };
-          if (myNum) req.fromContact = myNum;
-          return stateRef.update({
-            dateRequests: firebase.firestore.FieldValue.arrayUnion(req)
-          }).then(function () {
-            appendLog('request', fromEntry.nickname, typeLabel + ' 요청 → ' + target.nickname);
-            notifyAdmin(typeLabel + ' 요청', fromEntry.nickname + '님이 ' + target.nickname + '님의 ' + typeLabel + '를 요청했어요!');
-            return refreshNow();
-          }).then(function () {
-            modalNotice('요청 완료', target.nickname + '님에게 ' + typeLabel + ' 요청을 보냈어요! "메시지함" 탭에서 상태를 볼 수 있어요.');
-          });
+        /* 데이트 신청은 번호를 공유하지 않음 — 수락되면 앱 내 채팅으로만 대화 */
+        var req = {
+          id: genId(), type: type, fromId: fromEntry.id, toId: toId,
+          note: note || '', submittedAt: new Date().toISOString()
+        };
+        return stateRef.update({
+          dateRequests: firebase.firestore.FieldValue.arrayUnion(req)
+        }).then(function () {
+          appendLog('request', fromEntry.nickname, actionText + ' → ' + target.nickname);
+          notifyAdmin(actionText, fromEntry.nickname + '님이 ' + target.nickname + '님에게 ' + actionText + '을 보냈어요!');
+          return refreshNow();
+        }).then(function () {
+          modalNotice('요청 완료', target.nickname + '님에게 ' + actionText + '을 보냈어요! "메시지함" 탭에서 상태를 볼 수 있어요.');
         });
       }).catch(function (err) {
         modalNotice('오류', '요청에 실패했어요: ' + (err.message || err));
@@ -4620,7 +4700,7 @@
           });
         });
       }).then(function () {
-        appendLog('admin', '관리자', '번호 요청 승인');
+        appendLog('admin', '관리자', '데이트 신청 수락');
         return refreshNow();
       }).catch(function (err) {
         modalNotice('오류', '승인에 실패했어요: ' + (err.message || err));
@@ -4862,49 +4942,35 @@
     var from = (state.entries || []).find(function (e) { return e.id === req.fromId; });
     var fromName = from ? from.nickname : '상대방';
     var msg = (isPhoto
-      ? escapeHtml(fromName) + '님에게 사진을 공개할까요? 승인하면 바로 볼 수 있게 돼요.'
-      : escapeHtml(fromName) + '님과 서로 번호를 공개할까요? 승인하면 바로 서로의 번호를 볼 수 있어요.') +
-      ' 상대에게 전할 답장을 남길 수 있어요.';
-    modalMessage('요청 승인', msg, '승인', 'primary', '예: 반가워요! 잘 부탁드려요 :)').then(function (replyMsg) {
+      ? escapeHtml(fromName) + '님의 사진 요청을 수락할까요? 수락하면 서로 사진을 볼 수 있어요.'
+      : escapeHtml(fromName) + '님의 데이트 신청을 수락할까요? 수락하면 앱 안에서 채팅으로 대화할 수 있어요 (번호는 공개되지 않아요).') +
+      ' 상대에게 전할 인사를 남길 수 있어요.';
+    modalMessage('요청 수락', msg, '수락', 'primary', '예: 반가워요! 잘 부탁드려요 :)').then(function (replyMsg) {
       if (replyMsg === null) return;
-      /* 번호 요청이면 내 번호를 담아 바로 확정 (관리자 개입 없음) */
-      var contactPromise = isPhoto ? Promise.resolve(null) : ensureMyContact();
-      return contactPromise.then(function (myNum) {
-        if (!isPhoto && !myNum) return;
-        return db.runTransaction(function (tx) {
-          return tx.get(stateRef).then(function (doc) {
-            var s = doc.data();
-            var reqs = (s.dateRequests || []).map(function (r) {
-              if (r.id !== id) return r;
-              var c = JSON.parse(JSON.stringify(r));
-              c.decidedAt = new Date().toISOString();
-              c.held = false;
-              if (replyMsg) c.approveMessage = replyMsg;
-              if (isPhoto) { c.approved = true; return c; }
-              c.toContact = myNum;
-              /* 요청자 번호까지 있으면 바로 승인 완료, 없으면 관리자 확정 대기 */
-              if (c.fromContact) c.approved = true;
-              else c.userApproved = true;
-              return c;
-            });
-            tx.update(stateRef, { dateRequests: reqs });
+      return db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).map(function (r) {
+            if (r.id !== id) return r;
+            var c = JSON.parse(JSON.stringify(r));
+            c.decidedAt = new Date().toISOString();
+            c.held = false;
+            c.approved = true; /* 사진·데이트 모두 수락 즉시 성사 (번호 공유 없음) */
+            if (replyMsg) c.approveMessage = replyMsg;
+            return c;
           });
-        }).then(function () {
-          appendLog('request', me.nickname, (isPhoto ? '사진' : '번호') + ' 요청 승인 → ' + fromName);
-          notifyAdmin('요청 승인', me.nickname + '님이 ' + fromName + '님의 ' + (isPhoto ? '사진' : '번호') + ' 요청을 승인했어요.');
-          return refreshNow();
-        }).then(function () {
-          var req2 = ((currentState && currentState.dateRequests) || []).find(function (r) { return r.id === id; });
-          var done = req2 && req2.approved;
-          var baseMsg = isPhoto
-            ? fromName + '님이 사진을 볼 수 있게 됐어요.'
-            : (done
-              ? '승인했어요! 이제 서로의 번호를 볼 수 있어요.'
-              : '승인했어요! 상대방 번호 정보가 없어서 관리자 확인이 필요해요.');
-          modalNotice('승인 완료', baseMsg);
+          tx.update(stateRef, { dateRequests: reqs });
         });
+      }).then(function () {
+        appendLog('request', me.nickname, (isPhoto ? '사진 요청' : '데이트 신청') + ' 수락 → ' + fromName);
+        notifyAdmin('요청 수락', me.nickname + '님이 ' + fromName + '님의 ' + (isPhoto ? '사진 요청' : '데이트 신청') + '을 수락했어요.');
+        return refreshNow();
+      }).then(function () {
+        modalNotice('수락 완료', isPhoto
+          ? fromName + '님과 서로 사진을 볼 수 있어요.'
+          : fromName + '님과 채팅을 시작할 수 있어요! 메시지함에서 "💬 채팅하기"를 눌러보세요.');
       }).catch(function (err) {
-        modalNotice('오류', '승인에 실패했어요: ' + (err.message || err));
+        modalNotice('오류', '수락에 실패했어요: ' + (err.message || err));
       });
     });
   }
@@ -5610,6 +5676,7 @@
         proxyRegisterMode = true; formRole = 'matchmaker'; editingEntryId = null; photoDataUrls = []; actingAs = null; activeTab = 'form'; paint(currentState);
       }
       else if (action === 'reveal-mine') handleRevealMine(id);
+      else if (action === 'dm-chat') openDmChat(id);
       else if (action === 'revoke-approve') handleRevokeApprove(id);
       else if (action === 'perm-photo') { if (isAdminUnlocked) openPermPopup(id, 'photo'); }
       else if (action === 'perm-contact') { if (isAdminUnlocked) openPermPopup(id, 'contact'); }
@@ -5875,7 +5942,7 @@
           '&#128587; <b>본인으로 참여</b><br>' +
           '<ol style="padding-left:18px;margin:6px 0;">' +
             '<li>신청서에서 <b>[본인]</b> 선택 → 정보 채워 제출 → 관리자 승인 후 명단에 올라가요.</li>' +
-            '<li>명단에서 마음에 드는 사람에게 <b>&#128247; 사진 / &#128241; 번호 요청</b> (간단한 인사·이유 <b>필수, 최소 10자</b>).</li>' +
+            '<li>명단에서 마음에 드는 사람에게 <b>&#128247; 사진 요청 / &#128156; 데이트 신청</b> (간단한 인사·이유 <b>필수, 최소 10자</b>). 데이트가 성사되면 <b>앱 안 채팅</b>으로 대화해요(번호 비공개).</li>' +
             '<li>받은 요청은 <b>승인 / 보류 / 거절 + 답장</b>. 예: "보류 + 사진 보여주세요".</li>' +
             '<li>자기소개·원하는 이성·피하고 싶은 조건은 <b>필수</b> (자기소개 20자↑, 나머지 각 10자↑). 자세할수록 매칭이 잘 돼요!</li>' +
           '</ol>' +

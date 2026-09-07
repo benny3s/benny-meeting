@@ -93,7 +93,7 @@ exports.onStateChange = functions
     const jobs = [];
     (after.dateRequests || []).forEach((r) => {
       const prev = beforeMap[r.id];
-      const type = (r.type || 'contact') === 'photo' ? '사진' : '번호';
+      const type = (r.type || 'contact') === 'photo' ? '사진' : '데이트';
       if (!prev) {
         /* 새 요청 → 받는 사람에게 (대리 프로필이면 주선자에게) */
         jobs.push(notifyRecipient(entries, r.toId, '새 ' + type + ' 요청', nameOf(entries, r.fromId) + '님이 ' + type + ' 요청을 보냈어요'));
@@ -152,6 +152,15 @@ exports.onStateChange = functions
       else if (m.from === 'admin') jobs.push(sendTo(m.entryId, '💬 관리자 메시지', preview));
     });
 
+    /* 회원↔회원 데이트 채팅(dm): 새 메시지 → 받는 사람에게 (대리 프로필이면 주선자에게) */
+    const beforeDm = {};
+    (before.dm || []).forEach((m) => { beforeDm[m.id] = true; });
+    (after.dm || []).forEach((m) => {
+      if (beforeDm[m.id]) return;
+      const preview = (m.text || '').slice(0, 40);
+      jobs.push(notifyRecipient(entries, m.toId, '💬 ' + nameOf(entries, m.fromId) + '님의 채팅', preview));
+    });
+
     await Promise.all(jobs);
     return null;
   });
@@ -183,7 +192,7 @@ exports.remindPending = functions
         const t = r.submittedAt ? new Date(r.submittedAt).getTime() : 0;
         if (!t) return r;
         const age = now - t;
-        const type = (r.type || 'contact') === 'photo' ? '사진' : '번호';
+        const type = (r.type || 'contact') === 'photo' ? '사진' : '데이트';
         const fromNick = nameOf(entries, r.fromId);
         if (age >= REMIND_2_MS && !r.remind2Sent) {
           sends.push({ toId: r.toId, title: '⏰ ' + type + ' 요청 알림', body: fromNick + '님의 ' + type + ' 요청이 3일째 기다리고 있어요. 승인/거절을 정해주세요' });
