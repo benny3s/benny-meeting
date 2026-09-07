@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-107';
+  var APP_VERSION = '2026-09-07-108';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -4349,8 +4349,9 @@
       var icon = isPhoto ? '📷' : '📱';
       var noteOverlay = openModal(
         '<h3>' + icon + ' ' + escapeHtml(target.nickname) + '님 ' + typeLabel + ' 요청</h3>' +
-        '<p class="modal-msg">상대방이 승인하면 확인할 수 있어요.</p>' +
-        '<textarea class="modal-input" id="modal-note" rows="3" maxlength="200" placeholder="한 마디 남기기 (선택)"></textarea>' +
+        '<p class="modal-msg">상대가 승인하면 확인할 수 있어요. 간단한 인사·요청 이유를 꼭 남겨주세요 <b>(최소 10자)</b>.</p>' +
+        '<textarea class="modal-input" id="modal-note" rows="3" maxlength="200" placeholder="예) 안녕하세요! 프로필 잘 봤어요, 꼭 한번 대화해보고 싶어요 :)"></textarea>' +
+        '<p id="modal-note-warn" class="modal-msg" style="color:var(--accent);margin:4px 0 0;font-size:0.82rem;" hidden>최소 10자 이상 남겨주세요.</p>' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
           '<button type="button" class="card-btn primary" id="modal-ok">요청하기</button>' +
@@ -4358,9 +4359,13 @@
       );
       new Promise(function (resolve) {
         function finish(val) { closeModal(noteOverlay); resolve(val); }
+        var noteEl = noteOverlay.querySelector('#modal-note');
+        var warnEl = noteOverlay.querySelector('#modal-note-warn');
         noteOverlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
         noteOverlay.querySelector('#modal-ok').addEventListener('click', function () {
-          finish(noteOverlay.querySelector('#modal-note').value.trim());
+          var v = noteEl.value.trim();
+          if (v.length < 10) { warnEl.hidden = false; noteEl.focus(); return; } /* 코멘트 최소 10자 필수 */
+          finish(v);
         });
         noteOverlay.addEventListener('click', function (e) { if (e.target === noteOverlay) finish(null); });
       }).then(function (note) {
@@ -5692,7 +5697,7 @@
           '&#128587; <b>본인으로 참여</b><br>' +
           '<ol style="padding-left:18px;margin:6px 0;">' +
             '<li>신청서에서 <b>[본인]</b> 선택 → 정보 채워 제출 → 관리자 승인 후 명단에 올라가요.</li>' +
-            '<li>명단에서 마음에 드는 사람에게 <b>&#128247; 사진 / &#128241; 번호 요청</b> (한 마디 메시지 첨부 가능).</li>' +
+            '<li>명단에서 마음에 드는 사람에게 <b>&#128247; 사진 / &#128241; 번호 요청</b> (간단한 인사·이유 <b>필수, 최소 10자</b>).</li>' +
             '<li>받은 요청은 <b>승인 / 보류 / 거절 + 답장</b>. 예: "보류 + 사진 보여주세요".</li>' +
             '<li>자기소개·원하는 이성·피하고 싶은 조건은 <b>필수(각 20자↑)</b>. 자세할수록 매칭이 잘 돼요!</li>' +
           '</ol>' +

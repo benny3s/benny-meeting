@@ -155,3 +155,53 @@ exports.onStateChange = functions
     await Promise.all(jobs);
     return null;
   });
+
+/* 미응답(pending) 사진/번호 요청 리마인더 — 1일차·3일차 딱 2회만 재알림.
+   remind1Sent / remind2Sent 플래그로 중복 방지. 이후는 관리자가 직접 챙김. */
+const REMIND_1_MS = 24 * 60 * 60 * 1000; /* 1일 */
+const REMIND_2_MS = 72 * 60 * 60 * 1000; /* 3일 */
+
+exports.remindPending = functions
+  .region('asia-northeast3')
+  .runWith({ timeoutSeconds: 60, memory: '256MB' })
+  .pubsub.schedule('every 1 hours')
+  .timeZone('Asia/Seoul')
+  .onRun(async () => {
+    const ref = db.doc('app/state');
+    /* 플래그 갱신은 트랜잭션으로(동시 요청 arrayUnion 과의 경쟁 최소화), 푸시 발송은 커밋 후 */
+    const result = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return null;
+      const state = snap.data() || {};
+      const entries = state.entries || [];
+      const reqs = state.dateRequests || [];
+      const now = Date.now();
+      const sends = [];
+      let changed = false;
+      const updated = reqs.map((r) => {
+        if (reqStatus(r) !== 'pending') return r;
+        const t = r.submittedAt ? new Date(r.submittedAt).getTime() : 0;
+        if (!t) return r;
+        const age = now - t;
+        const type = (r.type || 'contact') === 'photo' ? '사진' : '번호';
+        const fromNick = nameOf(entries, r.fromId);
+        if (age >= REMIND_2_MS && !r.remind2Sent) {
+          sends.push({ toId: r.toId, title: '⏰ ' + type + ' 요청 알림', body: fromNick + '님의 ' + type + ' 요청이 3일째 기다리고 있어요. 승인/거절을 정해주세요' });
+          changed = true;
+          return Object.assign({}, r, { remind1Sent: true, remind2Sent: true });
+        }
+        if (age >= REMIND_1_MS && !r.remind1Sent) {
+          sends.push({ toId: r.toId, title: '⏰ ' + type + ' 요청 알림', body: fromNick + '님의 ' + type + ' 요청이 아직 대기 중이에요. 확인해주세요' });
+          changed = true;
+          return Object.assign({}, r, { remind1Sent: true });
+        }
+        return r;
+      });
+      if (changed) tx.update(ref, { dateRequests: updated });
+      return { entries, sends };
+    });
+    if (result && result.sends.length) {
+      await Promise.all(result.sends.map((s) => notifyRecipient(result.entries, s.toId, s.title, s.body)));
+    }
+    return null;
+  });
