@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-119';
+  var APP_VERSION = '2026-09-07-120';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -2287,7 +2287,17 @@
       el.scrollTop = el.scrollHeight;
     }
     draw(); markDmSeen(me.id, otherId);
-    function close() { closeModal(overlay); paint(currentState); }
+    var lastCount = dmThread(currentState, me.id, otherId).length;
+    /* 열려 있는 동안 자동 갱신(폴링): 상대가 보낸 새 메시지를 앱 전체 리페인트 없이 채팅창에만 반영 */
+    var poll = setInterval(function () {
+      stateRef.get({ source: 'server' }).then(function (doc) {
+        if (!doc.exists) return;
+        currentState = doc.data();
+        var th = dmThread(currentState, me.id, otherId);
+        if (th.length !== lastCount) { lastCount = th.length; draw(); markDmSeen(me.id, otherId); }
+      }).catch(function () {});
+    }, 3500);
+    function close() { clearInterval(poll); closeModal(overlay); paint(currentState); }
     overlay.querySelector('#modal-cancel').addEventListener('click', close);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
     overlay.querySelector('#dm-send').addEventListener('click', function () {
@@ -2296,8 +2306,11 @@
       var btn = overlay.querySelector('#dm-send'); btn.disabled = true;
       sendDm(me.id, otherId, t).then(function () {
         ta.value = ''; return refreshNow();
-      }).then(function () { draw(); markDmSeen(me.id, otherId); btn.disabled = false; })
-        .catch(function (err) { btn.disabled = false; modalNotice('오류', '전송 실패: ' + (err.message || err)); });
+      }).then(function () {
+        draw(); markDmSeen(me.id, otherId);
+        lastCount = dmThread(currentState, me.id, otherId).length;
+        btn.disabled = false;
+      }).catch(function (err) { btn.disabled = false; modalNotice('오류', '전송 실패: ' + (err.message || err)); });
     });
   }
   function msgLineHtml(m, canDelete) {
