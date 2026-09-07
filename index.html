@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-120';
+  var APP_VERSION = '2026-09-07-121';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -3260,6 +3260,52 @@
         : '<p class="sub" style="margin:0;">받은 요청이 없어요.</p>') +
       '</div>';
   }
+  /* 메시지함: 내 사진을 볼 수 있는 사람 목록 (원하면 삭제=접근 회수) */
+  function photoViewersSectionHtml(state, me) {
+    if (!me) return '';
+    var viewers = (state.entries || []).filter(function (x) {
+      return x.id !== me.id && !x.isMatchmaker && canViewPhotoOf(state, x.id, me.id);
+    });
+    var rows = viewers.length
+      ? viewers.map(function (x) {
+          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);">' +
+            '<span><b style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.8rem;">' + escapeHtml(formatUid(x) || '—') + '</b> ' + escapeHtml(x.nickname) + '</span>' +
+            '<button type="button" class="card-btn danger" data-action="revoke-photo-viewer" data-id="' + escapeHtml(x.id) + '" style="flex:none;padding:4px 12px;">삭제</button>' +
+          '</div>';
+        }).join('')
+      : '<p class="sub" style="margin:0;">아직 내 사진을 볼 수 있는 사람이 없어요.</p>';
+    return '<div class="mine-section"><h3>📷 내 사진을 볼 수 있는 사람<span class="count">' + viewers.length + '</span></h3>' +
+      '<p class="sub" style="margin:0 0 6px;">삭제하면 그 사람은 더 이상 내 사진을 볼 수 없어요. (사진은 서로 공개라, 나도 그 사람 사진을 못 보게 돼요.)</p>' +
+      rows + '</div>';
+  }
+  function handleRevokePhotoViewer(otherId) {
+    var me = findMyEntry(currentState);
+    if (!me) return modalNotice('로그인 필요', '먼저 로그인해주세요.');
+    var otherNick = nickForEntry(currentState, otherId);
+    modalConfirm('사진 접근 삭제', otherNick + '님이 내 사진을 못 보게 할까요? 사진은 서로 공개라, 나도 ' + otherNick + '님 사진을 못 보게 돼요.', '삭제', 'danger').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).map(function (r) {
+            if ((r.type || 'contact') !== 'photo') return r;
+            var between = (r.fromId === me.id && r.toId === otherId) || (r.fromId === otherId && r.toId === me.id);
+            if (!between) return r;
+            var c = JSON.parse(JSON.stringify(r));
+            if (c.approved) c.approved = false;
+            if (c.fromId === me.id && c.fromRevealed) c.fromRevealed = false;
+            return c;
+          });
+          tx.update(stateRef, { dateRequests: reqs });
+        });
+      }).then(function () {
+        appendLog('request', me.nickname, '사진 접근 삭제 → ' + otherNick);
+        return refreshNow();
+      }).then(function () {
+        modalNotice('삭제 완료', otherNick + '님은 더 이상 내 사진을 볼 수 없어요.');
+      }).catch(function (err) { modalNotice('오류', '삭제 실패: ' + (err.message || err)); });
+    });
+  }
   function renderMine(state) {
     var me = findMyEntry(state);
     var myPending = findMyPending(state);
@@ -3364,6 +3410,7 @@
           '<div class="my-uid">고유번호 ' + escapeHtml(formatUid(me) || '—') + '</div>' +
           '<p class="sub">내 소개팅 프로필로 받고 보낸 요청이에요.</p>' +
           sections +
+          photoViewersSectionHtml(state, me) +
         '</div>'
       );
     }
@@ -3412,6 +3459,7 @@
         '<p class="sub">' + escapeHtml(me.nickname) + '님, 반가워요! 받은 요청은 직접 승인하거나 거절할 수 있어요.</p>' +
         (isSubProfile ? '' : joinRequestSectionHtml(state, false)) + /* 나에게 온 주선자 요청 있으면 표시 */
         sections +
+        photoViewersSectionHtml(state, me) +
         (isSubProfile ? '' : msgSection) +
         ((!isSubProfile && !isMatchmakerEntry(myAuthEntry(state)) && me.id === currentUser.id)
           ? '<div class="mine-section" style="margin-top:14px;"><button type="button" class="card-btn" id="convert-mm" style="flex:none;">🤝 주선자 계정으로 전환</button>' +
@@ -5699,6 +5747,7 @@
       }
       else if (action === 'reveal-mine') handleRevealMine(id);
       else if (action === 'dm-chat') openDmChat(id);
+      else if (action === 'revoke-photo-viewer') handleRevokePhotoViewer(id);
       else if (action === 'revoke-approve') handleRevokeApprove(id);
       else if (action === 'perm-photo') { if (isAdminUnlocked) openPermPopup(id, 'photo'); }
       else if (action === 'perm-contact') { if (isAdminUnlocked) openPermPopup(id, 'contact'); }
