@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-109';
+  var APP_VERSION = '2026-09-07-110';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -2790,6 +2790,13 @@
     });
   }
 
+  /* 카카오톡 인앱 브라우저 감지 + 기본(외부) 브라우저로 열기 — 카톡 웹뷰는 사진 첨부(파일 선택)가 막힘 */
+  function isKakaoInApp() { return /kakaotalk/i.test(navigator.userAgent || ''); }
+  function isIOSDevice() { return /iphone|ipad|ipod/i.test(navigator.userAgent || ''); }
+  function openInExternalBrowser() {
+    try { location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href); } catch (e) {}
+  }
+
   function renderForm(state) {
     var isEdit = !!editingEntryId;
     if (!isEdit && formRole === 'mm-new') return renderMatchmakerNew(state);
@@ -2828,6 +2835,15 @@
     /* 일반 회원이 본인 프로필을 수정할 때도 본인/주선자 토글을 보여줌 → 주선자로 전환(친구 소개) 가능 */
     var editingOwnSelf = isEdit && currentUser && editingEntryId === currentUser.id && !isMatchmakerEntry(myAuthEntry(state));
     var roleToggle = (!isEdit || editingOwnSelf) ? roleToggleHtml() : '';
+    /* 카카오톡 인앱 브라우저 안내: 사진 첨부가 막히므로 작성 전에 크롬/사파리로 열도록 유도 (중간에 옮기면 작성 내용 사라짐) */
+    var kakaoNote = isKakaoInApp()
+      ? '<div class="readonly-note" style="background:#fff4e5;border-color:#ffb74d;">' +
+          '📷 <b>카카오톡 브라우저에서는 사진 첨부가 안 돼요.</b> 작성을 시작하기 전에 아래 버튼으로 크롬/사파리에서 열어주세요. ' +
+          '<b>카톡 안에서 작성하다가 옮기면 입력한 내용이 사라집니다.</b>' +
+          '<button type="button" class="card-btn primary" id="open-external-btn" style="margin-top:10px;display:block;width:100%;">🌐 크롬 · 사파리로 열기</button>' +
+          (isIOSDevice() ? '<div style="font-size:0.78rem;color:var(--muted);margin-top:6px;">※ 버튼으로 안 열리면 화면의 <b>공유/메뉴 → 다른 브라우저(Safari)로 열기</b>를 눌러주세요.</div>' : '') +
+        '</div>'
+      : '';
     return (
       roleToggle + setupNote + editNote + proxyNote +
       '<div class="form-card">' +
@@ -2835,6 +2851,7 @@
           '<h2>' + (isEdit ? '프로필 수정' : (proxy ? '🤝 친구를 소개해 주세요' : (ownerMMForm ? '🙋 내 소개팅 프로필' : '본인을 소개해 주세요'))) + '</h2>' +
           '<p>' + (isEdit ? '수정할 항목을 변경한 뒤 저장하세요.' : (proxy ? '소개할 친구의 정보를 채워주세요. 관리자 승인 후 명단에 올라가요.' : (ownerMMForm ? '주선자님 본인의 소개팅 프로필이에요. 승인 후 상단 "🔄 활동 중 프로필"에서 본인으로 전환해 직접 활동할 수 있어요. (PIN 없이 주선자 계정으로 관리)' : '아래 정보를 채워서 제출하면 관리자 승인 후 명단에 올라가요.'))) + '</p>' +
         '</div>' +
+        kakaoNote +
         '<form id="entry-form" novalidate>' +
           '<div class="field-group">' +
             '<div class="row-2">' +
@@ -5382,6 +5399,7 @@
       paint(currentState);
       return;
     }
+    if (e.target.closest('#open-external-btn')) { openInExternalBrowser(); return; }
     if (e.target.closest('#start-proxy')) { startProxyIntro(); return; }
     if (e.target.closest('#request-mm')) { handleRequestMatchmaker(); return; }
     if (e.target.closest('#cancel-mm-req')) { handleCancelMmReq(); return; }
