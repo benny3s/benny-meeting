@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-07-112';
+  var APP_VERSION = '2026-09-07-113';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -3353,10 +3353,11 @@
       : '';
 
     /* 회원 명단 (트리): 로그인 계정(주선자/일반)이 최상위, 그 아래 관리 프로필(본인/친구) */
+    /* e(이 사람)가 볼 수 있는 사진/번호 수 (e가 "보는 주체") */
     function permCounts(e) {
       return {
-        photoN: allEntries.filter(function (x) { return x.id !== e.id && canViewPhotoOf(state, x.id, e.id); }).length,
-        contactN: allEntries.filter(function (x) { return x.id !== e.id && canViewContactOf(state, x.id, e.id); }).length
+        photoN: allEntries.filter(function (x) { return x.id !== e.id && canViewPhotoOf(state, e.id, x.id); }).length,
+        contactN: allEntries.filter(function (x) { return x.id !== e.id && canViewContactOf(state, e.id, x.id); }).length
       };
     }
     var childrenByMgr = {};
@@ -3412,10 +3413,10 @@
     }
     var seenSection =
       '<h2>👥 회원 명단</h2>' +
-      '<p class="sub">로그인 계정이 상위, 그 아래 <span class="chip" style="background:#fdeef0;color:var(--accent);">🙋 본인</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 친구</span> 가 붙어요. <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자</span> <span class="chip" style="background:#f1f1f1;color:#777;">일반</span>. 헤더로 정렬 · 닉네임 클릭 = 프로필 · <b>접속 시간 클릭 = 그 사람 활동 기록</b> · 📷/📱 = 볼 수 있는 사람 수(클릭해서 관리).</p>' +
+      '<p class="sub">로그인 계정이 상위, 그 아래 <span class="chip" style="background:#fdeef0;color:var(--accent);">🙋 본인</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 친구</span> 가 붙어요. <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자</span> <span class="chip" style="background:#f1f1f1;color:#777;">일반</span>. 헤더로 정렬 · 닉네임 클릭 = 프로필 · <b>접속 시간 클릭 = 그 사람 활동 기록</b> · 📷/📱 = <b>이 사람이 볼 수 있는</b> 사진·번호 수(클릭해서 관리).</p>' +
       (tops.length
         ? '<div class="admin-table-wrap"><table class="seen-table"><thead><tr>' +
-            seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 권한') + seenTh('contact', '📱 권한') +
+            seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 볼 수 있는 사진') + seenTh('contact', '📱 볼 수 있는 번호') +
           '</tr></thead><tbody>' + seenRows + '</tbody></table></div>'
         : '<p class="sub">등록된 사람이 없어요.</p>');
 
@@ -4603,7 +4604,7 @@
       return (req.fromId === viewerId && req.toId === targetId) || (req.fromId === targetId && req.toId === viewerId);
     });
   }
-  /* 관리자: 특정 회원의 사진/번호를 볼 수 있는 사람 관리 팝업 */
+  /* 관리자: 이 회원이 볼 수 있는 사진/번호 관리 팝업 (주체 = targetId가 "보는 사람") */
   function openPermPopup(targetId, kind) {
     if (!isAdminUnlocked) return;
     var state = currentState;
@@ -4613,15 +4614,16 @@
     var others = (state.entries || []).filter(function (e) { return e.id !== targetId; })
       .sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
     var rows = others.map(function (x) {
-      var has = isPhoto ? canViewPhotoOf(state, x.id, targetId) : canViewContactOf(state, x.id, targetId);
+      /* targetId(이 사람)가 x의 사진/번호를 볼 수 있는가 */
+      var has = isPhoto ? canViewPhotoOf(state, targetId, x.id) : canViewContactOf(state, targetId, x.id);
       return '<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line);cursor:pointer;">' +
-        '<input type="checkbox" data-permtoggle="1" data-viewer="' + escapeHtml(x.id) + '" data-target="' + escapeHtml(targetId) + '" data-kind="' + kind + '"' + (has ? ' checked' : '') + ' style="width:17px;height:17px;accent-color:var(--accent);flex:none;">' +
+        '<input type="checkbox" data-permtoggle="1" data-viewer="' + escapeHtml(targetId) + '" data-target="' + escapeHtml(x.id) + '" data-kind="' + kind + '"' + (has ? ' checked' : '') + ' style="width:17px;height:17px;accent-color:var(--accent);flex:none;">' +
         '<span><b style="font-variant-numeric:tabular-nums;">' + escapeHtml(formatUid(x) || '—') + '</b> ' + escapeHtml(x.nickname) + (x.testAccount ? ' 🧪' : '') + '</span>' +
       '</label>';
     }).join('');
     var overlay = openModal(
-      '<h3>' + (isPhoto ? '📷 사진' : '📱 번호') + ' 권한 관리</h3>' +
-      '<p class="modal-msg"><b>' + escapeHtml(target.nickname) + '</b>님의 ' + (isPhoto ? '사진' : '번호') + '를 볼 수 있는 사람이에요. 체크로 관리하세요.' +
+      '<h3>' + (isPhoto ? '📷 사진' : '📱 번호') + ' 열람 권한</h3>' +
+      '<p class="modal-msg"><b>' + escapeHtml(target.nickname) + '</b>님이 볼 수 있는 ' + (isPhoto ? '사진' : '번호') + '이에요. 체크한 사람의 ' + (isPhoto ? '사진' : '번호') + '을 ' + escapeHtml(target.nickname) + '님이 볼 수 있어요.' +
         (isPhoto ? '' : '<br><span style="color:var(--muted);font-size:0.82rem;">번호는 회원끼리 요청·승인으로만 공유돼요. 여기선 <b>해제(회수)</b>만 가능해요.</span>') + '</p>' +
       '<div style="max-height:48vh;overflow-y:auto;">' + (rows || '<p class="sub">다른 회원이 없어요.</p>') + '</div>' +
       '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">닫기</button></div>'
