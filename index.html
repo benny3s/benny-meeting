@@ -102,6 +102,13 @@
   }
   .admin-link:hover { opacity: 1; border-color: rgba(251,243,238,0.6); }
   .admin-link.unlocked { background: var(--accent); border-color: var(--accent); opacity: 1; }
+  /* 좁은 화면: 헤더 버튼이 4줄로 넘치지 않게 각 줄을 가로 스크롤(줄바꿈 방지) */
+  @media (max-width: 480px) {
+    .admin-bar { align-items: stretch; }
+    .admin-bar-row { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    .admin-bar-row::-webkit-scrollbar { display: none; }
+    .admin-link { flex: none; white-space: nowrap; }
+  }
 
   /* ---------- Tabs ---------- */
   /* 탭 + 프로필 전환 바를 함께 상단 고정 */
@@ -779,7 +786,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-140';
+  var APP_VERSION = '2026-09-08-141';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -893,10 +900,11 @@
     var a = acqAuth(); if (!a) { modalNotice('로그인 필요', '먼저 로그인해주세요.'); return; }
     numbers = (numbers || []).filter(Boolean);
     if (!numbers.length) { modalNotice('안내', '추가할 번호를 찾지 못했어요.'); return; }
+    var loading = openModal('<h3>적용 중…</h3><p class="modal-msg">번호 ' + numbers.length + '개로 지인 필터를 적용하고 있어요. 잠시만요…</p>');
     fns.httpsCallable('setAcqFilter')({ entryId: a.entryId, pin: a.pin, numbers: numbers, mode: mode }).then(function (r) {
       var c = (r && r.data && r.data.count) || 0;
-      refreshMyHidden(function () { paint(currentState); modalNotice('적용 완료', '지인 필터에 번호 ' + c + '개가 등록됐어요. 해당하는 회원과는 서로 명단에서 숨겨져요.'); });
-    }).catch(function (e) { modalNotice('오류', '필터 적용 실패: ' + ((e && e.message) || e)); });
+      refreshMyHidden(function () { closeModal(loading); paint(currentState); modalNotice('적용 완료', '지인 필터에 번호 ' + c + '개가 등록됐어요. 해당하는 회원과는 서로 명단에서 숨겨져요.'); });
+    }).catch(function (e) { closeModal(loading); modalNotice('오류', '필터 적용 실패: ' + ((e && e.message) || e)); });
   }
   function chooseAcqModeThenApply(numbers) {
     if (!(acqCounts.filter > 0)) { applyAcqNumbers(numbers, 'replace'); return; } /* 기존 없으면 바로 등록 */
@@ -2907,7 +2915,7 @@
       : '';
     return (
       '<div class="list-toolbar">' +
-        '<div class="summary"><strong>' + entries.length + '명</strong> 등록 (남 ' + maleCount + ' / 여 ' + femaleCount + ')' + viewToggle + acqBtn + '</div>' +
+        '<div class="summary"><strong>' + entries.length + '명</strong> <span style="font-size:0.82em;">남' + maleCount + '·여' + femaleCount + '</span>' + viewToggle + acqBtn + '</div>' +
         '<div class="filter-group">' +
           '<button type="button" class="filter-btn" data-filter="all" aria-pressed="' + (listFilter === 'all') + '">전체</button>' +
           '<button type="button" class="filter-btn" data-filter="male" aria-pressed="' + (listFilter === 'male') + '">남성</button>' +
@@ -3836,7 +3844,7 @@
     });
     function permCell(e, count, kind) {
       if (isMatchmakerEntry(e)) return '<td style="text-align:center;color:var(--muted);">—</td>'; /* 순수 주선자는 소개팅 당사자 아님 */
-      var act = kind === 'photo' ? 'perm-photo' : 'perm-contact', icon = kind === 'photo' ? '📷' : '📱';
+      var act = kind === 'photo' ? 'perm-photo' : 'perm-contact', icon = kind === 'photo' ? '📷' : '💬';
       return '<td style="text-align:center;"><button type="button" class="card-btn" data-action="' + act + '" data-id="' + escapeHtml(e.id) + '" style="flex:none;padding:3px 9px;">' + icon + ' ' + count + '</button></td>';
     }
     function nameCell(e, indent) {

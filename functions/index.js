@@ -49,7 +49,8 @@ function verifyPinServer(pin, entry) {
   const pa = entry.pinAuth;
   if (pa && pa.salt && pa.hash) {
     const salt = Buffer.from(pa.salt, 'base64');
-    const h = nodeCrypto.pbkdf2Sync(String(pin), salt, 150000, 32, 'sha256').toString('hex');
+    /* 클라 makePinAuth는 파생 32바이트를 base64로 저장(함수명은 HashHex지만 실제 base64) */
+    const h = nodeCrypto.pbkdf2Sync(String(pin), salt, 150000, 32, 'sha256').toString('base64');
     return h === pa.hash;
   }
   if (entry.pinHash) { /* 구형 계정 폴백: sha256(pin) (클라 verifyPin과 동일) */
