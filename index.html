@@ -398,7 +398,7 @@
   .filter-group { display: flex; gap: 6px; }
   .filter-btn {
     background: var(--card); border: 1px solid var(--line); color: var(--muted);
-    padding: 7px 16px; border-radius: 999px; font-size: 0.85rem; cursor: pointer;
+    padding: 7px 16px; border-radius: 999px; font-size: 0.85rem; cursor: pointer; white-space: nowrap;
   }
   .filter-btn[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .view-toggle {
@@ -786,7 +786,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-143';
+  var APP_VERSION = '2026-09-08-144';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -2927,8 +2927,8 @@
         '<div class="summary"><strong>' + entries.length + '명</strong> <span style="font-size:0.82em;">남' + maleCount + '·여' + femaleCount + '</span>' + viewToggle + acqBtn + '</div>' +
         '<div class="filter-group">' +
           '<button type="button" class="filter-btn" data-filter="all" aria-pressed="' + (listFilter === 'all') + '">전체</button>' +
-          '<button type="button" class="filter-btn" data-filter="male" aria-pressed="' + (listFilter === 'male') + '">남성</button>' +
-          '<button type="button" class="filter-btn" data-filter="female" aria-pressed="' + (listFilter === 'female') + '">여성</button>' +
+          '<button type="button" class="filter-btn" data-filter="gender" aria-pressed="' + (listFilter === 'male' || listFilter === 'female') + '" title="눌러서 남/여 전환">' +
+            (listFilter === 'male' ? '👨 남성' : (listFilter === 'female' ? '👩 여성' : '성별')) + '</button>' +
           permBtns +
         '</div>' +
       '</div>' +
@@ -5983,7 +5983,12 @@
     }
     var filterBtn = e.target.closest('[data-filter]');
     if (filterBtn) {
-      listFilter = filterBtn.getAttribute('data-filter');
+      var f = filterBtn.getAttribute('data-filter');
+      if (f === 'gender') { /* 성별 버튼: 남 → 여 → 전체 순환 */
+        listFilter = (listFilter === 'male') ? 'female' : (listFilter === 'female') ? 'all' : 'male';
+      } else {
+        listFilter = f;
+      }
       paint(currentState);
       return;
     }
