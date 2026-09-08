@@ -779,7 +779,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-132';
+  var APP_VERSION = '2026-09-08-133';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -962,6 +962,46 @@
         '<button type="button" class="card-btn" id="acq-manual" style="flex:none;">✏️ 번호 직접 입력</button>' +
         (acqCounts.filter ? '<button type="button" class="card-btn danger" id="acq-clear" style="flex:none;">전체 삭제</button>' : '') +
       '</div></div>';
+  }
+  /* 명단 툴바의 "🙈 지인 필터" 버튼이 여는 패널 (모달). 내부 버튼(#acq-vcf/#acq-manual/#acq-clear)은 전역 위임 핸들러가 처리 */
+  function openAcqFilterPanel() {
+    if (!acqAuth()) { modalNotice('로그인 필요', '먼저 로그인해주세요.'); return; }
+    var inner =
+      '<p class="modal-msg" style="text-align:left;">아는 사람과 <b>마주치기 방지</b> — 등록한 번호의 회원은 내 명단에서 숨겨지고, <b>상대 명단에서도 내가 숨겨져요(서로 안 보임)</b>. 올린 번호는 암호화 저장되고 상대에게 공개되지 않아요.' +
+        (acqCounts.filter ? ' 현재 <b>' + acqCounts.filter + '개</b> 등록' + (acqCounts.hidden ? ', <b>' + acqCounts.hidden + '명</b> 숨김 중' : '') + '.' : '') + '</p>' +
+      '<div style="display:flex;flex-direction:column;gap:8px;">' +
+        '<label class="card-btn" style="cursor:pointer;text-align:center;">📇 연락처 파일(vcf) 올리기<input type="file" id="acq-vcf" accept=".vcf,text/vcard,text/x-vcard" style="display:none;"></label>' +
+        '<button type="button" class="card-btn" id="acq-manual">✏️ 번호 직접 입력</button>' +
+        (acqCounts.filter ? '<button type="button" class="card-btn danger" id="acq-clear">전체 삭제</button>' : '') +
+      '</div>';
+    var ov = openModal('<h3>🙈 지인 필터</h3>' + inner + '<div class="modal-actions"><button type="button" class="card-btn" id="modal-cancel">닫기</button></div>');
+    ov.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(ov); });
+    ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(ov); });
+  }
+  /* 비로그인 티저 카드: 신원 가림(닉네임·직장 숨김, 사진 강한 블러). 성별·나이·지역·소개일부·선호일부만 부분 공개 */
+  function teaserCardHtml(entry) {
+    var ageStr = entry.birthYear ? (String(entry.birthYear).slice(2) + '년생') : '';
+    var thumb = cardThumb(entry);
+    var photo = thumb
+      ? '<div class="pf-photos" style="pointer-events:none;"><img src="' + thumb + '" alt="회원 사진" style="filter:blur(22px) saturate(0.55);transform:scale(1.12);" loading="lazy"><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:1.7rem;">🔒</div></div>'
+      : '<div class="pf-photo pf-photo--empty" style="background:' + avatarColor(entry.id) + ';">🔒</div>';
+    var introBit = entry.intro ? escapeHtml(String(entry.intro).replace(/\s+/g, ' ').slice(0, 18)) + '…' : '';
+    var idealBit = entry.idealType ? escapeHtml(String(entry.idealType).replace(/\s+/g, ' ').slice(0, 18)) + '…' : '';
+    return (
+      '<article class="pf-card">' +
+        photo +
+        '<div class="pf-body">' +
+          '<h3 class="pf-name" style="color:var(--muted);">🔒 회원</h3>' +
+          '<div class="pf-chips">' +
+            '<span class="chip chip--gender-' + escapeHtml(entry.gender) + '">' + genderLabel(entry.gender) + '</span>' +
+            (ageStr ? '<span class="chip">' + escapeHtml(ageStr) + '</span>' : '') +
+          '</div>' +
+          '<ul class="pf-meta"><li>' + ICON_PIN + '<span>' + escapeHtml(entry.region || '-') + '</span></li></ul>' +
+          (introBit ? '<div class="pf-extra"><b>소개</b> ' + introBit + '</div>' : '') +
+          (idealBit ? '<div class="pf-extra"><b>선호</b> ' + idealBit + '</div>' : '') +
+        '</div>' +
+      '</article>'
+    );
   }
   /* 관리자: 기존 회원 번호를 안전 저장소(sendContacts)에 일괄 백필. 관리자 브라우저에서 복호화 → CF로 저장 */
   function handleBackfillPhones() {
@@ -2816,6 +2856,7 @@
     var maleCount = entries.filter(function (e) { return e.gender === 'male'; }).length;
     var femaleCount = entries.filter(function (e) { return e.gender === 'female'; }).length;
     var me = findMyEntry(state);
+    var teaser = !currentUser && !isAdminUnlocked; /* 비로그인·비관리자 → 신원 가린 티저 뷰 */
     var isPermFilter = (listFilter === 'photo' || listFilter === 'contact');
     var filtered = entries.filter(function (e) {
       if (myHiddenIds.indexOf(e.id) >= 0) return false; /* 지인 필터(마주치기 방지)로 숨김 */
@@ -2830,7 +2871,9 @@
       return '<div class="empty-state"><div class="big">' + ICON_HEART + '</div><p>아직 등록된 사람이 없어요.<br>첫 번째로 신청해 보세요!</p></div>';
     }
     var body;
-    if (listView === 'compact') {
+    if (teaser) {
+      body = '<div class="roster-grid">' + ordered.map(function (e) { return teaserCardHtml(e); }).join('') + '</div>';
+    } else if (listView === 'compact') {
       body = '<div class="compact-list">' + ordered.map(function (e) {
         var idx = entries.indexOf(e);
         return compactRowHtml(e, idx + 1);
@@ -2841,6 +2884,9 @@
         return cardHtml(e, idx + 1, state);
       }).join('') + '</div>';
     }
+    var teaserCta = teaser
+      ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);text-align:center;">🔒 회원 정보는 <b>로그인 후</b> 볼 수 있어요. 현재 <b>' + entries.length + '명</b>이 함께하고 있어요.<br><b>안전한 지인 기반 소개</b> — 가입하고 만나보세요!</div>'
+      : '';
     var guide = '';
     if (isPermFilter) {
       var kind = listFilter === 'photo' ? '사진' : '번호';
@@ -2849,15 +2895,16 @@
         (ordered.length ? '' : '<br>아직 없어요 — 마음에 드는 분에게 적극적으로 ' + kind + ' 보기 요청을 해보세요! 💪') +
         '</div>';
     }
-    var viewToggle = '<button type="button" class="view-toggle' + (listView === 'compact' ? ' on' : '') + '" data-viewtoggle="1">' +
+    var viewToggle = teaser ? '' : '<button type="button" class="view-toggle' + (listView === 'compact' ? ' on' : '') + '" data-viewtoggle="1">' +
       (listView === 'compact' ? '🖼 사진으로' : '☰ 간단히') + '</button>';
+    var acqBtn = me ? '<button type="button" class="view-toggle" id="acq-open" style="margin-left:6px;">🙈 지인 필터' + (acqCounts.filter ? ' <span style="opacity:0.85;">' + acqCounts.filter + '</span>' : '') + '</button>' : '';
     var permBtns = me
       ? '<button type="button" class="filter-btn" data-filter="photo" aria-pressed="' + (listFilter === 'photo') + '">📷 사진</button>' +
         '<button type="button" class="filter-btn" data-filter="contact" aria-pressed="' + (listFilter === 'contact') + '">💬 채팅</button>'
       : '';
     return (
       '<div class="list-toolbar">' +
-        '<div class="summary"><strong>' + entries.length + '명</strong> 등록 (남 ' + maleCount + ' / 여 ' + femaleCount + ')' + viewToggle + '</div>' +
+        '<div class="summary"><strong>' + entries.length + '명</strong> 등록 (남 ' + maleCount + ' / 여 ' + femaleCount + ')' + viewToggle + acqBtn + '</div>' +
         '<div class="filter-group">' +
           '<button type="button" class="filter-btn" data-filter="all" aria-pressed="' + (listFilter === 'all') + '">전체</button>' +
           '<button type="button" class="filter-btn" data-filter="male" aria-pressed="' + (listFilter === 'male') + '">남성</button>' +
@@ -2865,6 +2912,7 @@
           permBtns +
         '</div>' +
       '</div>' +
+      teaserCta +
       guide +
       body
     );
@@ -3561,7 +3609,6 @@
           '<p class="sub">내 소개팅 프로필로 받고 보낸 요청이에요.</p>' +
           sections +
           photoViewersSectionHtml(state, me) +
-          acqFilterSectionHtml() +
         '</div>'
       );
     }
@@ -3611,7 +3658,6 @@
         (isSubProfile ? '' : joinRequestSectionHtml(state, false)) + /* 나에게 온 주선자 요청 있으면 표시 */
         sections +
         photoViewersSectionHtml(state, me) +
-        acqFilterSectionHtml() +
         (isSubProfile ? '' : msgSection) +
         ((!isSubProfile && !isMatchmakerEntry(myAuthEntry(state)) && me.id === currentUser.id)
           ? '<div class="mine-section" style="margin-top:14px;"><button type="button" class="card-btn" id="convert-mm" style="flex:none;">🤝 주선자 계정으로 전환</button>' +
@@ -5833,6 +5879,7 @@
       paint(currentState);
       return;
     }
+    if (e.target.closest('#acq-open')) { openAcqFilterPanel(); return; }
     if (e.target.closest('#acq-manual')) { handleAcqManual(); return; }
     if (e.target.closest('#acq-clear')) { handleAcqClear(); return; }
     if (e.target.closest('#backfill-phones')) { handleBackfillPhones(); return; }
