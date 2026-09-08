@@ -786,7 +786,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-141';
+  var APP_VERSION = '2026-09-08-142';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -826,6 +826,15 @@
   var ICON_PIN = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>';
   var ICON_BRIEF = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
   var ICON_HEART = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 21s-7.5-4.9-10-9.5C.6 8.1 2.4 4 6.3 4 8.6 4 10.6 5.2 12 7c1.4-1.8 3.4-3 5.7-3 3.9 0 5.7 4.1 4.3 7.5C19.5 16.1 12 21 12 21z"/></svg>';
+  /* 앱 로고: 하트 + 서스펜션 브릿지(베니브릿지). 어두운 헤더 배경용 2톤(골드 브릿지 + 로즈 하트) */
+  var ICON_LOGO = '<svg viewBox="0 0 48 48" width="36" height="36" aria-label="베니브릿지">' +
+    '<g fill="none" stroke="#E5C77A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M4 34 H44"/><path d="M16 34 V13"/><path d="M32 34 V13"/>' +
+      '<path d="M4 31 Q10 14 16 13 Q24 26 32 13 Q38 14 44 31"/>' +
+      '<path d="M9 26.5 V34 M22 22.5 V34 M26 22.5 V34 M39 26.5 V34" stroke-width="1.2" opacity="0.7"/>' +
+    '</g>' +
+    '<path d="M24 6.2 C24 3.7 20.2 2.8 18.7 4.8 C17.2 6.8 18.2 9 24 12.4 C29.8 9 30.8 6.8 29.3 4.8 C27.8 2.8 24 3.7 24 6.2 Z" fill="#E58C96"/>' +
+  '</svg>';
   var ICON_STAMP = '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>';
   var ICON_LOCK = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/></svg>';
   var ICON_UNLOCK = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 9-3"/></svg>';
@@ -4180,8 +4189,8 @@
     else panel = renderForm(state);
     return (
       '<div class="masthead"><div class="masthead-inner">' +
-        '<div class="masthead-icon">' + ICON_HEART + '</div>' +
-        '<div><h1 id="masthead-title" title="새로고침" style="cursor:pointer;">베니브릿지 <span style="font-size:0.5em;font-weight:400;opacity:0.65;">🌉</span></h1><p>관리자 주변 사람들 중심으로, 좋은 인연을 맺어주는 작은 공간이에요.</p></div>' +
+        '<div class="masthead-icon">' + ICON_LOGO + '</div>' +
+        '<div><h1 id="masthead-title" title="새로고침" style="cursor:pointer;">베니브릿지</h1><p>관리자 주변 사람들 중심으로, 좋은 인연을 맺어주는 작은 공간이에요.</p></div>' +
       '</div>' +
       '<div class="admin-bar">' +
         '<div class="admin-bar-row">' +
@@ -6724,10 +6733,15 @@
   function makeAppIcon(size) {
     var c = document.createElement('canvas'); c.width = size; c.height = size;
     var ctx = c.getContext('2d');
-    ctx.fillStyle = '#B23A48'; ctx.fillRect(0, 0, size, size);
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = Math.round(size * 0.5) + 'px serif';
-    ctx.fillText('♥', size / 2, size * 0.56); /* ♥ */
+    ctx.fillStyle = '#B23A48'; ctx.fillRect(0, 0, size, size); /* 로즈 배경 */
+    var s = size / 48;
+    ctx.strokeStyle = '#F1E2C4'; ctx.lineWidth = 2.6 * s; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; /* 크림색 브릿지 */
+    ctx.beginPath(); ctx.moveTo(7 * s, 35 * s); ctx.lineTo(41 * s, 35 * s); ctx.stroke(); /* 상판 */
+    ctx.beginPath(); ctx.moveTo(17 * s, 35 * s); ctx.lineTo(17 * s, 16 * s); ctx.moveTo(31 * s, 35 * s); ctx.lineTo(31 * s, 16 * s); ctx.stroke(); /* 주탑 */
+    ctx.beginPath(); ctx.moveTo(7 * s, 32 * s); ctx.quadraticCurveTo(11 * s, 17 * s, 17 * s, 16 * s); ctx.quadraticCurveTo(24 * s, 27 * s, 31 * s, 16 * s); ctx.quadraticCurveTo(37 * s, 17 * s, 41 * s, 32 * s); ctx.stroke(); /* 케이블 */
+    ctx.fillStyle = '#FBF3EE'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = Math.round(size * 0.2) + 'px serif';
+    ctx.fillText('♥', size / 2, size * 0.17); /* 상단 하트 */
     return c.toDataURL('image/png');
   }
   function setupPWA() {
