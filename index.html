@@ -810,7 +810,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-161';
+  var APP_VERSION = '2026-09-08-162';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -5907,22 +5907,14 @@
   }
 
   function handleRevealPhoto(id) {
-    var el = document.querySelector('[data-action="reveal-photo"][data-id="' + id + '"]');
-    if (!el) return;
-    if (isAdminUnlocked) {
-      el.classList.remove('blurred'); el.setAttribute('data-action', 'gallery');
-      return;
-    }
+    /* 권한이 있으면 저화질 썸네일 블러를 벗기는 중간 단계 없이 곧바로 원본(전체 해상도) 갤러리를 연다.
+       → 40px 저해상도 썸네일이 잠깐 드러나는 어색함 없음 */
+    if (isAdminUnlocked) { handleGallery(id); return; }
     var state = currentState;
     requireLogin().then(function (myEntry) {
       if (!myEntry) return;
-      if (myEntry.id === id) {
-        el.classList.remove('blurred'); el.setAttribute('data-action', 'gallery');
-        return;
-      }
-      var photoApproved = canViewPhotoOf(state, myEntry.id, id);
-      if (photoApproved) {
-        el.classList.remove('blurred'); el.setAttribute('data-action', 'gallery');
+      if (myEntry.id === id || canViewPhotoOf(state, myEntry.id, id)) {
+        handleGallery(id);
       } else {
         modalNotice('안내', '사진 보기 요청을 보내고 상대방의 승인을 받아야 해요.');
       }
