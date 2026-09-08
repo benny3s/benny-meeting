@@ -786,7 +786,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-145';
+  var APP_VERSION = '2026-09-08-146';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -3875,6 +3875,12 @@
       return '<td class="seen-date" data-action="log-filter" data-nick="' + escapeHtml(e.nickname) + '" title="눌러서 이 사람 활동 기록 보기"' +
         ' style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(dateTxt) + '</td>';
     }
+    /* 지인 필터 적용 수(숫자만). 매칭 대상은 비공개, 개수만 CF가 entry.acqFilterCount에 저장 */
+    function acqCell(e) {
+      if (isMatchmakerEntry(e)) return '<td style="text-align:center;color:var(--muted);">—</td>';
+      var n = e.acqFilterCount || 0;
+      return '<td style="text-align:center;' + (n ? 'font-weight:700;color:var(--accent);' : 'color:var(--muted);') + '">' + n + '</td>';
+    }
     /* 계정 유형 분류: 일반(general) / 주선자(mm) / 주선자 관리 프로필(managed=대리·본인) */
     var acctType = function (e) { return e.isMatchmaker ? 'mm' : (e.managedBy ? 'managed' : 'general'); };
     var seenRows;
@@ -3882,13 +3888,13 @@
       seenRows = tops.map(function (d) {
         var e = d.e;
         var row = '<tr>' + nameCell(e, false) + seenCell(e) +
-          permCell(e, d.photoN, 'photo') + permCell(e, d.contactN, 'contact') + '</tr>';
+          permCell(e, d.photoN, 'photo') + permCell(e, d.contactN, 'contact') + acqCell(e) + '</tr>';
         var kids = (childrenByMgr[e.id] || []).slice().sort(function (a, b) { return (b.ownerSelf ? 1 : 0) - (a.ownerSelf ? 1 : 0); });
         row += kids.map(function (c) {
           var pc = permCounts(c);
           return '<tr style="background:rgba(0,0,0,0.02);">' + nameCell(c, true) +
             '<td class="seen-date" style="color:var(--muted);">—</td>' +
-            permCell(c, pc.photoN, 'photo') + permCell(c, pc.contactN, 'contact') + '</tr>';
+            permCell(c, pc.photoN, 'photo') + permCell(c, pc.contactN, 'contact') + acqCell(c) + '</tr>';
         }).join('');
         return row;
       }).join('');
@@ -3899,8 +3905,8 @@
       seenRows = flat.map(function (e) {
         var pc = permCounts(e);
         return '<tr>' + nameCell(e, false) + seenCell(e) +
-          permCell(e, pc.photoN, 'photo') + permCell(e, pc.contactN, 'contact') + '</tr>';
-      }).join('') || '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:14px;">해당 유형의 회원이 없어요.</td></tr>';
+          permCell(e, pc.photoN, 'photo') + permCell(e, pc.contactN, 'contact') + acqCell(e) + '</tr>';
+      }).join('') || '<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:14px;">해당 유형의 회원이 없어요.</td></tr>';
     }
     var typeFilterBtns = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 10px;">' +
       [['all', '전체'], ['general', '일반 회원'], ['mm', '주선자'], ['managed', '소개·본인']].map(function (f) {
@@ -3916,7 +3922,7 @@
       typeFilterBtns +
       (tops.length
         ? '<div class="admin-table-wrap"><table class="seen-table"><thead><tr>' +
-            seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 사진') + seenTh('contact', '💬 채팅') +
+            seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 사진') + seenTh('contact', '💬 채팅') + '<th style="white-space:nowrap;">🙈 필터</th>' +
           '</tr></thead><tbody>' + seenRows + '</tbody></table></div>'
         : '<p class="sub">등록된 사람이 없어요.</p>');
 

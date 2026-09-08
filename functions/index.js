@@ -122,6 +122,13 @@ exports.setAcqFilter = functions
     }
     if (fh.length > 5000) fh = fh.slice(0, 5000);
     await ref.set({ fh: fh, at: new Date().toISOString() });
+    /* 관리자 표 표시용: 회원 entry에 지인필터 개수 저장(숫자만, 대상은 비공개) */
+    await db.runTransaction(async (tx) => {
+      const sd = await tx.get(db.doc('app/state'));
+      const s = sd.data() || {};
+      const entries = (s.entries || []).map((e) => e.id === entryId ? Object.assign({}, e, { acqFilterCount: fh.length }) : e);
+      tx.update(db.doc('app/state'), { entries: entries });
+    }).catch(function () {});
     return { ok: true, count: fh.length, matchedNew: newHashes.length };
   });
 
@@ -142,6 +149,12 @@ exports.clearAcqFilter = functions
       throw new functions.https.HttpsError('permission-denied', 'PIN이 올바르지 않아요.');
     }
     await db.doc('acqFilter/' + entryId).delete().catch(function () {});
+    await db.runTransaction(async (tx) => {
+      const sd = await tx.get(db.doc('app/state'));
+      const s = sd.data() || {};
+      const entries = (s.entries || []).map((e) => e.id === entryId ? Object.assign({}, e, { acqFilterCount: 0 }) : e);
+      tx.update(db.doc('app/state'), { entries: entries });
+    }).catch(function () {});
     return { ok: true };
   });
 
