@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="light">
-<title>결</title>
+<title>베니브릿지</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap">
 <style id="page-style">
   :root {
@@ -778,7 +778,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-128';
+  var APP_VERSION = '2026-09-08-129';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -3953,7 +3953,7 @@
     return (
       '<div class="masthead"><div class="masthead-inner">' +
         '<div class="masthead-icon">' + ICON_HEART + '</div>' +
-        '<div><h1 id="masthead-title" title="새로고침" style="cursor:pointer;">결 <span style="font-size:0.5em;font-weight:400;opacity:0.65;">結</span></h1><p>관리자 주변 사람들 중심으로, 좋은 인연을 맺어주는 작은 공간이에요.</p></div>' +
+        '<div><h1 id="masthead-title" title="새로고침" style="cursor:pointer;">베니브릿지 <span style="font-size:0.5em;font-weight:400;opacity:0.65;">🌉</span></h1><p>관리자 주변 사람들 중심으로, 좋은 인연을 맺어주는 작은 공간이에요.</p></div>' +
       '</div>' +
       '<div class="admin-bar">' +
         '<div class="admin-bar-row">' +
@@ -5993,7 +5993,7 @@
     });
   }
 
-  var ANNOUNCE_KEY = 'announce-v7'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
+  var ANNOUNCE_KEY = 'announce-v8'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
   function showAnnouncement(force) {
     if (!force) {
       try {
@@ -6045,7 +6045,7 @@
         '<p style="color:var(--muted);font-size:0.82rem;margin-top:10px;">궁금하거나 불안한 점이 있으면 언제든 상단 &#128172; Q&amp;A 로 물어봐 주세요!</p>' +
       '</div>';
     var overlay = openModal(
-      '<h3 style="text-align:center;">안녕하세요! 결(結)입니다 &#128522;</h3>' +
+      '<h3 style="text-align:center;">안녕하세요! 베니브릿지입니다 &#128522;</h3>' +
       '<div class="role-toggle" style="margin-bottom:12px;">' +
         '<button type="button" class="role-btn active" data-anntab="use">&#128214; 사용법</button>' +
         '<button type="button" class="role-btn" data-anntab="sec">&#128274; 보안</button>' +
@@ -6158,10 +6158,10 @@
       var opts = { body: '이 알림이 보이면 정상이에요! 실제 요청이 오면 이렇게 알려드려요.', icon: icon, tag: 'benchinso-test-' + Date.now(), renotify: true };
       if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
         navigator.serviceWorker.getRegistration().then(function (reg) {
-          if (reg && reg.showNotification) { reg.showNotification('결 테스트 알림 🔔', opts); }
-          else { try { new Notification('결 테스트 알림 🔔', opts); } catch (e) {} }
-        }).catch(function () { try { new Notification('결 테스트 알림 🔔', opts); } catch (e) {} });
-      } else { try { new Notification('결 테스트 알림 🔔', opts); } catch (e) {} }
+          if (reg && reg.showNotification) { reg.showNotification('베니브릿지 테스트 알림 🔔', opts); }
+          else { try { new Notification('베니브릿지 테스트 알림 🔔', opts); } catch (e) {} }
+        }).catch(function () { try { new Notification('베니브릿지 테스트 알림 🔔', opts); } catch (e) {} });
+      } else { try { new Notification('베니브릿지 테스트 알림 🔔', opts); } catch (e) {} }
     }
     if (Notification.permission === 'granted') {
       fire();
@@ -6344,7 +6344,7 @@
       var base = location.href.split('?')[0].split('#')[0];
       var dir = base.substring(0, base.lastIndexOf('/') + 1);
       var manifest = {
-        id: base, name: '결', short_name: '결',
+        id: base, name: '베니브릿지', short_name: '베니브릿지',
         start_url: base, scope: dir, display: 'standalone',
         background_color: '#FBF3EE', theme_color: '#B23A48',
         icons: [
