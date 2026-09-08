@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-170';
+  var APP_VERSION = '2026-09-08-171';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1856,7 +1856,11 @@
     }
     /* 현재 탭 유지 (예전엔 전환 시 메시지함으로 강제 이동했음) */
     paint(currentState);
-    refreshMyHidden(function () { paint(currentState); }); /* 전환한 프로필 기준으로 지인 필터 숨김 목록 재계산 */
+    /* 전환한 프로필 기준으로 지인 필터 숨김 목록 재계산 — 실제로 바뀔 때만 다시 그림(이중 새로고침 방지) */
+    var beforeHidden = myHiddenIds.slice().sort().join(',');
+    refreshMyHidden(function () {
+      if (myHiddenIds.slice().sort().join(',') !== beforeHidden) paint(currentState);
+    });
     window.scrollTo(0, 0);
   }
   /* 주선자가 sub 친구에게 임시 로그인 PIN 발급 (친구가 직접 후보를 보게) */
@@ -3015,15 +3019,21 @@
     } else {
       contactHtml = '<div class="pf-contact"><span style="color:var(--muted);">💌 대화 신청이 수락되면 채팅할 수 있어요</span></div>';
     }
-    /* 상세 팝업에서 관리자에게만: 최근 접속 시간 + 알람 설정 여부 */
+    /* 상세 팝업에서 관리자에게만: 최근 접속 시간 + 알람 설정 여부.
+       단, 직접 로그인이 불가한 대리 계정(로그인 PIN 없음)은 접속/알림이 무의미하므로 표시하지 않음 */
     var adminInfoHtml = '';
     if (detailMode && isAdminUnlocked) {
-      var seenTxt = entry.lastSeenAt ? new Date(entry.lastSeenAt).toLocaleString('ko-KR') : '기록 없음';
-      adminInfoHtml =
-        '<div class="pf-admininfo">' +
-          '<div class="pf-ai-row"><span class="pf-ai-label">🕘 최근 접속</span><span class="pf-ai-val">' + escapeHtml(seenTxt) + '</span></div>' +
-          '<div class="pf-ai-row"><span class="pf-ai-label">🔔 알람 설정</span><span class="pf-ai-val" id="detail-notif-' + escapeHtml(entry.id) + '">확인 중…</span></div>' +
-        '</div>';
+      var canSelfLogin = !!(entry.pinAuth || entry.pinHash);
+      if (canSelfLogin) {
+        var seenTxt = entry.lastSeenAt ? new Date(entry.lastSeenAt).toLocaleString('ko-KR') : '기록 없음';
+        adminInfoHtml =
+          '<div class="pf-admininfo">' +
+            '<div class="pf-ai-row"><span class="pf-ai-label">🕘 최근 접속</span><span class="pf-ai-val">' + escapeHtml(seenTxt) + '</span></div>' +
+            '<div class="pf-ai-row"><span class="pf-ai-label">🔔 알람 설정</span><span class="pf-ai-val" id="detail-notif-' + escapeHtml(entry.id) + '">확인 중…</span></div>' +
+          '</div>';
+      } else {
+        adminInfoHtml = '<div class="pf-admininfo"><div class="pf-ai-row"><span class="pf-ai-val" style="color:var(--muted);">🤝 주선자가 대리 관리하는 계정이에요 (직접 로그인·접속 없음)</span></div></div>';
+      }
     }
     var adminBtn = isAdminUnlocked
       ? '<button type="button" class="card-btn admin-detail-btn" data-action="detail" data-id="' + escapeHtml(entry.id) + '">🔍 상세</button>' +
@@ -6290,8 +6300,8 @@
     var filterBtn = e.target.closest('[data-filter]');
     if (filterBtn) {
       var f = filterBtn.getAttribute('data-filter');
-      if (f === 'gender') { /* 성별 버튼: 남 → 여 → 전체 순환 */
-        listFilter = (listFilter === 'male') ? 'female' : (listFilter === 'female') ? 'all' : 'male';
+      if (f === 'gender') { /* 성별 버튼: 남 ↔ 여 반복 (전체는 별도 '전체' 버튼으로) */
+        listFilter = (listFilter === 'male') ? 'female' : 'male';
       } else {
         listFilter = f;
       }
