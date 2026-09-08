@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-171';
+  var APP_VERSION = '2026-09-08-172';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1764,6 +1764,9 @@
     photoDataUrls = [];
     if (!currentUser) { activeTab = 'form'; paint(currentState); return; } /* 로그아웃: 바로 새 신청서 폼 (currentUser 없음 크래시 방지) */
     var prof = mySelfProfile(currentState);
+    /* 주선자가 친구로 활동 중이었어도 [본인]을 누르면 활동 프로필을 '본인'으로 전환 */
+    var _authE = myAuthEntry(currentState);
+    if (_authE && isMatchmakerEntry(_authE)) { actingAs = prof ? prof.id : null; actingResolved = true; }
     if (prof) { startEditing(prof); return; } /* 이미 있으면 수정 (startEditing이 activeTab='form' + paint + 필드 채움) */
     /* 승인 대기 중인 본인 프로필이 있으면 새로 만들지 않게 안내 */
     var authE = myAuthEntry(currentState), pend = (currentState && currentState.pendingEntries) || [];
