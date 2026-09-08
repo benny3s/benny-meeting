@@ -28,6 +28,10 @@ function decPhone(blob) {
     return Buffer.concat([d.update(Buffer.from(parts[2], 'hex')), d.final()]).toString('utf8');
   } catch (e) { return ''; }
 }
+/* 매칭용 번호 해시 (원본 대신 비교용). 서버 전용 키로 HMAC → 클라이언트로 새어도 역추적 불가 */
+function hmacPhone(normalized) {
+  return nodeCrypto.createHmac('sha256', numKey()).update(String(normalized)).digest('hex');
+}
 /* 한국 전화번호 정규화: 하이픈·공백 제거, +82/82 → 0, 최종 0으로 시작하는 숫자열 */
 function normPhone(raw) {
   if (!raw) return '';
@@ -74,8 +78,97 @@ exports.savePhone = functions
     if (!verifyPinServer(pin, authEntryFor(state, entry))) {
       throw new functions.https.HttpsError('permission-denied', 'PIN이 올바르지 않아요.');
     }
-    await db.doc('sendContacts/' + entryId).set({ enc: encPhone(phone), at: new Date().toISOString() });
+    await db.doc('sendContacts/' + entryId).set({ enc: encPhone(phone), ph: hmacPhone(phone), at: new Date().toISOString() });
     return { ok: true };
+  });
+
+/* 지인 필터 설정: 사용자가 올린 번호(연락처)를 정규화·해시해 저장. mode append(기본)/replace.
+   원본 번호는 저장하지 않고 HMAC만 보관 → 상대 번호를 알 필요 없이 매칭만 가능. */
+exports.setAcqFilter = functions
+  .region('asia-northeast3')
+  .runWith({ secrets: ['NUM_ENC_KEY'], timeoutSeconds: 30, memory: '256MB' })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', '로그인이 필요해요.');
+    const entryId = String((data && data.entryId) || '');
+    const pin = String((data && data.pin) || '');
+    const mode = (data && data.mode) === 'replace' ? 'replace' : 'append';
+    const numbers = Array.isArray(data && data.numbers) ? data.numbers : [];
+    if (!entryId || !pin) throw new functions.https.HttpsError('invalid-argument', '정보가 부족해요.');
+    const snap = await db.doc('app/state').get();
+    const state = snap.data() || {};
+    const entry = (state.entries || []).find((e) => e.id === entryId);
+    if (!entry) throw new functions.https.HttpsError('not-found', '계정을 찾을 수 없어요.');
+    if (!verifyPinServer(pin, authEntryFor(state, entry))) {
+      throw new functions.https.HttpsError('permission-denied', 'PIN이 올바르지 않아요.');
+    }
+    const myPh = ((await db.doc('sendContacts/' + entryId).get()).data() || {}).ph || null;
+    const newHashes = [];
+    numbers.forEach((n) => { const nn = normPhone(n); if (nn) { const h = hmacPhone(nn); if (h !== myPh) newHashes.push(h); } }); /* 내 번호는 제외 */
+    const ref = db.doc('acqFilter/' + entryId);
+    let fh = newHashes;
+    if (mode === 'append') {
+      const cur = (await ref.get()).data();
+      fh = (cur && Array.isArray(cur.fh)) ? cur.fh.slice() : [];
+      newHashes.forEach((h) => { if (fh.indexOf(h) < 0) fh.push(h); });
+    } else {
+      fh = Array.from(new Set(newHashes));
+    }
+    if (fh.length > 5000) fh = fh.slice(0, 5000);
+    await ref.set({ fh: fh, at: new Date().toISOString() });
+    return { ok: true, count: fh.length, matchedNew: newHashes.length };
+  });
+
+/* 지인 필터 전체 삭제 (내가 건 필터만 삭제. 상대가 나를 걸어둔 건 그대로 → 서로 안 보일 수 있음) */
+exports.clearAcqFilter = functions
+  .region('asia-northeast3')
+  .runWith({ secrets: ['NUM_ENC_KEY'], timeoutSeconds: 20, memory: '256MB' })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', '로그인이 필요해요.');
+    const entryId = String((data && data.entryId) || '');
+    const pin = String((data && data.pin) || '');
+    if (!entryId || !pin) throw new functions.https.HttpsError('invalid-argument', '정보가 부족해요.');
+    const snap = await db.doc('app/state').get();
+    const state = snap.data() || {};
+    const entry = (state.entries || []).find((e) => e.id === entryId);
+    if (!entry) throw new functions.https.HttpsError('not-found', '계정을 찾을 수 없어요.');
+    if (!verifyPinServer(pin, authEntryFor(state, entry))) {
+      throw new functions.https.HttpsError('permission-denied', 'PIN이 올바르지 않아요.');
+    }
+    await db.doc('acqFilter/' + entryId).delete().catch(function () {});
+    return { ok: true };
+  });
+
+/* 내 명단에서 숨길 회원 ID 목록 (양방향): 내가 건 사람 + 나를 건 사람. 블록 관계는 노출 안 함(ID만 반환) */
+exports.getHiddenIds = functions
+  .region('asia-northeast3')
+  .runWith({ secrets: ['NUM_ENC_KEY'], timeoutSeconds: 30, memory: '256MB' })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', '로그인이 필요해요.');
+    const entryId = String((data && data.entryId) || '');
+    const pin = String((data && data.pin) || '');
+    if (!entryId || !pin) throw new functions.https.HttpsError('invalid-argument', '정보가 부족해요.');
+    const snap = await db.doc('app/state').get();
+    const state = snap.data() || {};
+    const entry = (state.entries || []).find((e) => e.id === entryId);
+    if (!entry) throw new functions.https.HttpsError('not-found', '계정을 찾을 수 없어요.');
+    if (!verifyPinServer(pin, authEntryFor(state, entry))) {
+      throw new functions.https.HttpsError('permission-denied', 'PIN이 올바르지 않아요.');
+    }
+    const myFilter = (await db.doc('acqFilter/' + entryId).get()).data() || {};
+    const myFh = new Set(Array.isArray(myFilter.fh) ? myFilter.fh : []);
+    const myPh = ((await db.doc('sendContacts/' + entryId).get()).data() || {}).ph || null;
+    const hide = new Set();
+    /* 내가 건 사람: 그 회원의 번호해시가 내 필터에 있음 */
+    if (myFh.size) {
+      const sc = await db.collection('sendContacts').get();
+      sc.forEach((d) => { const p = (d.data() || {}).ph; if (d.id !== entryId && p && myFh.has(p)) hide.add(d.id); });
+    }
+    /* 나를 건 사람: 그 회원의 필터에 내 번호해시가 있음 */
+    if (myPh) {
+      const q = await db.collection('acqFilter').where('fh', 'array-contains', myPh).get();
+      q.forEach((d) => { if (d.id !== entryId) hide.add(d.id); });
+    }
+    return { ids: Array.from(hide), filterCount: myFh.size, hiddenCount: hide.size };
   });
 
 const SITE_URL = 'https://benny3s.github.io/benny-meeting/';

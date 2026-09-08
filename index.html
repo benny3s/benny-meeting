@@ -779,7 +779,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-130';
+  var APP_VERSION = '2026-09-08-131';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -862,6 +862,106 @@
       return fns.httpsCallable('savePhone')({ entryId: entryId, pin: pin, phone: phone })
         .then(function () {}).catch(function (e) { try { console.warn('savePhone', e && e.message); } catch (e2) {} });
     } catch (e) { return Promise.resolve(); }
+  }
+
+  /* ── 지인 필터 (마주치기 방지, 양방향 숨김) ── */
+  var myHiddenIds = [];                 /* 내 명단에서 숨길 회원 ID (서버 계산) */
+  var acqCounts = { filter: 0, hidden: 0 };
+  function acqAuth() {
+    var me = (typeof findMyEntry === 'function') ? findMyEntry(currentState) : null;
+    if (!me || !currentUser) return null;
+    return { entryId: me.id, pin: currentUser.pin };
+  }
+  function refreshMyHidden(cb) {
+    var a = acqAuth();
+    if (!fns || !a) { myHiddenIds = []; acqCounts = { filter: 0, hidden: 0 }; if (cb) cb(); return; }
+    try {
+      fns.httpsCallable('getHiddenIds')({ entryId: a.entryId, pin: a.pin }).then(function (r) {
+        var d = (r && r.data) || {};
+        myHiddenIds = d.ids || [];
+        acqCounts = { filter: d.filterCount || 0, hidden: d.hiddenCount || 0 };
+        if (cb) cb();
+      }).catch(function () { if (cb) cb(); });
+    } catch (e) { if (cb) cb(); }
+  }
+  function parseVcfNumbers(text) {
+    var nums = [], re = /TEL[^:\r\n]*:\s*([+0-9()\-\s.]+)/gi, m;
+    while ((m = re.exec(String(text || ''))) !== null) { var t = (m[1] || '').trim(); if (t) nums.push(t); }
+    return nums;
+  }
+  function applyAcqNumbers(numbers, mode) {
+    var a = acqAuth(); if (!a) { modalNotice('로그인 필요', '먼저 로그인해주세요.'); return; }
+    numbers = (numbers || []).filter(Boolean);
+    if (!numbers.length) { modalNotice('안내', '추가할 번호를 찾지 못했어요.'); return; }
+    fns.httpsCallable('setAcqFilter')({ entryId: a.entryId, pin: a.pin, numbers: numbers, mode: mode }).then(function (r) {
+      var c = (r && r.data && r.data.count) || 0;
+      refreshMyHidden(function () { paint(currentState); modalNotice('적용 완료', '지인 필터에 번호 ' + c + '개가 등록됐어요. 해당하는 회원과는 서로 명단에서 숨겨져요.'); });
+    }).catch(function (e) { modalNotice('오류', '필터 적용 실패: ' + ((e && e.message) || e)); });
+  }
+  function chooseAcqModeThenApply(numbers) {
+    if (!(acqCounts.filter > 0)) { applyAcqNumbers(numbers, 'replace'); return; } /* 기존 없으면 바로 등록 */
+    var ov = openModal(
+      '<h3>번호 추가 방식</h3>' +
+      '<p class="modal-msg">이미 등록된 지인 필터가 ' + acqCounts.filter + '개 있어요. 어떻게 할까요?</p>' +
+      '<div class="modal-actions" style="flex-direction:column;gap:8px;align-items:stretch;">' +
+        '<button type="button" class="card-btn primary" id="acq-append" style="width:100%;">기존 필터에 추가 (권장)</button>' +
+        '<button type="button" class="card-btn" id="acq-replace" style="width:100%;">기존은 지우고 새로 등록</button>' +
+        '<button type="button" class="card-btn" id="modal-cancel" style="width:100%;">취소</button>' +
+      '</div>'
+    );
+    ov.querySelector('#acq-append').addEventListener('click', function () { closeModal(ov); applyAcqNumbers(numbers, 'append'); });
+    ov.querySelector('#acq-replace').addEventListener('click', function () { closeModal(ov); applyAcqNumbers(numbers, 'replace'); });
+    ov.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(ov); });
+    ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(ov); });
+  }
+  function handleAcqVcf(file) {
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      var nums = parseVcfNumbers(ev.target.result);
+      if (!nums.length) { modalNotice('안내', '연락처 파일에서 번호를 찾지 못했어요. 다른 파일이거나 형식이 달라요.'); return; }
+      chooseAcqModeThenApply(nums);
+    };
+    reader.onerror = function () { modalNotice('오류', '파일을 읽지 못했어요.'); };
+    reader.readAsText(file);
+  }
+  function handleAcqManual() {
+    if (!acqAuth()) { modalNotice('로그인 필요', '먼저 로그인해주세요.'); return; }
+    var ov = openModal(
+      '<h3>번호 직접 입력</h3>' +
+      '<p class="modal-msg">마주치기 싫은 지인의 전화번호를 <b>한 줄에 하나씩</b> 입력하세요. (예: 010-1234-5678)</p>' +
+      '<textarea class="modal-input" id="acq-nums" rows="5" placeholder="01012345678&#10;010-2222-3333"></textarea>' +
+      '<div class="modal-actions"><button type="button" class="card-btn" id="modal-cancel">취소</button><button type="button" class="card-btn primary" id="acq-ok">추가</button></div>'
+    );
+    ov.querySelector('#acq-ok').addEventListener('click', function () {
+      var t = ov.querySelector('#acq-nums').value || '';
+      var nums = t.split(/[\n,;]+/).map(function (x) { return x.trim(); }).filter(Boolean);
+      closeModal(ov);
+      if (!nums.length) { modalNotice('안내', '번호를 입력해주세요.'); return; }
+      chooseAcqModeThenApply(nums);
+    });
+    ov.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(ov); });
+    ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(ov); });
+  }
+  function handleAcqClear() {
+    var a = acqAuth(); if (!a) return;
+    modalConfirm('지인 필터 전체 삭제', '내가 등록한 지인 필터를 모두 지울까요? 다만 상대가 나를 필터에 걸어둔 경우엔, 삭제 후에도 서로 보이지 않을 수 있어요.', '전체 삭제', 'danger').then(function (ok) {
+      if (!ok) return;
+      fns.httpsCallable('clearAcqFilter')({ entryId: a.entryId, pin: a.pin }).then(function () {
+        refreshMyHidden(function () { paint(currentState); modalNotice('삭제 완료', '지인 필터를 모두 삭제했어요.'); });
+      }).catch(function (e) { modalNotice('오류', '삭제 실패: ' + ((e && e.message) || e)); });
+    });
+  }
+  function acqFilterSectionHtml() {
+    if (!currentUser) return '';
+    return '<div class="mine-section"><h3>🙈 지인 필터<span class="count">' + (acqCounts.filter || 0) + '</span></h3>' +
+      '<p class="sub" style="margin:0 0 8px;">아는 사람과 <b>마주치기 방지</b> — 등록한 번호의 회원은 내 명단에서 숨겨지고, <b>상대 명단에서도 내가 숨겨져요(서로 안 보임)</b>. 올린 번호는 암호화 저장되고 상대에게 공개되지 않아요.' +
+      (acqCounts.hidden ? ' 현재 <b>' + acqCounts.hidden + '명</b> 숨김 중.' : '') + '</p>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+        '<label class="card-btn" style="flex:none;cursor:pointer;">📇 연락처 파일(vcf)<input type="file" id="acq-vcf" accept=".vcf,text/vcard,text/x-vcard" style="display:none;"></label>' +
+        '<button type="button" class="card-btn" id="acq-manual" style="flex:none;">✏️ 번호 직접 입력</button>' +
+        (acqCounts.filter ? '<button type="button" class="card-btn danger" id="acq-clear" style="flex:none;">전체 삭제</button>' : '') +
+      '</div></div>';
   }
 
   /* ---- utils ---- */
@@ -2049,6 +2149,7 @@
         touchLastSeen(entry.id);
         appendLog('login', entry.nickname, '로그인');
         paint(currentState);
+        refreshMyHidden(function () { paint(currentState); }); /* 로그인 후 지인 필터 숨김 반영 */
       });
     });
   }
@@ -2692,6 +2793,7 @@
     var me = findMyEntry(state);
     var isPermFilter = (listFilter === 'photo' || listFilter === 'contact');
     var filtered = entries.filter(function (e) {
+      if (myHiddenIds.indexOf(e.id) >= 0) return false; /* 지인 필터(마주치기 방지)로 숨김 */
       if (listFilter === 'male' || listFilter === 'female') return e.gender === listFilter;
       if (listFilter === 'photo') return me && e.id !== me.id && canViewPhotoOf(state, me.id, e.id);
       if (listFilter === 'contact') return me && e.id !== me.id && canViewContactOf(state, me.id, e.id);
@@ -3434,6 +3536,7 @@
           '<p class="sub">내 소개팅 프로필로 받고 보낸 요청이에요.</p>' +
           sections +
           photoViewersSectionHtml(state, me) +
+          acqFilterSectionHtml() +
         '</div>'
       );
     }
@@ -3483,6 +3586,7 @@
         (isSubProfile ? '' : joinRequestSectionHtml(state, false)) + /* 나에게 온 주선자 요청 있으면 표시 */
         sections +
         photoViewersSectionHtml(state, me) +
+        acqFilterSectionHtml() +
         (isSubProfile ? '' : msgSection) +
         ((!isSubProfile && !isMatchmakerEntry(myAuthEntry(state)) && me.id === currentUser.id)
           ? '<div class="mine-section" style="margin-top:14px;"><button type="button" class="card-btn" id="convert-mm" style="flex:none;">🤝 주선자 계정으로 전환</button>' +
@@ -5700,6 +5804,8 @@
       paint(currentState);
       return;
     }
+    if (e.target.closest('#acq-manual')) { handleAcqManual(); return; }
+    if (e.target.closest('#acq-clear')) { handleAcqClear(); return; }
     if (e.target.closest('#open-external-btn')) { openInExternalBrowser(); return; }
     if (e.target.closest('#start-proxy')) { startProxyIntro(); return; }
     if (e.target.closest('#request-mm')) { handleRequestMatchmaker(); return; }
@@ -5850,6 +5956,11 @@
       });
       return;
     }
+    if (e.target.id === 'acq-vcf') {
+      handleAcqVcf(e.target.files && e.target.files[0]);
+      e.target.value = '';
+      return;
+    }
     if (e.target.id === 'f-photo') {
       var files = e.target.files;
       if (!files || !files.length) return;
@@ -5951,6 +6062,7 @@
           var meNow = (state.entries || []).find(function (e) { return e.id === currentUser.id; });
           var last = meNow && meNow.lastSeenAt ? new Date(meNow.lastSeenAt).getTime() : 0;
           if (Date.now() - last > 5 * 60 * 1000) touchLastSeen(currentUser.id); /* 5분 이상 지났을 때만 */
+          refreshMyHidden(function () { paint(currentState); }); /* 지인 필터 숨김 목록 반영 */
         }
       });
     }).catch(function (err) {
