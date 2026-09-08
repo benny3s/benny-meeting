@@ -779,7 +779,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-138';
+  var APP_VERSION = '2026-09-08-139';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -3284,7 +3284,7 @@
               '<span class="hint">기본은 <b class="ex">흐리게(비공개)</b> — 요청을 승인한 사람에게만 보여요. 아래 체크를 풀면 <b class="ex">전체 공개</b>가 됩니다.</span>' +
               '<div class="photo-upload-area" id="photo-upload-area"></div>' +
               '<div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap;">' +
-                '<label class="photo-pick">사진 추가<input type="file" id="f-photo" accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif" multiple></label>' +
+                '<label class="photo-pick">사진 추가<input type="file" id="f-photo" multiple></label>' +
                 '<label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;cursor:pointer">' +
                   '<input type="checkbox" name="blurPhoto" id="f-blur"' + (isEdit ? '' : ' checked') + ' style="width:16px;height:16px;accent-color:var(--accent)"> 사진 흐리게 처리 (요청 승인 시에만 공개)' +
                 '</label>' +
