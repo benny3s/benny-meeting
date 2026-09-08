@@ -779,7 +779,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-137';
+  var APP_VERSION = '2026-09-08-138';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -3284,7 +3284,7 @@
               '<span class="hint">기본은 <b class="ex">흐리게(비공개)</b> — 요청을 승인한 사람에게만 보여요. 아래 체크를 풀면 <b class="ex">전체 공개</b>가 됩니다.</span>' +
               '<div class="photo-upload-area" id="photo-upload-area"></div>' +
               '<div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap;">' +
-                '<label class="photo-pick">사진 추가<input type="file" id="f-photo" accept="image/*" multiple></label>' +
+                '<label class="photo-pick">사진 추가<input type="file" id="f-photo" accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif" multiple></label>' +
                 '<label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;cursor:pointer">' +
                   '<input type="checkbox" name="blurPhoto" id="f-blur"' + (isEdit ? '' : ' checked') + ' style="width:16px;height:16px;accent-color:var(--accent)"> 사진 흐리게 처리 (요청 승인 시에만 공개)' +
                 '</label>' +
@@ -6127,20 +6127,29 @@
     if (e.target.id === 'f-photo') {
       var files = e.target.files;
       if (!files || !files.length) return;
+      /* 이미지 파일만 사용 (파일 시스템에서 아무 파일이나 골라도 이미지 아닌 건 제외) */
+      var imgs = Array.prototype.filter.call(files, function (f) {
+        if (!f) return false;
+        if (f.type) return f.type.indexOf('image/') === 0;
+        return /\.(jpe?g|png|gif|webp|heic|heif|bmp|tiff?)$/i.test(f.name || ''); /* 타입 비었으면 확장자로 */
+      });
+      var nonImg = files.length - imgs.length;
+      if (!imgs.length) { modalNotice('안내', '이미지 파일만 추가할 수 있어요. (JPG·PNG·HEIC 등)'); e.target.value = ''; return; }
       var remaining = 3 - photoDataUrls.length;
       if (remaining <= 0) { modalNotice('안내', '사진은 최대 3장까지 추가할 수 있어요.'); e.target.value = ''; return; }
-      var toRead = Math.min(files.length, remaining);
+      var toRead = Math.min(imgs.length, remaining);
       for (var i = 0; i < toRead; i++) {
         (function (file) {
           resizeImage(file, FULL_MAX, FULL_MAX, FULL_Q, function (dataUrl) {
             photoDataUrls.push(dataUrl);
             renderPhotoThumbs();
           });
-        })(files[i]);
+        })(imgs[i]);
       }
-      if (files.length > remaining) {
-        modalNotice('안내', '최대 3장까지만 추가됩니다. ' + (files.length - remaining) + '장은 무시되었어요.');
-      }
+      var notes = [];
+      if (imgs.length > remaining) notes.push('최대 3장까지만 추가돼요 (' + (imgs.length - remaining) + '장 무시).');
+      if (nonImg > 0) notes.push('이미지가 아닌 파일 ' + nonImg + '개는 제외했어요.');
+      if (notes.length) modalNotice('안내', notes.join(' '));
       e.target.value = '';
       setTimeout(saveDraft, 300); /* 사진 압축 후 임시저장 */
       return;
