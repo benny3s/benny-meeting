@@ -566,6 +566,23 @@
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     padding-top: 10px; border-top: 1px dashed var(--line);
   }
+  /* 요청함 접기 카드 (많을 때 한 줄 요약 → 펼치면 상세/버튼) */
+  .req-fold { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 8px; background: var(--paper); }
+  .req-fold[open] { border-color: var(--accent); }
+  .req-fold > summary { cursor: pointer; list-style: none; padding: 10px 14px; display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .req-fold > summary::-webkit-scrollbar { display: none; }
+  .req-fold > summary::-webkit-details-marker { display: none; }
+  .req-fold > summary > * { flex: 0 0 auto; }
+  .req-sum-who { font-size: 0.92rem; font-weight: 600; }
+  .req-sum-when { color: var(--muted); font-size: 0.74rem; margin-left: auto; padding-left: 8px; }
+  .req-fold-body { padding: 0 14px 12px; }
+  /* 사용량 현황 표 */
+  .stats-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; margin: 6px 0 4px; }
+  .stats-table th, .stats-table td { border: 1px solid var(--line); padding: 6px 8px; text-align: center; }
+  .stats-table th { background: var(--gold-soft); color: var(--ink); font-weight: 700; }
+  .stats-table td.lbl { text-align: left; font-weight: 600; background: var(--paper); }
+  .stats-sub { color: var(--muted); font-size: 0.8rem; }
+  .stats-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
   /* Pending count badge (matches tab count styling) */
   .pending-count {
@@ -810,7 +827,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-162';
+  var APP_VERSION = '2026-09-08-163';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -3908,6 +3925,61 @@
     );
   }
 
+  /* 관리자 사용량 현황: 누적 요약 + 최근 7일(가입/사진/대화) 추이. 신뢰 가능한 필드(submittedAt/type/status)만 사용 */
+  function usageStatsHtml(state) {
+    var entries = state.entries || [];
+    var pending = state.pendingEntries || [];
+    var reqs = state.dateRequests || [];
+    var cand = entries.filter(function (e) { return !e.isMatchmaker; }); /* 명단 후보(래퍼 제외) */
+    var gGeneral = cand.filter(function (e) { return !e.managedBy; }).length;
+    var gFriend = cand.filter(function (e) { return e.managedBy && !e.ownerSelf; }).length;
+    var gOwnerSelf = cand.filter(function (e) { return e.managedBy && e.ownerSelf; }).length;
+    var mmCount = entries.filter(function (e) { return e.isMatchmaker; }).length;
+    var delReq = entries.filter(function (e) { return e.deleteRequested; }).length;
+    function reqStat(type) {
+      var list = reqs.filter(function (r) { return (r.type || 'contact') === type; });
+      var ap = 0, rj = 0, wait = 0;
+      list.forEach(function (r) { var s = reqStatus(r); if (s === 'approved') ap++; else if (s === 'rejected') rj++; else wait++; });
+      return { total: list.length, ap: ap, rj: rj, wait: wait };
+    }
+    var photo = reqStat('photo'), talk = reqStat('contact');
+    var row = function (lbl, val, sub) {
+      return '<tr><td class="lbl">' + lbl + '</td><td><b>' + val + '</b>' + (sub ? ' <span class="stats-sub">' + sub + '</span>' : '') + '</td></tr>';
+    };
+    var summary =
+      '<table class="stats-table">' +
+        '<tr><th style="text-align:left;">구분</th><th>수</th></tr>' +
+        row('명단 회원(후보)', cand.length, '일반 ' + gGeneral + '·친구 ' + gFriend + '·주선자본인 ' + gOwnerSelf) +
+        row('주선자 계정', mmCount, '') +
+        row('승인 대기', pending.length, '') +
+        row('삭제요청 대기', delReq, '') +
+        row('📷 사진 요청', photo.total, '대기 ' + photo.wait + '·승인 ' + photo.ap + '·거절 ' + photo.rj) +
+        row('💌 대화 신청', talk.total, '대기 ' + talk.wait + '·승인 ' + talk.ap + '·거절 ' + talk.rj) +
+      '</table>';
+    /* 최근 7일 추이 (KST 일자) */
+    var days = [];
+    for (var i = 6; i >= 0; i--) { days.push(kstDay(new Date(Date.now() - i * 86400000).toISOString())); }
+    var joinAll = entries.concat(pending);
+    var byDay = {};
+    days.forEach(function (d) { byDay[d] = { join: 0, photo: 0, talk: 0 }; });
+    joinAll.forEach(function (e) { if (e.submittedAt) { var d = kstDay(e.submittedAt); if (byDay[d]) byDay[d].join++; } });
+    reqs.forEach(function (r) { if (r.submittedAt) { var d = kstDay(r.submittedAt); if (byDay[d]) { if ((r.type || 'contact') === 'photo') byDay[d].photo++; else byDay[d].talk++; } } });
+    var trendRows = days.map(function (d) {
+      var c = byDay[d]; var md = d.slice(5).replace('-', '/');
+      return '<tr><td class="lbl">' + md + '</td><td>' + c.join + '</td><td>' + c.photo + '</td><td>' + c.talk + '</td></tr>';
+    }).join('');
+    var trend =
+      '<div class="stats-scroll"><table class="stats-table">' +
+        '<tr><th style="text-align:left;">날짜</th><th>가입</th><th>📷사진</th><th>💌대화</th></tr>' +
+        trendRows +
+      '</table></div>';
+    return '<details style="margin-bottom:14px;"><summary style="cursor:pointer;font-weight:700;">📊 사용량 현황</summary>' +
+      '<div style="margin-top:8px;">' + summary +
+      '<p class="stats-sub" style="margin:10px 0 4px;">최근 7일 추이 (가입=신규 프로필, 신청=보낸 날 기준)</p>' + trend +
+      '<p class="stats-sub" style="margin-top:6px;">※ 탈퇴/승인 시점은 별도로 기록되지 않아 추이에서 제외했어요.</p>' +
+      '</div></details>';
+  }
+
   function renderAdmin(state) {
     if (!isAdminUnlocked) {
       return '<div class="admin-panel"><h2>관리자 모드</h2><p class="sub">위쪽 "관리자" 버튼으로 PIN을 입력하면 승인 대기 명단, 실명, 연락처, 소개자, 대화 신청함을 볼 수 있어요.</p></div>';
@@ -3996,8 +4068,16 @@
       var toName = (d && d.toName) || nameOf(toId);
       var note = reqNote(r);
       var needsDecrypt = (typeof r.note !== 'string') && !d && r.ciphertext;
+      var st = reqStatus(r);
+      var whenShort = new Date(r.submittedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      var summary =
+        '<summary>' + typeBadge +
+          '<span class="req-sum-who">' + escapeHtml(fromName) + ' → ' + escapeHtml(toName) + '</span>' +
+          statusChip(st) +
+          '<span class="req-sum-when">' + whenShort + '</span>' +
+        '</summary>';
       var body =
-        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + typeBadge +
+        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px;">' +
         '<div class="who" style="display:inline;">' +
           '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(fromId || '') + '" style="flex:none;display:inline-flex;padding:4px 10px;">' + escapeHtml(uidOf(fromId)) + ' ' + escapeHtml(fromName) + '</button>' +
           ' → ' +
@@ -4007,31 +4087,30 @@
         (r.approveMessage ? '<div class="note" style="color:#137333;">답장: ' + escapeHtml(r.approveMessage) + '</div>' : '') +
         (r.held && r.holdMessage ? '<div class="note" style="color:#b06000;">보류 메시지: ' + escapeHtml(r.holdMessage) + '</div>' : '') +
         (r.rejected && r.rejectMessage ? '<div class="note" style="color:#c5221f;">거절 메시지: ' + escapeHtml(r.rejectMessage) + '</div>' : '');
-      var st = reqStatus(r);
       var decideBtns =
         '<button type="button" class="card-btn approve" data-action="approve-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">승인</button>' +
         '<button type="button" class="card-btn" data-action="hold-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">보류</button>' +
         '<button type="button" class="card-btn danger" data-action="reject-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">거절</button>';
       var actionBtns;
       if (st === 'approved') {
-        actionBtns = statusChip(st) +
-          '<button type="button" class="card-btn danger" data-action="delete-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">삭제</button>';
+        actionBtns = '<button type="button" class="card-btn danger" data-action="delete-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">삭제</button>';
       } else if (st === 'rejected') {
-        actionBtns = statusChip(st) +
-          '<span class="chip" style="background:#f1f3f4;color:#5f6368;">' + (r.rejectedBy === 'user' ? '본인 거절' : '관리자 거절') + '</span>' +
+        actionBtns = '<span class="chip" style="background:#f1f3f4;color:#5f6368;">' + (r.rejectedBy === 'user' ? '본인 거절' : '관리자 거절') + '</span>' +
           '<button type="button" class="card-btn danger" data-action="delete-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">삭제</button>';
       } else {
-        /* pending / held / user_approved → 관리자가 승인/보류/거절 가능 */
-        actionBtns = statusChip(st) + decideBtns;
+        actionBtns = decideBtns;
       }
       return (
-        '<div class="request-item">' +
-          '<div>' + body + '</div>' +
-          '<div class="req-foot">' +
-            '<span class="when">' + new Date(r.submittedAt).toLocaleString('ko-KR') + '</span>' +
-            actionBtns +
+        '<details class="req-fold"' + (st === 'approved' || st === 'rejected' ? '' : '') + '>' +
+          summary +
+          '<div class="req-fold-body">' +
+            body +
+            '<div class="req-foot">' +
+              '<span class="when">' + new Date(r.submittedAt).toLocaleString('ko-KR') + '</span>' +
+              actionBtns +
+            '</div>' +
           '</div>' +
-        '</div>'
+        '</details>'
       );
     };
     var isDone = function (r) { var st = reqStatus(r); return st === 'approved' || st === 'rejected'; };
@@ -4256,6 +4335,7 @@
           '<button type="button" class="card-btn" id="admin-change-pw" style="flex:none;">🔑 비밀번호 변경</button>' +
           '<button type="button" class="card-btn" id="admin-regen-thumbs" style="flex:none;">🖼 블러 썸네일 재생성</button>' +
         '</div>' +
+        usageStatsHtml(state) +
         pendingSection +
         (deleteReqSection ? '<hr class="perforation">' + deleteReqSection : '') +
         '<hr class="perforation">' +
