@@ -779,7 +779,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-135';
+  var APP_VERSION = '2026-09-08-136';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -3509,17 +3509,21 @@
     var me = findMyEntry(state);
     var myPending = findMyPending(state);
     if (!me && myPending) {
-      return (
-        '<div class="admin-panel">' +
-          '<h2>메시지함</h2>' +
-          '<div class="mine-status-box">' +
+      var waitBox = myPending.heldReason
+        ? '<div class="mine-status-box">' +
+            '<div class="mine-status-icon">📌</div>' +
+            '<h3>신청 보류 안내</h3>' +
+            '<div class="mine-note" style="text-align:left;white-space:pre-wrap;margin:8px 0;">' + escapeHtml(myPending.heldReason) + '</div>' +
+            '<p class="sub">관리자가 신청을 <b>보류</b>했어요. 위 내용을 확인해 주세요. (아직 명단에는 올라가지 않았어요)</p>' +
+            '<p class="sub" style="margin-top:8px;">신청일: ' + fmtDate(myPending.submittedAt) + '</p>' +
+          '</div>'
+        : '<div class="mine-status-box">' +
             '<div class="mine-status-icon">⏳</div>' +
             '<h3>승인 대기 중이에요</h3>' +
             '<p class="sub">관리자(베니)가 신청서를 확인하고 있어요. 승인되면 명단에 등록되고, 사진 요청·데이트 신청을 주고받을 수 있어요.</p>' +
             '<p class="sub" style="margin-top:8px;">신청일: ' + fmtDate(myPending.submittedAt) + '</p>' +
-          '</div>' +
-        '</div>'
-      );
+          '</div>';
+      return '<div class="admin-panel"><h2>메시지함</h2>' + waitBox + '</div>';
     }
     if (!me) {
       return '<div class="admin-panel"><h2>메시지함</h2><p class="sub">신청 정보를 찾을 수 없어요. 다시 로그인해주세요.</p></div>';
@@ -3676,14 +3680,18 @@
     var pendingItems = pending.map(function (e) {
       var displayName = e.nickname || e.name || '(이름 없음)';
       var ageStr = e.birthYear ? (String(e.birthYear).slice(2) + '년생') : '-';
+      var heldNote = e.heldReason ? '<div class="p-meta" style="color:var(--accent);margin-top:3px;white-space:pre-wrap;">📌 보류 중: ' + escapeHtml(e.heldReason) + '</div>' : '';
+      var holdBtn = '<button type="button" class="card-btn" data-action="hold-pending" data-id="' + escapeHtml(e.id) + '">' + (e.heldReason ? '보류 사유 수정' : '보류') + '</button>';
       if (e.isMatchmaker) {
         return (
           '<div class="pending-item">' +
             '<div class="p-name">🤝 ' + escapeHtml(displayName) + ' <span class="chip" style="background:var(--gold-soft);color:var(--gold);">주선자</span></div>' +
             '<div class="p-meta">주선자(매니저) 등록 — 명단에 노출되지 않아요. 승인하면 친구들을 대신 소개할 수 있어요.</div>' +
+            heldNote +
             '<div class="pending-actions">' +
               '<button type="button" class="card-btn" data-action="detail-pending" data-id="' + escapeHtml(e.id) + '">상세 보기</button>' +
               '<button type="button" class="card-btn approve" data-action="approve" data-id="' + escapeHtml(e.id) + '">승인</button>' +
+              holdBtn +
               '<button type="button" class="card-btn danger" data-action="reject" data-id="' + escapeHtml(e.id) + '">거절</button>' +
             '</div>' +
           '</div>'
@@ -3699,9 +3707,11 @@
           '<div class="p-name">' + escapeHtml(displayName) + '</div>' +
           '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + ' · ' + escapeHtml(e.region || '') + '</div>' +
           '<div class="p-meta" style="margin-top:3px;">' + photoStatus + '</div>' +
+          heldNote +
           '<div class="pending-actions">' +
             '<button type="button" class="card-btn" data-action="detail-pending" data-id="' + escapeHtml(e.id) + '">상세 보기</button>' +
             '<button type="button" class="card-btn approve" data-action="approve" data-id="' + escapeHtml(e.id) + '">승인</button>' +
+            holdBtn +
             '<button type="button" class="card-btn danger" data-action="reject" data-id="' + escapeHtml(e.id) + '">거절</button>' +
           '</div>' +
         '</div>'
@@ -4914,6 +4924,32 @@
     });
   }
 
+  /* 관리자: 신청 보류 (사유 남김). 신청자는 로그인 가능·메시지함에 사유 표시, 명단엔 미등록 */
+  function handleHoldApplication(id) {
+    var e = ((currentState && currentState.pendingEntries) || []).find(function (x) { return x.id === id; });
+    if (!e) return;
+    modalMessage('신청 보류', e.nickname + '님 신청을 보류하고, 신청자에게 전할 사유를 남겨주세요. (신청자는 로그인은 되지만 명단엔 아직 안 올라가요)', '보류하기', 'primary', '예: 사진이 흐려요. 다른 사진으로 다시 등록해 주세요.').then(function (msg) {
+      if (msg === null || msg === undefined) return;
+      msg = (msg || '').trim();
+      if (!msg) return modalNotice('안내', '보류 사유를 입력해주세요.');
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var pend = (s.pendingEntries || []).map(function (p) {
+            if (p.id !== id) return p;
+            var c = JSON.parse(JSON.stringify(p)); c.heldReason = msg; c.heldAt = new Date().toISOString(); return c;
+          });
+          tx.update(stateRef, { pendingEntries: pend });
+        });
+      }).then(function () {
+        appendLog('admin', '관리자', '신청 보류 · ' + e.nickname);
+        return refreshNow();
+      }).then(function () {
+        modalNotice('보류 처리 완료', e.nickname + '님을 보류했어요. 신청자 메시지함에 사유가 표시돼요.');
+      }).catch(function (err) { modalNotice('오류', '보류 실패: ' + (err.message || err)); });
+    });
+  }
+
   function handleReject(id) {
     var pend = ((currentState && currentState.pendingEntries) || []).find(function (e) { return e.id === id; });
     var nick = pend ? pend.nickname : '';
@@ -5628,7 +5664,11 @@
       var el = document.getElementById('detail-photos');
       if (!el) return;
       if (!photos.length) { el.style.display = 'none'; return; }
-      el.innerHTML = photos.map(function (p) { return '<img src="' + p + '" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">'; }).join('');
+      el.innerHTML = photos.map(function (p, i) { return '<img src="' + p + '" data-gidx="' + i + '" title="눌러서 크게 보기" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in;">'; }).join('');
+      el.addEventListener('click', function (ev) {
+        var img = ev.target.closest('img[data-gidx]');
+        if (img) openGallery(photos, parseInt(img.getAttribute('data-gidx'), 10) || 0);
+      });
     });
     if (adminPrivateKey && entry.realNameEnc) {
       decryptWithAdmin(adminPrivateKey, entry.realNameEnc).then(function (name) {
@@ -5904,6 +5944,7 @@
       else if (action === 'request-photo') handleRequest(id, 'photo');
       else if (action === 'request-contact') handleRequest(id, 'contact');
       else if (action === 'approve') handleApprove(id);
+      else if (action === 'hold-pending') handleHoldApplication(id);
       else if (action === 'reject') handleReject(id);
       else if (action === 'approve-request') handleApproveRequest(id);
       else if (action === 'hold-request') handleHoldRequest(id);
