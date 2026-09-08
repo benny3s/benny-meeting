@@ -779,7 +779,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-136';
+  var APP_VERSION = '2026-09-08-137';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -2845,7 +2845,9 @@
           reqBtns +
           adminBtn +
           '<button type="button" class="card-btn" data-action="edit" data-id="' + escapeHtml(entry.id) + '">수정</button>' +
-          '<button type="button" class="card-btn danger" data-action="delete" data-id="' + escapeHtml(entry.id) + '">삭제</button>' +
+          (isAdminUnlocked
+            ? '<button type="button" class="card-btn danger" data-action="admin-manage" data-id="' + escapeHtml(entry.id) + '">보류·삭제</button>'
+            : '<button type="button" class="card-btn danger" data-action="delete" data-id="' + escapeHtml(entry.id) + '">삭제</button>') +
         '</div>' +
       '</article>'
     );
@@ -2959,7 +2961,7 @@
     overlay.classList.add('card-detail-modal');
     /* 관리자: 알람 설정 여부를 pushTokens에서 조회해 채움 */
     if (isAdminUnlocked) fillNotifStatus(entry.id);
-    var closeActions = ['edit', 'delete', 'request-photo', 'request-contact', 'detail'];
+    var closeActions = ['edit', 'delete', 'admin-manage', 'request-photo', 'request-contact', 'detail'];
     overlay.addEventListener('click', function (e) {
       if (e.target === overlay) { closeModal(overlay); return; }
       if (e.target.closest('#card-detail-close')) { closeModal(overlay); return; }
@@ -4950,6 +4952,51 @@
     });
   }
 
+  /* 관리자: 승인된 회원 관리 — 보류(명단 내림, 되돌릴 수 있음) 또는 완전 삭제 선택 */
+  function handleAdminManage(id) {
+    if (!isAdminUnlocked) return;
+    var e = (currentState.entries || []).find(function (x) { return x.id === id; });
+    if (!e) return;
+    var ov = openModal(
+      '<h3>' + escapeHtml(e.nickname) + '님 관리</h3>' +
+      '<p class="modal-msg">명단에서 내리려면 <b>보류</b>(되돌릴 수 있어요), 완전히 지우려면 <b>삭제</b>를 선택하세요.</p>' +
+      '<div class="modal-actions" style="flex-direction:column;gap:8px;align-items:stretch;">' +
+        '<button type="button" class="card-btn primary" id="am-hold" style="width:100%;">📌 보류 (명단에서 내림 · 되돌릴 수 있음)</button>' +
+        '<button type="button" class="card-btn danger" id="am-del" style="width:100%;">🗑 완전 삭제 (되돌릴 수 없음)</button>' +
+        '<button type="button" class="card-btn" id="modal-cancel" style="width:100%;">취소</button>' +
+      '</div>'
+    );
+    ov.querySelector('#am-hold').addEventListener('click', function () { closeModal(ov); handleHoldApproved(id); });
+    ov.querySelector('#am-del').addEventListener('click', function () { closeModal(ov); handleDelete(id); });
+    ov.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(ov); });
+    ov.addEventListener('click', function (ev) { if (ev.target === ov) closeModal(ov); });
+  }
+  /* 관리자: 승인 회원을 보류로 되돌림 (entries → pendingEntries, heldReason). 재승인 시 고유번호 유지 */
+  function handleHoldApproved(id) {
+    var e = (currentState.entries || []).find(function (x) { return x.id === id; });
+    if (!e) return;
+    modalMessage('회원 보류', e.nickname + '님을 명단에서 내리고(보류) 사유를 남겨주세요. 로그인은 되지만 명단엔 안 보여요. 나중에 "승인 대기"에서 다시 승인할 수 있어요.', '보류하기', 'primary', '예: 사진/정보 확인이 필요해요.').then(function (msg) {
+      if (msg === null || msg === undefined) return;
+      msg = (msg || '').trim();
+      if (!msg) return modalNotice('안내', '보류 사유를 입력해주세요.');
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var moved = null;
+          var entries = (s.entries || []).filter(function (x) { if (x.id === id) { moved = x; return false; } return true; });
+          if (!moved) return;
+          var c = JSON.parse(JSON.stringify(moved)); c.heldReason = msg; c.heldAt = new Date().toISOString();
+          tx.update(stateRef, { entries: entries, pendingEntries: (s.pendingEntries || []).concat([c]) });
+        });
+      }).then(function () {
+        appendLog('admin', '관리자', '회원 보류(명단 내림) · ' + e.nickname);
+        return refreshNow();
+      }).then(function () {
+        modalNotice('보류 완료', e.nickname + '님을 명단에서 내렸어요. "승인 대기"에서 다시 승인할 수 있어요.');
+      }).catch(function (err) { modalNotice('오류', '보류 실패: ' + (err.message || err)); });
+    });
+  }
+
   function handleReject(id) {
     var pend = ((currentState && currentState.pendingEntries) || []).find(function (e) { return e.id === id; });
     var nick = pend ? pend.nickname : '';
@@ -5941,6 +5988,7 @@
       var action = actionBtn.getAttribute('data-action');
       var id = actionBtn.getAttribute('data-id');
       if (action === 'delete') handleDelete(id);
+      else if (action === 'admin-manage') handleAdminManage(id);
       else if (action === 'request-photo') handleRequest(id, 'photo');
       else if (action === 'request-contact') handleRequest(id, 'contact');
       else if (action === 'approve') handleApprove(id);
