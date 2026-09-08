@@ -779,7 +779,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-139';
+  var APP_VERSION = '2026-09-08-140';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -3662,6 +3662,7 @@
         '<div class="my-uid" style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px;">고유번호 ' + escapeHtml(formatUid(me) || '—') + '</div>' +
         actingBanner +
         '<p class="sub">' + escapeHtml(me.nickname) + '님, 반가워요! 받은 요청은 직접 승인하거나 거절할 수 있어요.</p>' +
+        (me.deleteRequested ? '<div class="mine-note reject" style="margin-top:10px;">🗑 삭제 요청이 접수되어 <b>관리자 확인 중</b>이에요. <button type="button" class="card-btn" data-action="cancel-delete" data-id="' + escapeHtml(me.id) + '" style="flex:none;padding:4px 12px;margin-left:8px;">삭제 요청 취소</button></div>' : '') +
         (isSubProfile ? '' : joinRequestSectionHtml(state, false)) + /* 나에게 온 주선자 요청 있으면 표시 */
         sections +
         photoViewersSectionHtml(state, me) +
@@ -3724,6 +3725,22 @@
         '<h2>승인 대기<span class="pending-count">' + pending.length + '</span></h2>' +
         (pending.length ? pendingItems : '<p class="sub">대기 중인 신청이 없어요.</p>') +
       '</div>';
+    /* 삭제 요청 (회원이 삭제 요청 → 관리자 승인 후 삭제. 삭제 후 튀기 방지) */
+    var delReqs = (state.entries || []).filter(function (e) { return e.deleteRequested; });
+    var deleteReqSection = delReqs.length
+      ? '<div class="pending-section"><h2>🗑 삭제 요청<span class="pending-count">' + delReqs.length + '</span></h2>' +
+          delReqs.map(function (e) {
+            return '<div class="pending-item">' +
+              '<div class="p-name" data-action="card-detail" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(e.nickname) + ' <span class="chip" style="background:#fce8e6;color:#c5221f;">삭제 요청</span></div>' +
+              '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(e.region || '') + ' · 요청: ' + fmtDate(e.deleteReqAt) + '</div>' +
+              '<div class="pending-actions">' +
+                '<button type="button" class="card-btn danger" data-action="approve-delete" data-id="' + escapeHtml(e.id) + '">삭제 승인</button>' +
+                '<button type="button" class="card-btn" data-action="cancel-delete" data-id="' + escapeHtml(e.id) + '">요청 취소</button>' +
+              '</div>' +
+            '</div>';
+          }).join('') +
+        '</div>'
+      : '';
     var allEntries = state.entries;
     var uidOf = function (eid) {
       var e = allEntries.find(function (x) { return x.id === eid; });
@@ -3998,6 +4015,7 @@
           '<button type="button" class="card-btn" id="admin-change-pw" style="flex:none;">🔑 비밀번호 변경</button>' +
         '</div>' +
         pendingSection +
+        (deleteReqSection ? '<hr class="perforation">' + deleteReqSection : '') +
         '<hr class="perforation">' +
         '<h2>📬 요청함<span class="pending-count">' + activeReqs.length + '</span></h2>' +
         '<p class="sub">아직 처리하지 않은 사진 요청·데이트 신청이에요.</p>' +
@@ -4090,6 +4108,7 @@
     var reqCount = (state.dateRequests || []).filter(function (r) {
       var st = reqStatus(r); return st !== 'approved' && st !== 'rejected';
     }).length;
+    var deleteReqCount = (state.entries || []).filter(function (e) { return e.deleteRequested; }).length;
     var tabs =
       '<button type="button" class="tab-btn" data-tab="form" role="tab" aria-selected="' + (activeTab === 'form') + '">신청서 작성</button>' +
       '<button type="button" class="tab-btn" data-tab="list" role="tab" aria-selected="' + (activeTab === 'list') + '">명단 보기<span class="count">' + entries.length + '</span></button>';
@@ -4104,6 +4123,7 @@
       tabs += '<button type="button" class="tab-btn" data-tab="admin" role="tab" aria-selected="' + (activeTab === 'admin') + '">관리자' +
         '<span class="count' + (pendingCount >= 1 ? ' blink' : '') + '" title="승인 대기">대기 ' + pendingCount + '</span>' +
         '<span class="count" title="요청">요청 ' + reqCount + '</span>' +
+        (deleteReqCount >= 1 ? '<span class="count blink" title="삭제 요청">삭제 ' + deleteReqCount + '</span>' : '') +
         '<span class="count' + (msgUnread >= 1 ? ' blink' : '') + '" title="안 읽은 Q&A">Q&A ' + msgUnread + '</span></button>';
     }
     /* 주선자 프로필 전환 바: 주선자 계정이거나 대리 프로필이 1개 이상일 때 표시 (주선자는 sub 없어도 항상 보임).
@@ -4814,16 +4834,81 @@
       });
       return;
     }
-    /* 로그인한 본인, 또는 내가 소개한 친구(sub)만 삭제 가능 (로그인 필수) */
-    if (currentUser && currentUser.id === id) {
-      modalConfirm('삭제', '내 프로필을 명단에서 삭제할까요? 되돌릴 수 없어요.').then(function (ok) { if (ok) doDelete(); });
-      return;
-    }
-    if (currentUser && iManageTarget(state, id)) {
-      modalConfirm('삭제', escapeHtml(entry.nickname) + '님(내가 소개한 친구)을 명단에서 삭제할까요?').then(function (ok) { if (ok) doDelete(); });
+    /* 로그인한 본인, 또는 내가 소개한 친구(sub) → 즉시 삭제 대신 '관리자 삭제 요청' (삭제 후 튀기 방지) */
+    if (currentUser && (currentUser.id === id || iManageTarget(state, id))) {
+      requestDeletion(id);
       return;
     }
     modalNotice('로그인 필요', '삭제는 로그인한 뒤 본인 프로필(또는 내가 소개한 친구)만 할 수 있어요. 상단에서 로그인해 주세요.');
+  }
+  /* 회원(본인/주선자)의 삭제 요청 — 즉시 삭제 안 하고 관리자 승인 대기로 표시 */
+  function requestDeletion(id) {
+    var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
+    if (!entry) return;
+    if (entry.deleteRequested) { modalNotice('안내', '이미 삭제 요청됐어요. 관리자 확인 중이에요.'); return; }
+    modalConfirm('삭제 요청', entry.nickname + '님 프로필 삭제를 관리자에게 요청할까요? 바로 삭제되지 않고, 관리자 확인 후 삭제돼요.', '삭제 요청', 'danger').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var entries = (s.entries || []).map(function (e) {
+            if (e.id !== id) return e;
+            var c = JSON.parse(JSON.stringify(e)); c.deleteRequested = true; c.deleteReqAt = new Date().toISOString(); return c;
+          });
+          tx.update(stateRef, { entries: entries });
+        });
+      }).then(function () {
+        appendLog('request', entry.nickname, '프로필 삭제 요청');
+        notifyAdmin('🗑 삭제 요청', entry.nickname + '님이 프로필 삭제를 요청했어요.');
+        return refreshNow();
+      }).then(function () {
+        modalNotice('삭제 요청 접수', '관리자 확인 후 삭제돼요. 그때까지는 명단에 남아 있어요.');
+      }).catch(function (err) { modalNotice('오류', '요청 실패: ' + (err.message || err)); });
+    });
+  }
+  /* 관리자: 삭제 요청 승인 → 실제 삭제 */
+  function handleApproveDelete(id) {
+    if (!isAdminUnlocked) return;
+    var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
+    if (!entry) return;
+    modalConfirm('삭제 승인', escapeHtml(entry.nickname) + '님을 정말 삭제할까요? 되돌릴 수 없어요.', '삭제', 'danger').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var newEntries = (s.entries || []).filter(function (e) { return e.id !== id; });
+          var newRequests = (s.dateRequests || []).filter(function (r) { return r.toId !== id && r.fromId !== id; });
+          tx.update(stateRef, { entries: newEntries, dateRequests: newRequests });
+        });
+      }).then(function () {
+        photosRef.doc(id).delete().catch(function () {});
+        delete photoCache[id];
+        appendLog('admin', '관리자', '삭제 요청 승인 · ' + entry.nickname);
+        return refreshNow();
+      }).then(function () {
+        modalNotice('삭제 완료', entry.nickname + '님을 삭제했어요.');
+      }).catch(function (err) { modalNotice('오류', '삭제 실패: ' + (err.message || err)); });
+    });
+  }
+  /* 관리자 또는 본인: 삭제 요청 취소 (플래그 해제) */
+  function handleCancelDeleteReq(id) {
+    var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
+    if (!entry) return;
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var entries = (s.entries || []).map(function (e) {
+          if (e.id !== id) return e;
+          var c = JSON.parse(JSON.stringify(e)); delete c.deleteRequested; delete c.deleteReqAt; return c;
+        });
+        tx.update(stateRef, { entries: entries });
+      });
+    }).then(function () {
+      appendLog(isAdminUnlocked ? 'admin' : 'request', isAdminUnlocked ? '관리자' : entry.nickname, '삭제 요청 취소 · ' + entry.nickname);
+      return refreshNow();
+    }).then(function () {
+      modalNotice('취소됨', '삭제 요청을 취소했어요.');
+    }).catch(function (err) { modalNotice('오류', '취소 실패: ' + (err.message || err)); });
   }
 
   function handleRequest(toId, type) {
@@ -5994,6 +6079,8 @@
       else if (action === 'approve') handleApprove(id);
       else if (action === 'hold-pending') handleHoldApplication(id);
       else if (action === 'reject') handleReject(id);
+      else if (action === 'approve-delete') handleApproveDelete(id);
+      else if (action === 'cancel-delete') handleCancelDeleteReq(id);
       else if (action === 'approve-request') handleApproveRequest(id);
       else if (action === 'hold-request') handleHoldRequest(id);
       else if (action === 'reject-request') handleRejectRequest(id);
