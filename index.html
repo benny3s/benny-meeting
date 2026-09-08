@@ -788,7 +788,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-152';
+  var APP_VERSION = '2026-09-08-153';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -3062,7 +3062,7 @@
         '</div>';
     }
     var viewToggle = teaser ? '' : '<button type="button" class="view-toggle' + (listView === 'compact' ? ' on' : '') + '" data-viewtoggle="1">' +
-      (listView === 'compact' ? '🖼 사진으로' : '☰ 간단히') + '</button>';
+      (listView === 'compact' ? '🖼 사진' : '☰ 간단히') + '</button>';
     var acqBtn = me ? '<button type="button" class="view-toggle" id="acq-open" style="margin-left:6px;">🙈 지인 필터' + (acqCounts.filter ? ' <span style="opacity:0.85;">' + acqCounts.filter + '</span>' : '') + '</button>' : '';
     var permBtns = me
       ? '<button type="button" class="filter-btn" data-filter="photo" aria-pressed="' + (listFilter === 'photo') + '">📷 사진</button>' +
