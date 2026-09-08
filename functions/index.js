@@ -47,10 +47,16 @@ function normPhone(raw) {
 function verifyPinServer(pin, entry) {
   if (!entry) return false;
   const pa = entry.pinAuth;
-  if (!pa || !pa.salt || !pa.hash) return false;
-  const salt = Buffer.from(pa.salt, 'base64');
-  const h = nodeCrypto.pbkdf2Sync(String(pin), salt, 150000, 32, 'sha256').toString('hex');
-  return h === pa.hash;
+  if (pa && pa.salt && pa.hash) {
+    const salt = Buffer.from(pa.salt, 'base64');
+    const h = nodeCrypto.pbkdf2Sync(String(pin), salt, 150000, 32, 'sha256').toString('hex');
+    return h === pa.hash;
+  }
+  if (entry.pinHash) { /* 구형 계정 폴백: sha256(pin) (클라 verifyPin과 동일) */
+    const h = nodeCrypto.createHash('sha256').update(String(pin), 'utf8').digest('hex');
+    return h === entry.pinHash;
+  }
+  return false;
 }
 /* entryId의 인증 주체(본인 or 관리 주선자) 찾기 */
 function authEntryFor(state, entry) {

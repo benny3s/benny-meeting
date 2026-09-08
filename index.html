@@ -779,7 +779,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-134';
+  var APP_VERSION = '2026-09-08-135';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -972,7 +972,7 @@
       '<div style="display:flex;flex-direction:column;gap:8px;">' +
         '<label class="card-btn" style="cursor:pointer;text-align:center;">📇 연락처 파일(vcf) 올리기<input type="file" id="acq-vcf" accept=".vcf,text/vcard,text/x-vcard" style="display:none;"></label>' +
         '<button type="button" class="card-btn" id="acq-manual">✏️ 번호 직접 입력</button>' +
-        (acqCounts.filter ? '<button type="button" class="card-btn danger" id="acq-clear">전체 삭제</button>' : '') +
+        '<button type="button" class="card-btn danger" id="acq-clear">🔄 필터 리셋 (전체 삭제)</button>' +
       '</div>';
     var ov = openModal('<h3>🙈 지인 필터</h3>' + inner + '<div class="modal-actions"><button type="button" class="card-btn" id="modal-cancel">닫기</button></div>');
     ov.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(ov); });
@@ -2831,11 +2831,11 @@
             '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
             (entry.height ? '<span class="chip">' + escapeHtml(entry.height) + 'cm</span>' : '') +
             (entry.testAccount && isAdminUnlocked ? '<span class="chip" style="background:#e8eaed;color:#5f6368;">🧪 테스트</span>' : '') +
-            (isAdminUnlocked && isProxyEntry(entry) && !entry.ownerSelf ? '<span class="chip" style="background:var(--gold-soft);color:var(--gold);border-color:var(--gold);">🤝 ' + escapeHtml(managerNickOf(state, entry)) + '님이 소개</span>' : '') +
+            (isAdminUnlocked && isProxyEntry(entry) && !entry.ownerSelf ? '<span class="chip" data-action="card-detail" data-id="' + escapeHtml(entry.managedBy || '') + '" style="background:var(--gold-soft);color:var(--gold);border-color:var(--gold);cursor:pointer;text-decoration:underline dotted;" title="주선자 정보 보기">🤝 ' + escapeHtml(managerNickOf(state, entry)) + '님이 소개</span>' : '') +
           '</div>' +
           '<ul class="pf-meta">' +
-            '<li>' + ICON_PIN + '<span>' + escapeHtml(entry.region) + '</span></li>' +
-            '<li>' + ICON_BRIEF + '<span>' + escapeHtml(entry.workplace) + '</span></li>' +
+            '<li>' + ICON_PIN + '<span>' + escapeHtml(entry.region || '-') + '</span></li>' +
+            '<li>' + ICON_BRIEF + '<span>' + escapeHtml(entry.workplace || '-') + '</span></li>' +
           '</ul>' +
           extras +
           contactHtml +
@@ -3996,10 +3996,6 @@
         doneSection +
         '<hr class="perforation">' +
         capSection +
-        '<hr class="perforation">' +
-        '<h2>🔧 관리자 도구</h2>' +
-        '<p class="sub">기존 회원 번호를 지인 필터·SMS용 안전 저장소에 일괄 등록해요. (관리자 브라우저에서 복호화 → 1회용 토큰 필요)</p>' +
-        '<button type="button" class="card-btn" id="backfill-phones" style="flex:none;">📇 기존 회원 번호 일괄 등록</button>' +
         '<hr class="perforation">' +
         seenSection +
         '<hr class="perforation">' +
