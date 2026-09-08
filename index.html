@@ -788,7 +788,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-149';
+  var APP_VERSION = '2026-09-08-150';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -895,12 +895,33 @@
           if (firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported()) {
             fcmMessaging = firebase.messaging();
             try { attachFcmOnMessage(); } catch (e) {} /* 포그라운드 메시지 핸들러 등록 (함수는 hoisting됨) */
+            try { primeMessagingSw(); } catch (e) {} /* 올바른 하위경로 SW를 인스턴스에 미리 캐시 (아래 설명) */
           }
         } catch (e) {}
       }
       return !!fcmMessaging;
     });
     return _messagingReady;
+  }
+  /* messaging 인스턴스에 '올바른 하위경로' 서비스워커를 미리 등록·캐시해 둔다.
+     Firebase의 getToken()은 명시적 SW가 없으면 루트 경로(/firebase-messaging-sw.js)로
+     기본 등록을 시도하는데, 이 앱은 /benny-meeting/ 하위라 루트는 404 → 등록 실패.
+     그런데 Functions 콜러블은 호출 때마다 FCM 토큰을 붙이려고 이 getToken()을 내부적으로 부른다.
+     여기서 미리 하위경로 SW로 getToken을 한 번 호출해 인스턴스에 SW를 캐시(messaging.swRegistration)해 두면,
+     이후 Functions SDK의 토큰 요청도 이 SW를 재사용 → 루트 경로를 절대 건드리지 않아
+     (홈화면에 추가한 아이폰 앱 등에서도) 지인 필터 호출이 실패하지 않는다.
+     ※ getToken은 권한 팝업을 띄우지 않으며, 권한이 없어도 SW 등록/캐시는 먼저 일어난다. */
+  var _swPrimed = false;
+  function primeMessagingSw() {
+    if (_swPrimed || !fcmMessaging || !('serviceWorker' in navigator)) return;
+    _swPrimed = true;
+    try {
+      var dir = location.pathname;
+      if (!/\/$/.test(dir)) { dir = /\.[^/]*$/.test(dir) ? dir.replace(/[^/]*$/, '') : (dir + '/'); }
+      navigator.serviceWorker.register(dir + 'firebase-messaging-sw.js').then(function (reg) {
+        try { fcmMessaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg }).catch(function () {}); } catch (e) {}
+      }).catch(function () {});
+    } catch (e) {}
   }
   /* 푸시 가능한 기기에서는 미리 로드해 둠(사용자가 알림 버튼을 눌렀을 때 준비돼 있게) */
   try { loadMessagingSdk(); } catch (e) {}
