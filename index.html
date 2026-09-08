@@ -583,6 +583,8 @@
   .stats-table td.lbl { text-align: left; font-weight: 600; background: var(--paper); }
   .stats-sub { color: var(--muted); font-size: 0.8rem; }
   .stats-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* 스크롤되는 추이 표: 헤더 고정 */
+  .stats-trend thead th { position: sticky; top: 0; z-index: 1; }
 
   /* Pending count badge (matches tab count styling) */
   .pending-count {
@@ -827,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-165';
+  var APP_VERSION = '2026-09-08-166';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -3916,27 +3918,32 @@
         row('📷 사진 요청', photo.total, '대기 ' + photo.wait + '·승인 ' + photo.ap + '·거절 ' + photo.rj) +
         row('💌 대화 신청', talk.total, '대기 ' + talk.wait + '·승인 ' + talk.ap + '·거절 ' + talk.rj) +
       '</table>';
-    /* 최근 7일 추이 (KST 일자) */
-    var days = [];
-    for (var i = 6; i >= 0; i--) { days.push(kstDay(new Date(Date.now() - i * 86400000).toISOString())); }
+    /* 일자별 추이 (KST) — 첫 활동일부터 오늘까지 전체. 최신 날짜가 위로 오게 정렬, 세로 스크롤(약 7일 노출) */
     var candDays = cand.map(function (e) { return e.submittedAt ? kstDay(e.submittedAt) : ''; }).filter(Boolean);
+    var todayD = kstDay(new Date().toISOString());
+    var allDates = candDays.slice();
+    reqs.forEach(function (r) { if (r.submittedAt) allDates.push(kstDay(r.submittedAt)); });
+    var earliest = allDates.length ? allDates.reduce(function (a, b) { return a < b ? a : b; }) : todayD;
+    function addDay(dstr, n) { var d = new Date(dstr + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+    var days = [], d = earliest, guard = 0;
+    while (d <= todayD && guard++ < 1000) { days.push(d); d = addDay(d, 1); } /* 오래된→최신 */
     var byDay = {};
-    days.forEach(function (d) { byDay[d] = { join: 0, photo: 0, talk: 0 }; });
-    candDays.forEach(function (d) { if (byDay[d]) byDay[d].join++; });
-    reqs.forEach(function (r) { if (r.submittedAt) { var d = kstDay(r.submittedAt); if (byDay[d]) { if ((r.type || 'contact') === 'photo') byDay[d].photo++; else byDay[d].talk++; } } });
-    var trendRows = days.map(function (d) {
-      var c = byDay[d]; var md = d.slice(5).replace('-', '/');
-      var cum = candDays.filter(function (x) { return x <= d; }).length; /* 그 날까지 가입한 현재 회원 누적 */
+    days.forEach(function (dd) { byDay[dd] = { join: 0, photo: 0, talk: 0 }; });
+    candDays.forEach(function (dd) { if (byDay[dd]) byDay[dd].join++; });
+    reqs.forEach(function (r) { if (r.submittedAt) { var dd = kstDay(r.submittedAt); if (byDay[dd]) { if ((r.type || 'contact') === 'photo') byDay[dd].photo++; else byDay[dd].talk++; } } });
+    var trendRows = days.slice().reverse().map(function (dd) { /* 최신 날짜가 위로 */
+      var c = byDay[dd]; var md = dd.slice(5).replace('-', '/');
+      var cum = candDays.filter(function (x) { return x <= dd; }).length; /* 그 날까지 가입한 현재 회원 누적 */
       return '<tr><td class="lbl">' + md + '</td><td><b>' + cum + '</b></td><td>' + c.join + '</td><td>' + c.photo + '</td><td>' + c.talk + '</td></tr>';
     }).join('');
     var trend =
-      '<div class="stats-scroll"><table class="stats-table">' +
-        '<tr><th style="text-align:left;">날짜</th><th>누적 회원</th><th>가입</th><th>📷사진</th><th>💌대화</th></tr>' +
-        trendRows +
+      '<div class="stats-scroll" style="max-height:270px;overflow-y:auto;"><table class="stats-table stats-trend">' +
+        '<thead><tr><th style="text-align:left;">날짜</th><th>누적 회원</th><th>가입</th><th>📷사진</th><th>💌대화</th></tr></thead>' +
+        '<tbody>' + trendRows + '</tbody>' +
       '</table></div>';
     return '<details open style="margin-bottom:14px;"><summary style="cursor:pointer;font-weight:700;">📊 사용량 현황</summary>' +
       '<div style="margin-top:8px;">' + summary +
-      '<p class="stats-sub" style="margin:10px 0 4px;">최근 7일 추이 (누적 회원=그 날까지 가입한 현재 회원, 가입=신규 프로필, 신청=보낸 날 기준)</p>' + trend +
+      '<p class="stats-sub" style="margin:10px 0 4px;">일자별 추이 (최신순 · 누적 회원=그 날까지 가입한 현재 회원, 가입=신규 프로필, 신청=보낸 날 기준)</p>' + trend +
       '<p class="stats-sub" style="margin-top:6px;">※ 탈퇴한 회원은 집계에 없어 누적은 현재 회원 기준이에요. 승인/탈퇴 시점은 별도로 기록되지 않아요.</p>' +
       '</div></details>';
   }
