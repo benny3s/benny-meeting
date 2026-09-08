@@ -788,7 +788,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-151';
+  var APP_VERSION = '2026-09-08-152';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -4184,7 +4184,7 @@
     return (
       '<div class="admin-panel">' +
         '<div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
-          '<button type="button" class="card-btn' + (adminNotifOn() ? ' approve' : '') + '" id="admin-notif-toggle" style="flex:none;">' + (adminNotifOn() ? '🔔 관리자 알림 켜짐' : '🔔 관리자 알림 켜기') + '</button>' +
+          '<button type="button" class="card-btn' + (adminNotifActive() ? ' approve' : '') + '" id="admin-notif-toggle" style="flex:none;">' + (adminNotifBroken() ? '🔔 관리자 알림 재설정 필요' : (adminNotifActive() ? '🔔 관리자 알림 켜짐' : '🔔 관리자 알림 켜기')) + '</button>' +
           '<button type="button" class="card-btn" id="admin-change-pw" style="flex:none;">🔑 비밀번호 변경</button>' +
         '</div>' +
         pendingSection +
@@ -4366,8 +4366,8 @@
         (NOTIF_ENABLED
           ? '<div class="admin-bar-row">' +
               (isStandalone() ? '' : '<button type="button" class="admin-link" id="add-home">&#128241; 홈에 추가</button>') +
-              '<button type="button" class="admin-link' + (notifOn() ? ' unlocked' : '') + '" id="notif-toggle">' +
-                (notifOn() ? '&#128276; 알림 ON' : '&#128276; 알림 OFF') + '</button>' +
+              '<button type="button" class="admin-link' + (memberNotifActive() ? ' unlocked' : '') + '" id="notif-toggle">' +
+                (memberNotifBroken() ? '&#128276; 알림 재설정 필요' : (memberNotifActive() ? '&#128276; 알림 ON' : '&#128276; 알림 OFF')) + '</button>' +
               '<button type="button" class="admin-link" id="notif-help">&#128718; 가이드</button>' +
             '</div>'
           : '') +
@@ -6651,6 +6651,15 @@
   } catch (e) {}
   function notifOn() { try { return localStorage.getItem('memberNotifOn') === '1'; } catch (e) { return false; } }
   function adminNotifOn() { try { return localStorage.getItem('adminNotifOn') === '1'; } catch (e) { return false; } }
+  /* 브라우저(OS) 알림 권한이 실제로 '허용' 상태인지 */
+  function notifPermGranted() {
+    try { return ('Notification' in window) && Notification.permission === 'granted'; } catch (e) { return false; }
+  }
+  /* 앱 플래그는 켜졌지만 OS 권한이 회수돼 실제로는 안 오는 '어긋난' 상태 */
+  function memberNotifActive() { return notifOn() && notifPermGranted(); }
+  function memberNotifBroken() { return notifOn() && !notifPermGranted(); }
+  function adminNotifActive() { return adminNotifOn() && notifPermGranted(); }
+  function adminNotifBroken() { return adminNotifOn() && !notifPermGranted(); }
   function notifSupported() {
     return !!fcmMessaging && ('Notification' in window) && ('serviceWorker' in navigator);
   }
@@ -6804,10 +6813,14 @@
     loadMessagingSdk().then(function () {
       if (!notifSupported()) { modalNotice('안내', '이 브라우저에서는 웹 알림을 지원하지 않아요. 안드로이드·PC는 크롬, 아이폰은 사파리에서 "홈 화면에 추가" 후 그 아이콘으로 열어주세요.'); return; }
       if (Notification.permission === 'denied') {
-        modalNotice('알림 차단됨', '브라우저 설정에서 이 사이트의 알림을 "허용"으로 바꿔주세요. (주소창 왼쪽 자물쇠 → 알림)');
+        var iOSd = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+        modalNotice('알림 차단됨', iOSd
+          ? '아이폰 설정에서 이 앱의 알림이 꺼져 있어요. 설정 → 알림 → (베니브릿지 아이콘) → "알림 허용"을 켠 뒤, 다시 이 버튼을 눌러주세요.'
+          : '브라우저 설정에서 이 사이트의 알림을 "허용"으로 바꿔주세요. (주소창 왼쪽 자물쇠 → 알림)');
         return;
       }
-      if (notifOn()) { disableNotif(); } else { enableNotif(); }
+      /* 실제로 켜져 있을 때만 끄기 — 플래그만 켜지고 권한이 회수된 '어긋난' 상태면 다시 켜기(재설정) */
+      if (memberNotifActive()) { disableNotif(); } else { enableNotif(); }
     });
   }
   function enableNotif() {
@@ -6848,12 +6861,17 @@
       modalNotice('아이폰 알림 안내', '아이폰은 사파리 탭에서는 알림이 안 돼요. Safari에서 아래 공유 버튼 → "홈 화면에 추가" → 그 아이콘으로 다시 열어서 켜주세요. (아이폰은 크롬 앱으로도 알림이 안 돼요 · iOS 16.4 이상)');
       return;
     }
-    if (!notifSupported()) { modalNotice('안내', '이 브라우저에서는 웹 알림을 지원하지 않아요. 안드로이드·PC는 크롬, 아이폰은 사파리에서 "홈 화면에 추가" 후 그 아이콘으로 열어주세요.'); return; }
-    if (Notification.permission === 'denied') {
-      modalNotice('알림 차단됨', '브라우저 설정에서 이 사이트의 알림을 "허용"으로 바꿔주세요. (주소창 왼쪽 자물쇠 → 알림)');
-      return;
-    }
-    if (adminNotifOn()) { disableAdminNotif(); } else { enableAdminNotif(); }
+    loadMessagingSdk().then(function () {
+      if (!notifSupported()) { modalNotice('안내', '이 브라우저에서는 웹 알림을 지원하지 않아요. 안드로이드·PC는 크롬, 아이폰은 사파리에서 "홈 화면에 추가" 후 그 아이콘으로 열어주세요.'); return; }
+      if (Notification.permission === 'denied') {
+        var iOSd = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+        modalNotice('알림 차단됨', iOSd
+          ? '아이폰 설정에서 이 앱의 알림이 꺼져 있어요. 설정 → 알림 → (베니브릿지 아이콘) → "알림 허용"을 켠 뒤, 다시 이 버튼을 눌러주세요.'
+          : '브라우저 설정에서 이 사이트의 알림을 "허용"으로 바꿔주세요. (주소창 왼쪽 자물쇠 → 알림)');
+        return;
+      }
+      if (adminNotifActive()) { disableAdminNotif(); } else { enableAdminNotif(); }
+    });
   }
   function enableAdminNotif() {
     ensureFcmToken().then(function (token) {
