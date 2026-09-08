@@ -829,8 +829,9 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-167';
-  var DAILY_REQ_LIMIT = 5; /* 프로필별 하루(KST) 보낼 수 있는 사진+대화 요청 합산 한도 */
+  var APP_VERSION = '2026-09-08-168';
+  var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
+  var DAILY_TALK_LIMIT = 2;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -5252,19 +5253,22 @@
         if (st === 'rejected') return modalNotice('안내', escapeHtml(target.nickname) + '님이 이 요청을 거절했어요.');
         return modalNotice('안내', '이미 ' + escapeHtml(target.nickname) + '님에게 ' + actionText + '을 보냈어요. "메시지함" 탭에서 확인할 수 있어요.');
       }
-      /* 하루 요청 한도 (프로필별·KST·사진+대화 합산) — 무분별한 요청 방지 */
+      /* 하루 요청 한도 (프로필별·KST·유형별) — 무분별한 요청 방지 */
       var todayK = kstDay(new Date().toISOString());
-      var sentToday = (currentState.dateRequests || []).filter(function (req) {
-        return req.fromId === fromEntry.id && req.submittedAt && kstDay(req.submittedAt) === todayK;
+      var typeLimit = isPhoto ? DAILY_PHOTO_LIMIT : DAILY_TALK_LIMIT;
+      var sentTodayType = (currentState.dateRequests || []).filter(function (req) {
+        return req.fromId === fromEntry.id && (req.type || 'contact') === type && req.submittedAt && kstDay(req.submittedAt) === todayK;
       }).length;
-      if (sentToday >= DAILY_REQ_LIMIT) {
-        modalNotice('오늘 요청 한도 도달', '하루에 보낼 수 있는 사진·대화 요청은 ' + DAILY_REQ_LIMIT + '건이에요. 오늘은 모두 사용했어요. 내일 다시 신중하게 보내주세요 🙂 (이미 보낸 요청의 답장·수락은 계속 받을 수 있어요.)');
+      if (sentTodayType >= typeLimit) {
+        modalNotice('오늘 ' + actionText + ' 한도 도달', '하루에 보낼 수 있는 ' + actionText + '은 ' + typeLimit + '건이에요. 오늘은 모두 사용했어요. 내일 다시 신중하게 보내주세요 🙂 (이미 보낸 요청의 답장·수락은 계속 받을 수 있어요.)');
         return;
       }
+      var remainToday = typeLimit - sentTodayType; /* 이번 건 포함 남은 횟수 */
       var icon = isPhoto ? '📷' : '💌';
       var noteOverlay = openModal(
         '<h3>' + icon + ' ' + escapeHtml(target.nickname) + '님에게 ' + actionText + '</h3>' +
         '<p class="modal-msg">' + (isPhoto ? '수락하면 <b>서로 사진이 공개</b>돼요. ' : '수락하면 <b>앱 안에서 채팅</b>으로 대화할 수 있어요 (번호는 공개되지 않아요). ') + '간단한 인사·요청 이유를 꼭 남겨주세요 <b>(최소 10자)</b>.</p>' +
+        '<p class="modal-msg" style="color:var(--gold);font-size:0.82rem;margin:-2px 0 6px;">오늘 ' + actionText + ' 남은 횟수: <b>' + remainToday + '/' + typeLimit + '</b></p>' +
         '<textarea class="modal-input" id="modal-note" rows="3" maxlength="200" placeholder="예) 안녕하세요! 프로필 잘 봤어요, 꼭 한번 대화해보고 싶어요 :)"></textarea>' +
         '<p id="modal-note-warn" class="modal-msg" style="color:var(--accent);margin:4px 0 0;font-size:0.82rem;" hidden>최소 10자 이상 남겨주세요.</p>' +
         '<div class="modal-actions">' +
