@@ -786,7 +786,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-146';
+  var APP_VERSION = '2026-09-08-147';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -867,7 +867,16 @@
   var pushTokensRef = db.collection('pushTokens');
   var VAPID_KEY = 'BNtmOVQDK3AV0s-mJJdO9spG0AHInihNOnx2im0q-XDViqBMi2N-kz1y8IN1gv64uGqO0ASvtPMKNr3tqbZsHPY';
   var fcmMessaging = null;
-  try { if (firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported()) fcmMessaging = firebase.messaging(); } catch (e) {}
+  try {
+    /* iOS 사파리 '탭'에서는 웹푸시가 아예 안 됨(홈화면 추가 후에만 가능) → 메시징 초기화를 건너뛰어
+       기본 서비스워커(루트 경로) 등록 시도 자체가 안 생기게 함 */
+    var _iOS = /iP(hone|ad|od)/i.test(navigator.userAgent || '') ||
+               ((navigator.platform === 'MacIntel') && navigator.maxTouchPoints > 1);
+    var _iosOK = !_iOS || isStandalone();
+    if (_iosOK && firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported()) {
+      fcmMessaging = firebase.messaging();
+    }
+  } catch (e) {}
   /* Cloud Functions (asia-northeast3) — 보안 번호 저장/지인필터 호출용 */
   var fns = null;
   try { fns = firebase.app().functions('asia-northeast3'); } catch (e) {}
@@ -989,9 +998,45 @@
       '<div style="display:flex;flex-direction:column;gap:8px;">' +
         '<label class="card-btn" style="cursor:pointer;text-align:center;">📇 연락처 파일(vcf) 올리기<input type="file" id="acq-vcf" accept=".vcf,text/vcard,text/x-vcard" style="display:none;"></label>' +
         '<button type="button" class="card-btn" id="acq-manual">✏️ 번호 직접 입력</button>' +
+        '<button type="button" class="card-btn" id="acq-guide" style="background:transparent;border:1px dashed var(--line);color:var(--muted);">📖 연락처 파일 내보내는 방법 (안드로이드·아이폰)</button>' +
         '<button type="button" class="card-btn danger" id="acq-clear">🔄 필터 리셋 (전체 삭제)</button>' +
       '</div>';
     var ov = openModal('<h3>🙈 지인 필터</h3>' + inner + '<div class="modal-actions"><button type="button" class="card-btn" id="modal-cancel">닫기</button></div>');
+    ov.querySelector('#acq-guide').addEventListener('click', function () { openAcqGuide(); });
+    ov.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(ov); });
+    ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(ov); });
+  }
+  /* 연락처를 vcf(연락처 파일)로 내보내는 방법 — 안드로이드/아이폰 안내 */
+  function openAcqGuide() {
+    var css = 'margin:0 0 6px;font-weight:700;';
+    var ol = 'margin:0 0 14px;padding-left:20px;line-height:1.7;text-align:left;';
+    var inner =
+      '<p class="modal-msg" style="text-align:left;">아래 방법으로 연락처를 <b>vcf 파일</b>로 저장한 뒤, 위의 “연락처 파일(vcf) 올리기”로 넣어주세요. ' +
+        '올린 번호는 암호화 저장되고 상대에게 공개되지 않아요.</p>' +
+      '<div style="text-align:left;">' +
+        '<p style="' + css + '">🤖 안드로이드 (전체 연락처)</p>' +
+        '<ol style="' + ol + '">' +
+          '<li><b>연락처</b> 앱 열기</li>' +
+          '<li>메뉴(≡ 또는 ⋯) → <b>설정</b> → <b>가져오기/내보내기</b></li>' +
+          '<li><b>내보내기</b> → <b>기기(.vcf 파일)</b> 선택 → 저장</li>' +
+          '<li>저장 위치(보통 <b>내 파일 &gt; 다운로드</b>)의 <b>.vcf</b> 파일을 올리기</li>' +
+        '</ol>' +
+        '<p style="' + css + '">🍎 아이폰 (원하는 사람만 골라서)</p>' +
+        '<ol style="' + ol + '">' +
+          '<li><b>연락처</b> 앱 열기</li>' +
+          '<li>넣고 싶은 사람을 <b>길게 누르기</b> (여러 명은 목록에서 하나씩)</li>' +
+          '<li><b>공유하기</b> 탭 → <b>“파일”에 저장</b> (또는 메일/메시지로 나에게 보내기)</li>' +
+          '<li>저장된 <b>.vcf</b> 파일을 올리기</li>' +
+        '</ol>' +
+        '<p style="' + css + '">🍎 아이폰 (전체 연락처 한 번에)</p>' +
+        '<ol style="' + ol + '">' +
+          '<li>사파리에서 <b>icloud.com</b> 접속 → 로그인 → <b>연락처</b></li>' +
+          '<li>왼쪽 아래 <b>⚙️</b> → <b>전체 선택</b> → 다시 <b>⚙️</b> → <b>vCard 내보내기</b></li>' +
+          '<li>내려받은 <b>.vcf</b> 파일을 올리기</li>' +
+        '</ol>' +
+        '<p class="modal-msg" style="text-align:left;color:var(--muted);font-size:0.86rem;">💡 잘 안 되면 “✏️ 번호 직접 입력”으로 마주치기 싫은 번호만 한 줄에 하나씩 넣어도 돼요.</p>' +
+      '</div>';
+    var ov = openModal('<h3>📖 연락처 파일(vcf) 내보내기</h3>' + inner + '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-cancel">확인</button></div>');
     ov.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(ov); });
     ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(ov); });
   }
@@ -6512,7 +6557,11 @@
   function ensureFcmToken() {
     return Notification.requestPermission().then(function (perm) {
       if (perm !== 'granted') throw new Error('알림 권한이 필요해요 ("허용"을 눌러주세요)');
-      var swPath = location.pathname.replace(/[^/]*$/, '') + 'firebase-messaging-sw.js';
+      /* 앱 폴더 경로 계산 — URL 끝에 슬래시가 없어도(예: /benny-meeting) 루트가 아닌
+         하위 폴더(/benny-meeting/)로 정확히 잡히게 함 */
+      var dir = location.pathname;
+      if (!/\/$/.test(dir)) { dir = /\.[^/]*$/.test(dir) ? dir.replace(/[^/]*$/, '') : (dir + '/'); }
+      var swPath = dir + 'firebase-messaging-sw.js';
       return navigator.serviceWorker.register(swPath);
     }).then(function (reg) {
       return fcmMessaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
