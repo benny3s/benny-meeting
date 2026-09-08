@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-169';
+  var APP_VERSION = '2026-09-08-170';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1854,7 +1854,7 @@
       var sub = ((currentState && currentState.entries) || []).find(function (e) { return e.id === id && e.managedBy === currentUser.id; });
       actingAs = sub ? id : null;
     }
-    activeTab = 'mine';
+    /* 현재 탭 유지 (예전엔 전환 시 메시지함으로 강제 이동했음) */
     paint(currentState);
     refreshMyHidden(function () { paint(currentState); }); /* 전환한 프로필 기준으로 지인 필터 숨김 목록 재계산 */
     window.scrollTo(0, 0);
@@ -2560,6 +2560,19 @@
       if (attempt < 30) setTimeout(function () { verifyPropagation(sv, attempt + 1); }, 20000);
       else showReloadBanner(sv);
     });
+  }
+  /* 자체 버전 체크: 배포된 파일을 직접 받아 실행 중 버전과 비교 → 더 최신이면 배너.
+     (서버 appVersion 기록/다른 기기에 의존하지 않아, 혼자 써도 새 버전 배포 시 알림이 뜸) */
+  var selfCheckBusy = false;
+  function selfVersionCheck() {
+    if (selfCheckBusy || document.getElementById('update-bar')) return;
+    selfCheckBusy = true;
+    var url = location.pathname + '?vchk=' + Date.now();
+    fetch(url, { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (html) {
+      var m = html.match(/var APP_VERSION\s*=\s*'([^']+)'/);
+      var fetched = m ? m[1] : '';
+      if (fetched && verNewer(fetched, APP_VERSION)) showReloadBanner(fetched);
+    }).catch(function () {}).then(function () { selfCheckBusy = false; });
   }
   function showReloadBanner(sv) {
     if (document.getElementById('update-bar')) return;
@@ -7046,11 +7059,15 @@
   function refreshOnResume() {
     if (!appStarted) return;
     try { if (!isEditingForm()) refreshNow(); } catch (e) {}
+    try { selfVersionCheck(); } catch (e) {} /* 포그라운드 복귀 시 새 버전 배포됐는지 확인 */
   }
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') refreshOnResume();
   });
   window.addEventListener('focus', refreshOnResume);
+  /* 로드 직후 한 번 + 30분마다 새 버전 배포 확인 */
+  setTimeout(function () { try { selfVersionCheck(); } catch (e) {} }, 8000);
+  setInterval(function () { try { selfVersionCheck(); } catch (e) {} }, 30 * 60 * 1000);
 
   var deferredInstallPrompt = null;
   window.addEventListener('beforeinstallprompt', function (e) {
