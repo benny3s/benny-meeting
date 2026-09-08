@@ -1,8 +1,82 @@
 /* 베니브릿지 — 요청 이벤트 발생 시 상대에게 FCM 웹 푸시 발송 */
 const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
+const nodeCrypto = require('crypto');
 admin.initializeApp();
 const db = admin.firestore();
+
+/* ── 보안 번호 저장소 공용 헬퍼 (SMS·지인필터 공용) ──
+   번호는 서버 전용 키(Secret NUM_ENC_KEY)로 AES-256-GCM 암호화해 잠금 컬렉션에만 저장.
+   클라이언트는 규칙상 접근 불가(기본 차단), CF(Admin SDK)만 접근. */
+function numKey() {
+  const k = process.env.NUM_ENC_KEY || '';
+  if (k.length < 64) throw new functions.https.HttpsError('failed-precondition', '서버 키가 설정되지 않았어요.');
+  return Buffer.from(k.slice(0, 64), 'hex'); /* 64 hex = 32 bytes */
+}
+function encPhone(plain) {
+  const iv = nodeCrypto.randomBytes(12);
+  const cipher = nodeCrypto.createCipheriv('aes-256-gcm', numKey(), iv);
+  const ct = Buffer.concat([cipher.update(String(plain), 'utf8'), cipher.final()]);
+  return iv.toString('hex') + ':' + cipher.getAuthTag().toString('hex') + ':' + ct.toString('hex');
+}
+function decPhone(blob) {
+  const parts = String(blob || '').split(':');
+  if (parts.length !== 3) return '';
+  try {
+    const d = nodeCrypto.createDecipheriv('aes-256-gcm', numKey(), Buffer.from(parts[0], 'hex'));
+    d.setAuthTag(Buffer.from(parts[1], 'hex'));
+    return Buffer.concat([d.update(Buffer.from(parts[2], 'hex')), d.final()]).toString('utf8');
+  } catch (e) { return ''; }
+}
+/* 한국 전화번호 정규화: 하이픈·공백 제거, +82/82 → 0, 최종 0으로 시작하는 숫자열 */
+function normPhone(raw) {
+  if (!raw) return '';
+  let s = String(raw).replace(/[^\d+]/g, '');
+  s = s.replace(/^\+/, '');
+  if (s.startsWith('82')) s = '0' + s.slice(2); /* +82 / 82 = 앞자리 0 */
+  s = s.replace(/\D/g, '');
+  if (/^010\d{8}$/.test(s)) return s;      /* 휴대폰 */
+  if (/^0\d{8,10}$/.test(s)) return s;     /* 그 외 0으로 시작하는 유효 길이 */
+  return '';
+}
+/* 클라이언트 makePinAuth(PBKDF2-SHA256, 150000, 32byte)와 동일하게 PIN 검증 */
+function verifyPinServer(pin, entry) {
+  if (!entry) return false;
+  const pa = entry.pinAuth;
+  if (!pa || !pa.salt || !pa.hash) return false;
+  const salt = Buffer.from(pa.salt, 'base64');
+  const h = nodeCrypto.pbkdf2Sync(String(pin), salt, 150000, 32, 'sha256').toString('hex');
+  return h === pa.hash;
+}
+/* entryId의 인증 주체(본인 or 관리 주선자) 찾기 */
+function authEntryFor(state, entry) {
+  if (entry && entry.managedBy) {
+    return (state.entries || []).find((e) => e.id === entry.managedBy) || entry;
+  }
+  return entry;
+}
+
+/* 회원 전화번호를 안전 저장 (가입/수정 시 클라이언트가 호출). PIN 검증으로 본인만 저장 가능. */
+exports.savePhone = functions
+  .region('asia-northeast3')
+  .runWith({ secrets: ['NUM_ENC_KEY'], timeoutSeconds: 20, memory: '256MB' })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', '로그인이 필요해요.');
+    const entryId = String((data && data.entryId) || '');
+    const pin = String((data && data.pin) || '');
+    const phone = normPhone(data && data.phone);
+    if (!entryId || !pin) throw new functions.https.HttpsError('invalid-argument', '정보가 부족해요.');
+    if (!phone) throw new functions.https.HttpsError('invalid-argument', '전화번호 형식이 올바르지 않아요.');
+    const snap = await db.doc('app/state').get();
+    const state = snap.data() || {};
+    const entry = (state.entries || []).concat(state.pendingEntries || []).find((e) => e.id === entryId);
+    if (!entry) throw new functions.https.HttpsError('not-found', '계정을 찾을 수 없어요.');
+    if (!verifyPinServer(pin, authEntryFor(state, entry))) {
+      throw new functions.https.HttpsError('permission-denied', 'PIN이 올바르지 않아요.');
+    }
+    await db.doc('sendContacts/' + entryId).set({ enc: encPhone(phone), at: new Date().toISOString() });
+    return { ok: true };
+  });
 
 const SITE_URL = 'https://benny3s.github.io/benny-meeting/';
 

@@ -772,13 +772,14 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 
 <script id="app-logic">
 (function () {
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-129';
+  var APP_VERSION = '2026-09-08-130';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -851,6 +852,17 @@
   var VAPID_KEY = 'BNtmOVQDK3AV0s-mJJdO9spG0AHInihNOnx2im0q-XDViqBMi2N-kz1y8IN1gv64uGqO0ASvtPMKNr3tqbZsHPY';
   var fcmMessaging = null;
   try { if (firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported()) fcmMessaging = firebase.messaging(); } catch (e) {}
+  /* Cloud Functions (asia-northeast3) — 보안 번호 저장/지인필터 호출용 */
+  var fns = null;
+  try { fns = firebase.app().functions('asia-northeast3'); } catch (e) {}
+  /* 회원 전화번호를 서버에 안전 저장(암호화). 실패해도 가입/수정 흐름은 막지 않음(best-effort) */
+  function saveMyPhone(entryId, pin, phone) {
+    if (!fns || !entryId || !pin || !phone) return Promise.resolve();
+    try {
+      return fns.httpsCallable('savePhone')({ entryId: entryId, pin: pin, phone: phone })
+        .then(function () {}).catch(function (e) { try { console.warn('savePhone', e && e.message); } catch (e2) {} });
+    } catch (e) { return Promise.resolve(); }
+  }
 
   /* ---- utils ---- */
   function escapeHtml(str) {
@@ -4444,6 +4456,7 @@
         }
       });
     }).then(function () {
+      if (contact) saveMyPhone(entryId, selfPin, contact); /* 서버에 번호 안전 저장(암호화) — SMS·지인필터 공용, best-effort */
       photoDataUrls = [];
       if (isEdit) {
         editingEntryId = null;
