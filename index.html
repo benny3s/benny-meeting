@@ -829,7 +829,8 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-166';
+  var APP_VERSION = '2026-09-08-167';
+  var DAILY_REQ_LIMIT = 5; /* 프로필별 하루(KST) 보낼 수 있는 사진+대화 요청 합산 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -5250,6 +5251,15 @@
         var st = reqStatus(existingReq);
         if (st === 'rejected') return modalNotice('안내', escapeHtml(target.nickname) + '님이 이 요청을 거절했어요.');
         return modalNotice('안내', '이미 ' + escapeHtml(target.nickname) + '님에게 ' + actionText + '을 보냈어요. "메시지함" 탭에서 확인할 수 있어요.');
+      }
+      /* 하루 요청 한도 (프로필별·KST·사진+대화 합산) — 무분별한 요청 방지 */
+      var todayK = kstDay(new Date().toISOString());
+      var sentToday = (currentState.dateRequests || []).filter(function (req) {
+        return req.fromId === fromEntry.id && req.submittedAt && kstDay(req.submittedAt) === todayK;
+      }).length;
+      if (sentToday >= DAILY_REQ_LIMIT) {
+        modalNotice('오늘 요청 한도 도달', '하루에 보낼 수 있는 사진·대화 요청은 ' + DAILY_REQ_LIMIT + '건이에요. 오늘은 모두 사용했어요. 내일 다시 신중하게 보내주세요 🙂 (이미 보낸 요청의 답장·수락은 계속 받을 수 있어요.)');
+        return;
       }
       var icon = isPhoto ? '📷' : '💌';
       var noteOverlay = openModal(
