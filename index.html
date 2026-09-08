@@ -489,6 +489,13 @@
   }
   .pf-photo.blurred, .pf-photos.blurred { filter: blur(12px); cursor: pointer; transition: filter 0.3s; }
   .pf-photo--empty.blurred { filter: blur(12px); cursor: pointer; }
+  /* 블러 사진을 '꾹 누르기(롱프레스)'로 원본 미리보기/저장하는 것 방지.
+     이미지가 터치 이벤트를 안 받게 하고 iOS 콜아웃 메뉴를 끔 → 클릭(눌러서 보기)은 컨테이너가 처리 */
+  .pf-photos.blurred, .compact-thumb.blurred { -webkit-touch-callout: none; }
+  .pf-photos.blurred img, .compact-thumb.blurred img {
+    pointer-events: none; -webkit-touch-callout: none;
+    -webkit-user-select: none; user-select: none; -webkit-user-drag: none;
+  }
   .pf-body { padding: 14px 16px 12px; flex: 1; }
   .pf-name { font-size: 1.08rem; margin-bottom: 8px; }
   .pf-chips { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
@@ -803,7 +810,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-157';
+  var APP_VERSION = '2026-09-08-158';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
