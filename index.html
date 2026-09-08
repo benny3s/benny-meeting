@@ -788,7 +788,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-150';
+  var APP_VERSION = '2026-09-08-151';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -911,28 +911,65 @@
      이후 Functions SDK의 토큰 요청도 이 SW를 재사용 → 루트 경로를 절대 건드리지 않아
      (홈화면에 추가한 아이폰 앱 등에서도) 지인 필터 호출이 실패하지 않는다.
      ※ getToken은 권한 팝업을 띄우지 않으며, 권한이 없어도 SW 등록/캐시는 먼저 일어난다. */
-  var _swPrimed = false;
+  var _primePromise = null;
   function primeMessagingSw() {
-    if (_swPrimed || !fcmMessaging || !('serviceWorker' in navigator)) return;
-    _swPrimed = true;
-    try {
-      var dir = location.pathname;
-      if (!/\/$/.test(dir)) { dir = /\.[^/]*$/.test(dir) ? dir.replace(/[^/]*$/, '') : (dir + '/'); }
-      navigator.serviceWorker.register(dir + 'firebase-messaging-sw.js').then(function (reg) {
-        try { fcmMessaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg }).catch(function () {}); } catch (e) {}
-      }).catch(function () {});
-    } catch (e) {}
+    if (_primePromise) return _primePromise;
+    if (!fcmMessaging || !('serviceWorker' in navigator)) { _primePromise = Promise.resolve(false); return _primePromise; }
+    _primePromise = new Promise(function (resolve) {
+      try {
+        var dir = location.pathname;
+        if (!/\/$/.test(dir)) { dir = /\.[^/]*$/.test(dir) ? dir.replace(/[^/]*$/, '') : (dir + '/'); }
+        navigator.serviceWorker.register(dir + 'firebase-messaging-sw.js').then(function (reg) {
+          /* getToken을 하위경로 SW로 한 번 호출 → messaging.swRegistration에 캐시됨.
+             getTokenInternal(권한 확인)에서 실패해도 SW 등록/캐시는 이미 끝난 뒤라 목적 달성. */
+          try {
+            fcmMessaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg })
+              .then(function () { resolve(true); })
+              .catch(function () { resolve(true); }); /* 권한 없어 실패해도 SW 캐시는 됨 */
+          } catch (e) { resolve(true); }
+        }).catch(function () { resolve(false); });
+      } catch (e) { resolve(false); }
+    });
+    return _primePromise;
+  }
+  /* Functions 콜러블 호출 전에 messaging SW가 준비되도록 보장.
+     - 푸시 불가 기기(iOS 사파리 탭): messaging 미로드 → Functions가 토큰을 안 붙임 → 즉시 통과
+     - 푸시 가능 기기(홈화면 앱/데스크톱): 로드+prime 완료까지 대기 → 콜러블의 내부 getToken이 하위경로 SW 재사용 */
+  function messagingSettled() {
+    if (!_pushUsable) return Promise.resolve();
+    return loadMessagingSdk().then(function () {
+      if (!fcmMessaging) return;
+      return primeMessagingSw();
+    }).catch(function () {});
   }
   /* 푸시 가능한 기기에서는 미리 로드해 둠(사용자가 알림 버튼을 눌렀을 때 준비돼 있게) */
   try { loadMessagingSdk(); } catch (e) {}
   /* Cloud Functions (asia-northeast3) — 보안 번호 저장/지인필터 호출용 */
   var fns = null;
   try { fns = firebase.app().functions('asia-northeast3'); } catch (e) {}
+  /* 콜러블 공통 호출기: (1) messaging SW가 준비된 뒤 호출 (Functions SDK가 붙이는 FCM 토큰 요청이
+     루트 경로 SW를 등록하려다 실패하는 문제 예방) (2) 그래도 messaging/서비스워커 오류가 나면
+     prime 후 1회 자동 재시도 → 홈화면 앱(standalone) 아이폰에서도 안전. */
+  function isSwMsgError(e) {
+    var m = ((e && (e.message || e.code)) || '') + '';
+    return /messaging|service.?worker|failed-service-worker/i.test(m);
+  }
+  function callFn(name, payload) {
+    if (!fns) return Promise.reject(new Error('서버에 연결할 수 없어요.'));
+    function invoke() { return fns.httpsCallable(name)(payload); }
+    return messagingSettled().then(invoke).catch(function (e) {
+      if (isSwMsgError(e)) { /* 경쟁 조건 등으로 실패 시: prime 강제 후 1회 재시도 */
+        _primePromise = null;
+        return primeMessagingSw().then(invoke);
+      }
+      throw e;
+    });
+  }
   /* 회원 전화번호를 서버에 안전 저장(암호화). 실패해도 가입/수정 흐름은 막지 않음(best-effort) */
   function saveMyPhone(entryId, pin, phone) {
     if (!fns || !entryId || !pin || !phone) return Promise.resolve();
     try {
-      return fns.httpsCallable('savePhone')({ entryId: entryId, pin: pin, phone: phone })
+      return callFn('savePhone', { entryId: entryId, pin: pin, phone: phone })
         .then(function () {}).catch(function (e) { try { console.warn('savePhone', e && e.message); } catch (e2) {} });
     } catch (e) { return Promise.resolve(); }
   }
@@ -949,7 +986,7 @@
     var a = acqAuth();
     if (!fns || !a) { myHiddenIds = []; acqCounts = { filter: 0, hidden: 0 }; if (cb) cb(); return; }
     try {
-      fns.httpsCallable('getHiddenIds')({ entryId: a.entryId, pin: a.pin }).then(function (r) {
+      callFn('getHiddenIds', { entryId: a.entryId, pin: a.pin }).then(function (r) {
         var d = (r && r.data) || {};
         myHiddenIds = d.ids || [];
         acqCounts = { filter: d.filterCount || 0, hidden: d.hiddenCount || 0 };
@@ -967,7 +1004,7 @@
     numbers = (numbers || []).filter(Boolean);
     if (!numbers.length) { modalNotice('안내', '추가할 번호를 찾지 못했어요.'); return; }
     var loading = openModal('<h3>적용 중…</h3><p class="modal-msg">번호 ' + numbers.length + '개로 지인 필터를 적용하고 있어요. 잠시만요…</p>');
-    fns.httpsCallable('setAcqFilter')({ entryId: a.entryId, pin: a.pin, numbers: numbers, mode: mode }).then(function (r) {
+    callFn('setAcqFilter', { entryId: a.entryId, pin: a.pin, numbers: numbers, mode: mode }).then(function (r) {
       var c = (r && r.data && r.data.count) || 0;
       refreshMyHidden(function () { closeModal(loading); paint(currentState); modalNotice('적용 완료', '지인 필터에 번호 ' + c + '개가 등록됐어요. 해당하는 회원과는 서로 명단에서 숨겨져요.'); });
     }).catch(function (e) { closeModal(loading); modalNotice('오류', '필터 적용 실패: ' + ((e && e.message) || e)); });
@@ -1021,7 +1058,7 @@
     var a = acqAuth(); if (!a) return;
     modalConfirm('지인 필터 전체 삭제', '내가 등록한 지인 필터를 모두 지울까요? 다만 상대가 나를 필터에 걸어둔 경우엔, 삭제 후에도 서로 보이지 않을 수 있어요.', '전체 삭제', 'danger').then(function (ok) {
       if (!ok) return;
-      fns.httpsCallable('clearAcqFilter')({ entryId: a.entryId, pin: a.pin }).then(function () {
+      callFn('clearAcqFilter', { entryId: a.entryId, pin: a.pin }).then(function () {
         refreshMyHidden(function () { paint(currentState); modalNotice('삭제 완료', '지인 필터를 모두 삭제했어요.'); });
       }).catch(function (e) { modalNotice('오류', '삭제 실패: ' + ((e && e.message) || e)); });
     });
