@@ -123,10 +123,16 @@
     margin-bottom: 0;
     border-bottom: 1px solid var(--line);
     background: var(--paper);
-    flex-wrap: wrap;
+    /* 좁은 화면에서도 줄바꿈 대신 한 줄 유지 + 좌측 정렬 + 가로 스크롤 */
+    flex-wrap: nowrap; justify-content: flex-start;
+    overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
   }
+  .tabs::-webkit-scrollbar { display: none; }
+  /* 관리자 탭은 로그인 시 다음 줄로 (기본 탭 줄 아래에 별도 행) */
+  .tabs--admin { border-bottom: 1px solid var(--line); }
   #tab-panel { padding-top: 18px; }
   .tab-btn {
+    flex: 0 0 auto; white-space: nowrap;
     background: none;
     border: none;
     padding: 12px 6px;
@@ -797,7 +803,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-154';
+  var APP_VERSION = '2026-09-08-155';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -4300,9 +4306,10 @@
       var unreadBadge = unread ? '<span class="count blink" title="안 읽은 알림">' + unread + '</span>' : '';
       tabs += '<button type="button" class="tab-btn" data-tab="mine" role="tab" aria-selected="' + (activeTab === 'mine') + '">메시지함' + unreadBadge + '</button>';
     }
+    var adminTab = '';
     if (isAdminUnlocked) {
       var msgUnread = adminMsgUnread(state);
-      tabs += '<button type="button" class="tab-btn" data-tab="admin" role="tab" aria-selected="' + (activeTab === 'admin') + '">관리자' +
+      adminTab = '<button type="button" class="tab-btn" data-tab="admin" role="tab" aria-selected="' + (activeTab === 'admin') + '">관리자' +
         '<span class="count' + (pendingCount >= 1 ? ' blink' : '') + '" title="승인 대기">대기 ' + pendingCount + '</span>' +
         '<span class="count" title="요청">요청 ' + reqCount + '</span>' +
         (deleteReqCount >= 1 ? '<span class="count blink" title="삭제 요청">삭제 ' + deleteReqCount + '</span>' : '') +
@@ -4396,6 +4403,7 @@
       '<div class="page">' +
         '<div class="sticky-head">' +
           '<div class="tabs" role="tablist">' + tabs + '</div>' +
+          (adminTab ? '<div class="tabs tabs--admin" role="tablist">' + adminTab + '</div>' : '') +
           switcher +
         '</div>' +
         '<div id="tab-panel">' + panel + '</div>' +
