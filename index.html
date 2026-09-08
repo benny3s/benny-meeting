@@ -810,7 +810,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-160';
+  var APP_VERSION = '2026-09-08-161';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -1883,7 +1883,7 @@
     if (!currentUser) return;
     var sub = ((currentState && currentState.entries) || []).find(function (e) { return e.id === subId && e.managedBy === currentUser.id; });
     if (!sub) return modalNotice('안내', '내가 소개한 친구만 임시 PIN을 발급할 수 있어요.');
-    modalNumericPinSetup('🔑 1일 임시 로그인 PIN 발급', '주선자(' + currentUser.nickname + ')님이 계속 관리하는 상태는 그대로 유지돼요. 다만 ' + sub.nickname + '님이 직접 로그인할 수 있도록 1일 동안만 쓰는 임시 PIN을 발급해요. 예를 들어 ' + sub.nickname + '님에게 온 사진 요청·데이트 신청이 수락되면, 친구가 직접 로그인해 상대와 대화할 수 있어요. 사용할 PIN을 정해주세요 (숫자 4~8자리).').then(function (r) {
+    modalNumericPinSetup('🔑 1일 임시 로그인 PIN 발급', '주선자(' + currentUser.nickname + ')님이 계속 관리하는 상태는 그대로 유지돼요. 다만 ' + sub.nickname + '님이 직접 로그인할 수 있도록 1일 동안만 쓰는 임시 PIN을 발급해요. 예를 들어 ' + sub.nickname + '님에게 온 사진 요청·대화 신청이 수락되면, 친구가 직접 로그인해 상대와 대화할 수 있어요. 사용할 PIN을 정해주세요 (숫자 4~8자리).').then(function (r) {
       if (!r) return;
       if (!/^[0-9]{4,8}$/.test(r.p1)) return modalNotice('입력 오류', 'PIN은 숫자 4~8자리예요.');
       if (r.p1 !== r.p2) return modalNotice('오류', 'PIN이 일치하지 않아요.');
@@ -2641,7 +2641,7 @@
     return e ? e.nickname : '(알 수 없음)';
   }
 
-  /* ── 회원↔회원 데이트 채팅 (성사된 데이트 신청 사이). state.dm 배열, 쪽지처럼 단순·모달 기반(비실시간) ── */
+  /* ── 회원↔회원 대화 채팅 (연결된 대화 신청 사이). state.dm 배열, 쪽지처럼 단순·모달 기반(비실시간) ── */
   function dmPairKey(a, b) { return [a, b].sort().join('__'); }
   function dmThread(state, meId, otherId) {
     var key = dmPairKey(meId, otherId);
@@ -2679,7 +2679,7 @@
   function openDmChat(otherId) {
     var me = findMyEntry(currentState);
     if (!me) { modalNotice('로그인 필요', '먼저 로그인해주세요.'); return; }
-    if (!canViewContactOf(currentState, me.id, otherId)) { modalNotice('안내', '데이트 신청이 수락되면 채팅할 수 있어요.'); return; }
+    if (!canViewContactOf(currentState, me.id, otherId)) { modalNotice('안내', '대화 신청이 수락되면 채팅할 수 있어요.'); return; }
     var otherNick = nickForEntry(currentState, otherId);
     var overlay = openModal(
       '<h3>💬 ' + escapeHtml(otherNick) + '님과의 채팅</h3>' +
@@ -3013,13 +3013,13 @@
     if (entry.intro) extras += '<div class="pf-extra"><b>소개</b> ' + escapeHtml(entry.intro) + '</div>';
     if (entry.idealType) extras += '<div class="pf-extra"><b>선호</b> ' + escapeHtml(entry.idealType) + '</div>';
     if (entry.dealbreaker) extras += '<div class="pf-extra"><b>비선호</b> ' + escapeHtml(entry.dealbreaker) + '</div>';
-    /* 번호는 서로 공개하지 않음 — 데이트 신청이 수락되면 앱 내 채팅으로 대화 */
+    /* 번호는 서로 공개하지 않음 — 대화 신청이 수락되면 앱 내 채팅으로 대화 */
     var contactHtml;
     var meView = currentUser ? findMyEntry(state) : null;
     if (meView && meView.id !== entry.id && canViewContactOf(state, meView.id, entry.id)) {
-      contactHtml = '<div class="pf-contact open" style="cursor:pointer;" data-action="dm-chat" data-id="' + escapeHtml(entry.id) + '">💬 <span>채팅하기 (데이트 성사됨)</span></div>';
+      contactHtml = '<div class="pf-contact open" style="cursor:pointer;" data-action="dm-chat" data-id="' + escapeHtml(entry.id) + '">💬 <span>채팅하기 (대화 연결됨)</span></div>';
     } else {
-      contactHtml = '<div class="pf-contact"><span style="color:var(--muted);">💌 데이트 신청이 수락되면 채팅할 수 있어요</span></div>';
+      contactHtml = '<div class="pf-contact"><span style="color:var(--muted);">💌 대화 신청이 수락되면 채팅할 수 있어요</span></div>';
     }
     /* 상세 팝업에서 관리자에게만: 최근 접속 시간 + 알람 설정 여부 */
     var adminInfoHtml = '';
@@ -3043,11 +3043,11 @@
     var photoBtn = canSeePhoto
       ? '<button type="button" class="card-btn approve" data-action="gallery" data-id="' + escapeHtml(entry.id) + '">📷 사진 볼 수 있어요</button>'
       : '<button type="button" class="card-btn orange" data-action="request-photo" data-id="' + escapeHtml(entry.id) + '">📷 사진 요청</button>';
-    /* 데이트 신청(구 번호 요청): 성사되면 앱 내 채팅. 이미 성사면 "채팅하기" */
+    /* 대화 신청(구 번호 요청): 성사되면 앱 내 채팅. 이미 성사면 "채팅하기" */
     var matched = !!(viewer && canViewContactOf(state, viewer.id, entry.id));
     var dateBtn = matched
       ? '<button type="button" class="card-btn approve" data-action="dm-chat" data-id="' + escapeHtml(entry.id) + '">💬 채팅하기</button>'
-      : '<button type="button" class="card-btn primary" data-action="request-contact" data-id="' + escapeHtml(entry.id) + '">💌 데이트 신청</button>';
+      : '<button type="button" class="card-btn primary" data-action="request-contact" data-id="' + escapeHtml(entry.id) + '">💌 대화 신청</button>';
     var reqBtns = mineOrManaged ? '' : photoBtn + dateBtn;
     return (
       '<article class="pf-card" data-id="' + escapeHtml(entry.id) + '">' +
@@ -3531,7 +3531,7 @@
                   var pinAttrs = isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : (loggedIn ? ' class="keep-ph" placeholder="(비우면 로그인 PIN 그대로 사용)"' : ' placeholder="숫자 4~8자리" required');
                   return '<div class="field"><label for="f-pin">개인 PIN ' + pinLabelExtra + '</label>' +
                     '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8"' + pinAttrs + '>' +
-                    '<span class="hint">나중에 본인이 신청을 취소하거나 데이트를 신청할 때 필요해요.</span></div>';
+                    '<span class="hint">나중에 본인이 신청을 취소하거나 대화를 신청할 때 필요해요.</span></div>';
                 })()) +
             exampleTip +
             '<div class="field"><label for="f-intro">자기소개 <span class="req">필수</span> <span class="opt">최소 20자</span></label>' +
@@ -3564,7 +3564,7 @@
                   '동의를 거부할 권리가 있으며, 거부 시 신청이 불가합니다.</p>' +
               '</div>' +
               '<div class="consent-box">' +
-                '<p class="consent-detail" style="margin:0;">&#128276; <b>알림을 켜면</b> 사진 요청·데이트 신청과 승인 소식을 기기로 바로 받아볼 수 있어요. 신청 후 상단의 <b>&#128276; 알림</b> 버튼을 눌러주세요! (방법은 <b>&#128718; 가이드</b>)</p>' +
+                '<p class="consent-detail" style="margin:0;">&#128276; <b>알림을 켜면</b> 사진 요청·대화 신청과 승인 소식을 기기로 바로 받아볼 수 있어요. 신청 후 상단의 <b>&#128276; 알림</b> 버튼을 눌러주세요! (방법은 <b>&#128718; 가이드</b>)</p>' +
               '</div>')) +
           '<div class="submit-row">' +
             '<button type="submit" class="submit-btn" id="submit-btn">' + (isEdit ? '수정 저장하기' : (proxy ? '🤝 친구 소개 제출하기' : '도장 찍고 제출하기')) + '</button>' +
@@ -3594,7 +3594,7 @@
     var isPhoto = (r.type || 'contact') === 'photo';
     var typeBadge = isPhoto
       ? '<span class="chip" style="background:#fdf0e3;color:#b06000;">📷 사진</span>'
-      : '<span class="chip" style="background:#fce8e6;color:#d93025;">💌 데이트</span>';
+      : '<span class="chip" style="background:#fce8e6;color:#d93025;">💌 대화</span>';
     var actions = '';
     if (incoming && (st === 'pending' || st === 'held')) {
       /* 받은 요청: 승인/보류/거절 (보류 상태에서도 다시 결정 가능) */
@@ -3653,7 +3653,7 @@
     if (incoming && isPhoto && r.fromRevealed) {
       revealMine += '<div class="mine-note" style="color:#137333;">📷 상대가 사진을 공개했어요! 명단에서 이 분의 사진을 볼 수 있어요.</div>';
     }
-    /* 데이트 신청(구 번호 요청)이 수락됨 → 채팅 버튼 (번호 대신 앱 내 채팅) */
+    /* 대화 신청(구 번호 요청)이 수락됨 → 채팅 버튼 (번호 대신 앱 내 채팅) */
     var chatBtn = '';
     if (!isPhoto && st === 'approved') {
       var meNow = findMyEntry(state);
@@ -3755,7 +3755,7 @@
         : '<div class="mine-status-box">' +
             '<div class="mine-status-icon">⏳</div>' +
             '<h3>승인 대기 중이에요</h3>' +
-            '<p class="sub">관리자(베니)가 신청서를 확인하고 있어요. 승인되면 명단에 등록되고, 사진 요청·데이트 신청을 주고받을 수 있어요.</p>' +
+            '<p class="sub">관리자(베니)가 신청서를 확인하고 있어요. 승인되면 명단에 등록되고, 사진 요청·대화 신청을 주고받을 수 있어요.</p>' +
             '<p class="sub" style="margin-top:8px;">신청일: ' + fmtDate(myPending.submittedAt) + '</p>' +
           '</div>';
       return '<div class="admin-panel"><h2>메시지함</h2>' + waitBox + '</div>';
@@ -3802,9 +3802,9 @@
     var reqs = state.dateRequests || [];
     var groups = [
       { key: 'in-photo', title: '📷 받은 사진 요청', incoming: true, type: 'photo' },
-      { key: 'in-contact', title: '💌 받은 데이트 신청', incoming: true, type: 'contact' },
+      { key: 'in-contact', title: '💌 받은 대화 신청', incoming: true, type: 'contact' },
       { key: 'out-photo', title: '📷 보낸 사진 요청', incoming: false, type: 'photo' },
-      { key: 'out-contact', title: '💌 보낸 데이트 신청', incoming: false, type: 'contact' }
+      { key: 'out-contact', title: '💌 보낸 대화 신청', incoming: false, type: 'contact' }
     ];
     var sections = groups.map(function (g) {
       var items = reqs.filter(function (r) {
@@ -3910,7 +3910,7 @@
 
   function renderAdmin(state) {
     if (!isAdminUnlocked) {
-      return '<div class="admin-panel"><h2>관리자 모드</h2><p class="sub">위쪽 "관리자" 버튼으로 PIN을 입력하면 승인 대기 명단, 실명, 연락처, 소개자, 데이트 신청함을 볼 수 있어요.</p></div>';
+      return '<div class="admin-panel"><h2>관리자 모드</h2><p class="sub">위쪽 "관리자" 버튼으로 PIN을 입력하면 승인 대기 명단, 실명, 연락처, 소개자, 대화 신청함을 볼 수 있어요.</p></div>';
     }
     var pending = state.pendingEntries || [];
     var pendingItems = pending.map(function (e) {
@@ -3989,7 +3989,7 @@
       var reqType = r.type || 'contact';
       var typeBadge = reqType === 'photo'
         ? '<span class="chip" style="background:#e8f0fe;color:#1a73e8;">📷 사진</span>'
-        : '<span class="chip" style="background:#fce8e6;color:#d93025;">💌 데이트</span>';
+        : '<span class="chip" style="background:#fce8e6;color:#d93025;">💌 대화</span>';
       var fromId = r.fromId || (d && d.fromId);
       var toId = r.toId || (d && d.toId);
       var fromName = (d && d.fromName) || nameOf(fromId);
@@ -4260,7 +4260,7 @@
         (deleteReqSection ? '<hr class="perforation">' + deleteReqSection : '') +
         '<hr class="perforation">' +
         '<h2>📬 요청함<span class="pending-count">' + activeReqs.length + '</span></h2>' +
-        '<p class="sub">아직 처리하지 않은 사진 요청·데이트 신청이에요.</p>' +
+        '<p class="sub">아직 처리하지 않은 사진 요청·대화 신청이에요.</p>' +
         (activeReqs.length ? activeItems : '<p class="sub">처리할 요청이 없어요.</p>') +
         '<hr class="perforation">' +
         adminMsgSection +
@@ -5175,14 +5175,14 @@
     var target = state.entries.find(function (e) { return e.id === toId; });
     if (!target) return;
     var isPhoto = type === 'photo';
-    var typeLabel = isPhoto ? '사진 보기' : '데이트 신청';
-    var actionText = isPhoto ? '사진 보기 요청' : '데이트 신청';
+    var typeLabel = isPhoto ? '사진 보기' : '대화 신청';
+    var actionText = isPhoto ? '사진 보기 요청' : '대화 신청';
     requireLogin().then(function (fromEntry) {
       if (!fromEntry) return;
       if (isMatchmakerEntry(fromEntry)) {
         var mmOv = openModal(
           '<h3>먼저 프로필을 선택해 주세요</h3>' +
-          '<p class="modal-msg">주선자 계정은 <b>친구를 대신 소개하는 계정</b>이에요. <b>본인이나 친구 프로필을 등록해야</b> 소개팅 활동(사진·데이트 요청)을 할 수 있어요 😊</p>' +
+          '<p class="modal-msg">주선자 계정은 <b>친구를 대신 소개하는 계정</b>이에요. <b>본인이나 친구 프로필을 등록해야</b> 소개팅 활동(사진·대화 요청)을 할 수 있어요 😊</p>' +
           '<p class="modal-msg" style="margin-bottom:8px;">✅ <b>이미 프로필이 있으면</b> — 화면 위쪽 <b>“🔄 누구로 활동할까요”</b>를 눌러 그 프로필로 바꾼 뒤 요청하세요.</p>' +
           '<p class="modal-msg">❎ <b>아직 프로필이 없으면</b> — <b>“신청서 작성”</b> 탭에서 본인 프로필을 만들거나 친구를 소개(등록)하면 요청할 수 있어요.</p>' +
           '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">확인</button></div>'
@@ -5228,7 +5228,7 @@
         noteOverlay.addEventListener('click', function (e) { if (e.target === noteOverlay) finish(null); });
       }).then(function (note) {
         if (note === null || note === undefined) return;
-        /* 데이트 신청은 번호를 공유하지 않음 — 수락되면 앱 내 채팅으로만 대화 */
+        /* 대화 신청은 번호를 공유하지 않음 — 수락되면 앱 내 채팅으로만 대화 */
         var req = {
           id: genId(), type: type, fromId: fromEntry.id, toId: toId,
           note: note || '', submittedAt: new Date().toISOString()
@@ -5416,7 +5416,7 @@
           });
         });
       }).then(function () {
-        appendLog('admin', '관리자', '데이트 신청 수락');
+        appendLog('admin', '관리자', '대화 신청 수락');
         return refreshNow();
       }).catch(function (err) {
         modalNotice('오류', '승인에 실패했어요: ' + (err.message || err));
@@ -5513,10 +5513,10 @@
       '</label>';
     }).join('');
     var overlay = openModal(
-      '<h3>' + (isPhoto ? '📷 사진 열람 권한' : '💬 채팅(데이트 성사) 권한') + '</h3>' +
+      '<h3>' + (isPhoto ? '📷 사진 열람 권한' : '💬 채팅(대화 연결) 권한') + '</h3>' +
       (isPhoto
         ? '<p class="modal-msg"><b>' + escapeHtml(target.nickname) + '</b>님이 볼 수 있는 사진이에요. 체크한 사람의 사진을 ' + escapeHtml(target.nickname) + '님이 볼 수 있어요.</p>'
-        : '<p class="modal-msg"><b>' + escapeHtml(target.nickname) + '</b>님이 채팅할 수 있는(데이트 성사된) 사람이에요. <span style="color:var(--muted);font-size:0.82rem;">회원끼리 데이트 신청·수락으로만 성사돼요. 여기선 <b>해제(회수)</b>만 가능해요.</span></p>') +
+        : '<p class="modal-msg"><b>' + escapeHtml(target.nickname) + '</b>님이 채팅할 수 있는(대화 연결된) 사람이에요. <span style="color:var(--muted);font-size:0.82rem;">회원끼리 대화 신청·수락으로만 연결돼요. 여기선 <b>해제(회수)</b>만 가능해요.</span></p>') +
       '<div style="max-height:48vh;overflow-y:auto;">' + (rows || '<p class="sub">다른 회원이 없어요.</p>') + '</div>' +
       '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">닫기</button></div>'
     );
@@ -5660,7 +5660,7 @@
     var fromName = from ? from.nickname : '상대방';
     var msg = (isPhoto
       ? escapeHtml(fromName) + '님의 사진 요청을 수락할까요? 수락하면 서로 사진을 볼 수 있어요.'
-      : escapeHtml(fromName) + '님의 데이트 신청을 수락할까요? 수락하면 앱 안에서 채팅으로 대화할 수 있어요 (번호는 공개되지 않아요).') +
+      : escapeHtml(fromName) + '님의 대화 신청을 수락할까요? 수락하면 앱 안에서 채팅으로 대화할 수 있어요 (번호는 공개되지 않아요).') +
       ' 상대에게 전할 인사를 남길 수 있어요.';
     modalMessage('요청 수락', msg, '수락', 'primary', '예: 반가워요! 잘 부탁드려요 :)').then(function (replyMsg) {
       if (replyMsg === null) return;
@@ -5672,15 +5672,15 @@
             var c = JSON.parse(JSON.stringify(r));
             c.decidedAt = new Date().toISOString();
             c.held = false;
-            c.approved = true; /* 사진·데이트 모두 수락 즉시 성사 (번호 공유 없음) */
+            c.approved = true; /* 사진·대화 모두 수락 즉시 연결 (번호 공유 없음) */
             if (replyMsg) c.approveMessage = replyMsg;
             return c;
           });
           tx.update(stateRef, { dateRequests: reqs });
         });
       }).then(function () {
-        appendLog('request', me.nickname, (isPhoto ? '사진 요청' : '데이트 신청') + ' 수락 → ' + fromName);
-        notifyAdmin('요청 수락', me.nickname + '님이 ' + fromName + '님의 ' + (isPhoto ? '사진 요청' : '데이트 신청') + '을 수락했어요.');
+        appendLog('request', me.nickname, (isPhoto ? '사진 요청' : '대화 신청') + ' 수락 → ' + fromName);
+        notifyAdmin('요청 수락', me.nickname + '님이 ' + fromName + '님의 ' + (isPhoto ? '사진 요청' : '대화 신청') + '을 수락했어요.');
         return refreshNow();
       }).then(function () {
         modalNotice('수락 완료', isPhoto
@@ -6630,7 +6630,7 @@
         showNotification('새 접수!', '새로운 인연 신청서가 도착했어요. (' + state.pendingEntries.length + '건 대기중)');
       }
       if (prevRequestCount >= 0 && state.dateRequests.length > prevRequestCount) {
-        showNotification('새 요청!', '새로운 사진 요청·데이트 신청이 도착했어요.');
+        showNotification('새 요청!', '새로운 사진 요청·대화 신청이 도착했어요.');
       }
       prevPendingCount = state.pendingEntries.length;
       prevRequestCount = state.dateRequests.length;
@@ -6659,7 +6659,7 @@
           '&#128587; <b>본인으로 참여</b><br>' +
           '<ul style="padding-left:18px;margin:6px 0;list-style:none;">' +
             '<li style="' + li + '">① <b>[본인]</b>으로 신청서 제출 (<b>사진 1장↑ 필수</b>) → 관리자 승인 후 명단에.</li>' +
-            '<li style="' + li + '">② 마음에 들면 <b>&#128247; 사진 요청</b>(수락 시 서로 공개) 또는 <b>&#128156; 데이트 신청</b>(수락 시 앱 안 채팅). <span style="color:var(--muted);">전화번호는 공개 안 해요.</span></li>' +
+            '<li style="' + li + '">② 마음에 들면 <b>&#128247; 사진 요청</b>(수락 시 서로 공개) 또는 <b>&#128156; 대화 신청</b>(수락 시 앱 안 채팅). <span style="color:var(--muted);">전화번호는 공개 안 해요.</span></li>' +
             '<li style="' + li + '">③ 받은 요청은 <b>수락·보류·거절+답장</b>. 메시지함에서 <b>내 사진 본 사람 회수</b>도 가능.</li>' +
           '</ul>' +
         '</div>' +
@@ -6680,7 +6680,7 @@
       '<div data-annpanel="sec" hidden>' +
         '<ul style="padding-left:20px;margin:6px 0;">' +
           '<li>실명·연락처·소개자 정보는 <b>암호화</b>되어 저장돼요.</li>' +
-          '<li><b>사진</b>은 당사자가 직접 <b>수락</b>해야만 공개돼요 (수락 시 서로 공개). <b>전화번호는 서로 공개하지 않고</b>, 데이트가 성사되면 <b>앱 안 채팅</b>으로만 대화해요.</li>' +
+          '<li><b>사진</b>은 당사자가 직접 <b>수락</b>해야만 공개돼요 (수락 시 서로 공개). <b>전화번호는 서로 공개하지 않고</b>, 대화가 연결되면 <b>앱 안 채팅</b>으로만 대화해요.</li>' +
           '<li><b>데이터베이스 잠금</b> — 인증된 접속만 허용하고, 외부에서 데이터를 통째로 보거나 지울 수 없도록 규칙으로 막았어요.</li>' +
           '<li>개인 PIN은 원본이 아닌 <b>강력한 해시(PBKDF2)</b>로만 저장돼요.</li>' +
           '<li><b>수정·삭제는 로그인한 본인</b>(또는 관리자)만 할 수 있어요.</li>' +
