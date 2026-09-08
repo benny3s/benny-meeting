@@ -786,7 +786,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-144';
+  var APP_VERSION = '2026-09-08-145';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -2927,7 +2927,9 @@
         '<div class="summary"><strong>' + entries.length + '명</strong> <span style="font-size:0.82em;">남' + maleCount + '·여' + femaleCount + '</span>' + viewToggle + acqBtn + '</div>' +
         '<div class="filter-group">' +
           '<button type="button" class="filter-btn" data-filter="all" aria-pressed="' + (listFilter === 'all') + '">전체</button>' +
-          '<button type="button" class="filter-btn" data-filter="gender" aria-pressed="' + (listFilter === 'male' || listFilter === 'female') + '" title="눌러서 남/여 전환">' +
+          '<button type="button" class="filter-btn" data-filter="gender" aria-pressed="' + (listFilter === 'male' || listFilter === 'female') + '" title="눌러서 남/여 전환"' +
+            (listFilter === 'male' ? ' style="background:#D6EAF8;color:#2E6E8E;border-color:#AED6F1;font-weight:700;"'
+              : listFilter === 'female' ? ' style="background:#FADBE7;color:#B3477A;border-color:#F3C4D6;font-weight:700;"' : '') + '>' +
             (listFilter === 'male' ? '👨 남성' : (listFilter === 'female' ? '👩 여성' : '성별')) + '</button>' +
           permBtns +
         '</div>' +
@@ -3853,8 +3855,10 @@
     });
     function permCell(e, count, kind) {
       if (isMatchmakerEntry(e)) return '<td style="text-align:center;color:var(--muted);">—</td>'; /* 순수 주선자는 소개팅 당사자 아님 */
-      var act = kind === 'photo' ? 'perm-photo' : 'perm-contact', icon = kind === 'photo' ? '📷' : '💬';
-      return '<td style="text-align:center;"><button type="button" class="card-btn" data-action="' + act + '" data-id="' + escapeHtml(e.id) + '" style="flex:none;padding:3px 9px;">' + icon + ' ' + count + '</button></td>';
+      if (kind !== 'photo') { /* 채팅(연락처) 칸: 몇 명 적용 중인지 숫자만 (클릭하면 관리) */
+        return '<td style="text-align:center;"><button type="button" class="card-btn" data-action="perm-contact" data-id="' + escapeHtml(e.id) + '" style="flex:none;padding:3px 12px;">' + count + '</button></td>';
+      }
+      return '<td style="text-align:center;"><button type="button" class="card-btn" data-action="perm-photo" data-id="' + escapeHtml(e.id) + '" style="flex:none;padding:3px 9px;">📷 ' + count + '</button></td>';
     }
     function nameCell(e, indent) {
       return '<td data-action="card-detail" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer;' + (indent ? 'padding-left:18px;' : '') + '">' +
@@ -3912,7 +3916,7 @@
       typeFilterBtns +
       (tops.length
         ? '<div class="admin-table-wrap"><table class="seen-table"><thead><tr>' +
-            seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 볼 수 있는 사진') + seenTh('contact', '💬 채팅 가능') +
+            seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 사진') + seenTh('contact', '💬 채팅') +
           '</tr></thead><tbody>' + seenRows + '</tbody></table></div>'
         : '<p class="sub">등록된 사람이 없어요.</p>');
 
