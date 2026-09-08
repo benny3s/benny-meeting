@@ -810,7 +810,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-158';
+  var APP_VERSION = '2026-09-08-159';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -2902,6 +2902,9 @@
   /* ---- 사진: 목록은 썸네일, 원본은 photos/{id} 문서에서 필요할 때 로드 ---- */
   var FULL_MAX = 800, FULL_Q = 0.72;   /* 원본(고화질) */
   var THUMB_MAX = 220, THUMB_Q = 0.5;  /* 목록 썸네일(초경량) */
+  /* 블러(승인 전) 사진은 썸네일 자체를 아주 저해상도로 생성 → 바이트를 빼가도 원본 식별 불가.
+     화면에선 어차피 CSS 블러가 덮으므로 티가 안 남 (방법 A 롱프레스 차단과 병행) */
+  var BLUR_THUMB_MAX = 40, BLUR_THUMB_Q = 0.4;
   var photoCache = {};                 /* entryId -> [dataUrl] */
   var photosRef = db.collection('photos');
 
@@ -4792,7 +4795,12 @@
       referrerText ? encryptForAdmin(pubJwk, referrerText) : Promise.resolve(null),
       pin ? makePinAuth(pin) : Promise.resolve(null),
       (contact && selfPin) ? encryptForSelf(selfPin, contact) : Promise.resolve(null),
-      finalPhotos.length ? resizeDataUrl(finalPhotos[0], THUMB_MAX, THUMB_MAX, THUMB_Q) : Promise.resolve(null)
+      finalPhotos.length
+        ? resizeDataUrl(finalPhotos[0],
+            blurPhoto ? BLUR_THUMB_MAX : THUMB_MAX,
+            blurPhoto ? BLUR_THUMB_MAX : THUMB_MAX,
+            blurPhoto ? BLUR_THUMB_Q : THUMB_Q)
+        : Promise.resolve(null)
     ];
     Promise.all(encPromises).then(function (results) {
       var thumb = results[5] || null;
