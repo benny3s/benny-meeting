@@ -803,7 +803,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-155';
+  var APP_VERSION = '2026-09-08-156';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -1828,6 +1828,7 @@
     }
     activeTab = 'mine';
     paint(currentState);
+    refreshMyHidden(function () { paint(currentState); }); /* 전환한 프로필 기준으로 지인 필터 숨김 목록 재계산 */
     window.scrollTo(0, 0);
   }
   /* 주선자가 sub 친구에게 임시 로그인 PIN 발급 (친구가 직접 후보를 보게) */
