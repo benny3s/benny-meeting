@@ -87,6 +87,7 @@
   .masthead-icon { color: var(--accent); flex-shrink: 0; }
   .masthead h1 { font-size: clamp(1.5rem, 4vw, 2.1rem); letter-spacing: 0.01em; }
   .masthead p { margin: 6px 0 0; color: var(--paper); opacity: 0.72; font-size: 0.92rem; }
+  .masthead-sub { max-width: 880px; margin: 10px auto 0; color: var(--paper); opacity: 0.72; font-size: 0.92rem; line-height: 1.5; }
   .admin-bar { max-width: 880px; margin: 14px auto 0; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
   .admin-bar-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .notice-bar {
@@ -102,10 +103,9 @@
   }
   .admin-link:hover { opacity: 1; border-color: rgba(251,243,238,0.6); }
   .admin-link.unlocked { background: var(--accent); border-color: var(--accent); opacity: 1; }
-  /* 좁은 화면: 헤더 버튼이 4줄로 넘치지 않게 각 줄을 가로 스크롤(줄바꿈 방지) */
+  /* 좁은 화면: 헤더 버튼 줄바꿈 방지 → 우측 정렬 유지한 채 가로 스크롤 */
   @media (max-width: 480px) {
-    .admin-bar { align-items: stretch; }
-    .admin-bar-row { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    .admin-bar-row { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-end; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
     .admin-bar-row::-webkit-scrollbar { display: none; }
     .admin-link { flex: none; white-space: nowrap; }
   }
@@ -786,7 +786,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-142';
+  var APP_VERSION = '2026-09-08-143';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -4190,8 +4190,9 @@
     return (
       '<div class="masthead"><div class="masthead-inner">' +
         '<div class="masthead-icon">' + ICON_LOGO + '</div>' +
-        '<div><h1 id="masthead-title" title="새로고침" style="cursor:pointer;">베니브릿지</h1><p>관리자 주변 사람들 중심으로, 좋은 인연을 맺어주는 작은 공간이에요.</p></div>' +
+        '<div><h1 id="masthead-title" title="새로고침" style="cursor:pointer;">베니브릿지</h1></div>' +
       '</div>' +
+      '<p class="masthead-sub">관리자 주변 사람들 중심으로, 좋은 인연을 맺어주는 작은 공간이에요.</p>' +
       '<div class="admin-bar">' +
         '<div class="admin-bar-row">' +
           '<button type="button" class="admin-link" id="copy-url">&#128279; URL 복사</button>' +
