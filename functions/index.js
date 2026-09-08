@@ -171,6 +171,35 @@ exports.getHiddenIds = functions
     return { ids: Array.from(hide), filterCount: myFh.size, hiddenCount: hide.size };
   });
 
+/* 관리자 일괄 백필: 관리자 브라우저에서 복호화한 기존 회원 번호를 안전 저장소에 밀어넣음.
+   서버 남용 방지용 1회성 토큰(BACKFILL_TOKEN)으로 잠금. 관리자 비밀번호는 서버로 오지 않음. */
+exports.adminBackfill = functions
+  .region('asia-northeast3')
+  .runWith({ secrets: ['NUM_ENC_KEY', 'BACKFILL_TOKEN'], timeoutSeconds: 120, memory: '256MB' })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', '로그인이 필요해요.');
+    const token = String((data && data.token) || '');
+    const expected = process.env.BACKFILL_TOKEN || '';
+    let okToken = false;
+    try {
+      okToken = !!expected && token.length === expected.length &&
+        nodeCrypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+    } catch (e) { okToken = false; }
+    if (!okToken) throw new functions.https.HttpsError('permission-denied', '백필 토큰이 올바르지 않아요.');
+    const items = Array.isArray(data && data.items) ? data.items : [];
+    let ok = 0, skip = 0, pending = [];
+    for (let i = 0; i < items.length; i++) {
+      const id = String((items[i] && items[i].entryId) || '');
+      const phone = normPhone(items[i] && items[i].phone);
+      if (!id || !phone) { skip++; continue; }
+      pending.push(db.doc('sendContacts/' + id).set({ enc: encPhone(phone), ph: hmacPhone(phone), at: new Date().toISOString(), backfill: true }));
+      ok++;
+      if (pending.length >= 200) { await Promise.all(pending); pending = []; }
+    }
+    if (pending.length) await Promise.all(pending);
+    return { ok: ok, skip: skip };
+  });
+
 const SITE_URL = 'https://benny3s.github.io/benny-meeting/';
 
 function reqStatus(r) {

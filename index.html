@@ -779,7 +779,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-131';
+  var APP_VERSION = '2026-09-08-132';
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
@@ -962,6 +962,31 @@
         '<button type="button" class="card-btn" id="acq-manual" style="flex:none;">✏️ 번호 직접 입력</button>' +
         (acqCounts.filter ? '<button type="button" class="card-btn danger" id="acq-clear" style="flex:none;">전체 삭제</button>' : '') +
       '</div></div>';
+  }
+  /* 관리자: 기존 회원 번호를 안전 저장소(sendContacts)에 일괄 백필. 관리자 브라우저에서 복호화 → CF로 저장 */
+  function handleBackfillPhones() {
+    if (!isAdminUnlocked || !adminPrivateKey) { modalNotice('안내', '관리자 모드에서만 가능해요.'); return; }
+    if (!fns) { modalNotice('오류', '함수 연결이 안 됐어요. 새로고침 후 다시 시도해주세요.'); return; }
+    var list = (currentState.entries || []).filter(function (e) { return e.contactEnc; });
+    if (!list.length) { modalNotice('안내', '복호화할 번호가 있는 회원이 없어요.'); return; }
+    modalMessage('기존 회원 번호 일괄 등록', list.length + '명의 번호를 안전 저장소에 등록해요. 발급받은 백필 토큰을 입력하세요.', '시작', 'primary', '백필 토큰 붙여넣기').then(function (token) {
+      if (token === null || token === undefined) return;
+      token = (token || '').trim();
+      if (!token) { modalNotice('안내', '토큰을 입력해주세요.'); return; }
+      var jobs = list.map(function (e) {
+        return decryptWithAdmin(adminPrivateKey, e.contactEnc)
+          .then(function (num) { return { entryId: e.id, phone: num }; })
+          .catch(function () { return null; });
+      });
+      Promise.all(jobs).then(function (items) {
+        items = items.filter(function (x) { return x && x.phone; });
+        if (!items.length) { modalNotice('안내', '복호화된 번호가 없어요.'); return; }
+        return fns.httpsCallable('adminBackfill')({ token: token, items: items }).then(function (r) {
+          var d = (r && r.data) || {};
+          modalNotice('백필 완료', '등록 ' + (d.ok || 0) + '건, 건너뜀 ' + (d.skip || 0) + '건. 이제 기존 회원도 지인 필터·SMS 대상이 돼요.');
+        });
+      }).catch(function (e) { modalNotice('오류', '백필 실패: ' + ((e && e.message) || e)); });
+    });
   }
 
   /* ---- utils ---- */
@@ -3925,6 +3950,10 @@
         '<hr class="perforation">' +
         capSection +
         '<hr class="perforation">' +
+        '<h2>🔧 관리자 도구</h2>' +
+        '<p class="sub">기존 회원 번호를 지인 필터·SMS용 안전 저장소에 일괄 등록해요. (관리자 브라우저에서 복호화 → 1회용 토큰 필요)</p>' +
+        '<button type="button" class="card-btn" id="backfill-phones" style="flex:none;">📇 기존 회원 번호 일괄 등록</button>' +
+        '<hr class="perforation">' +
         seenSection +
         '<hr class="perforation">' +
         logSection +
@@ -5806,6 +5835,7 @@
     }
     if (e.target.closest('#acq-manual')) { handleAcqManual(); return; }
     if (e.target.closest('#acq-clear')) { handleAcqClear(); return; }
+    if (e.target.closest('#backfill-phones')) { handleBackfillPhones(); return; }
     if (e.target.closest('#open-external-btn')) { openInExternalBrowser(); return; }
     if (e.target.closest('#start-proxy')) { startProxyIntro(); return; }
     if (e.target.closest('#request-mm')) { handleRequestMatchmaker(); return; }
