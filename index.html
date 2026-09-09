@@ -836,7 +836,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-195';
+  var APP_VERSION = '2026-09-09-196';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -7096,7 +7096,7 @@
     });
   }
 
-  var ANNOUNCE_KEY = 'announce-v18'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
+  var ANNOUNCE_KEY = 'announce-v19'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
   function showAnnouncement(force) {
     if (!force) {
       try {
@@ -7129,11 +7129,13 @@
           '</ul>' +
         '</div>' +
         '<div style="' + box + '">' +
-          '&#129309; <b>주선자로 친구 소개</b> <span style="color:var(--muted);">(내가 소개팅 안 해도 OK)</span><br>' +
+          '&#129309; <b>주선자 역할</b> <span style="color:var(--muted);">(내가 소개팅 안 해도 OK)</span><br>' +
           '<ul style="padding-left:18px;margin:6px 0;list-style:none;">' +
-            '<li style="' + li + '">① <b>친구 등록</b> → 주선자가 <b>친구로 전환(로그인)</b>해서 대신 활동.</li>' +
-            '<li style="' + li + '">② 친구가 <b>잠깐 직접</b> 하고 싶으면 → <b>&#128273; 1일 PIN</b> 발급해 전달 → 친구가 하루 동안 로그인.</li>' +
-            '<li style="' + li + '">③ 친구가 <b>완전히 직접</b> 하고 싶으면 → <b>&#129706; 일반(독립) 계정으로 분리</b>.</li>' +
+            '<li style="' + li + '"><b>① 친구 등록</b>, 어울릴만한 사람 물색</li>' +
+            '<li style="' + li + '"><b>② 사진/대화 요청 가능</b> <span style="color:var(--muted);">(실제 인앱 대화는 친구 본인만 가능)</span></li>' +
+            '<li style="' + li + '"><b>③ 2가지 방법 제공</b><br>' +
+              '&nbsp;&nbsp;<b>&#128273; 1일 PIN</b> 발급 시 24시간 로그인 가능<br>' +
+              '&nbsp;&nbsp;<b>&#129706; 일반(독립) 계정</b>으로 승격 가능</li>' +
           '</ul>' +
         '</div>' +
         '<div style="' + box + 'margin-bottom:0;">' +
@@ -7144,9 +7146,9 @@
     var secPanel =
       '<div data-annpanel="sec" hidden><div style="' + box + 'margin-bottom:0;">' +
         '<ul style="padding-left:20px;margin:6px 0;">' +
-          '<li><b>개인 PIN·관리자 비밀번호</b>는 원문이 아닌 <b>강력한 해시(PBKDF2)</b>로만 저장돼요. <b>유출돼도 원문 복원이 사실상 불가</b>하고, <b>관리자도 볼 수 없어요.</b></li>' +
-          '<li><b>실명·전화번호·소개자</b>는 <b>암호화</b> 저장돼요. <b>다른 회원에겐 비공개</b>이고, 연락·확인용으로 <b>관리자만</b> 열람할 수 있어요.</li>' +
-          '<li><b>회원 간 채팅</b>은 앱에서 <b>관리자에게 표시되지 않아요.</b> (안전·분쟁 대응을 위해 서버에는 보관돼요.)</li>' +
+          '<li><b>개인 PIN</b> → 강력한 해시(PBKDF2), 유출돼도 원문 복원 불가, 관리자도 열람 불가 <span style="color:var(--muted);">(해킹 방지)</span></li>' +
+          '<li><b>실명·전화번호</b> → 암호화 저장, 다른 회원엔 비공개, 관리자만 열람 가능 <span style="color:var(--muted);">(연락 목적)</span></li>' +
+          '<li><b>회원 간 채팅</b> → 관리자에게 표시 안 됨 <span style="color:var(--muted);">(서버 보관, 추후 안전·분쟁 대응 목적)</span></li>' +
           '<li><b>사진</b>은 당사자가 직접 <b>수락</b>해야만 공개돼요 (수락 시 서로 공개). 전화번호는 서로 공개하지 않고, 대화가 연결되면 <b>앱 안 채팅</b>으로 대화해요.</li>' +
           '<li><b>데이터베이스 잠금</b> — 인증된 접속만 허용하고, 외부에서 데이터를 통째로 보거나 지울 수 없도록 규칙으로 막았어요.</li>' +
           '<li><b>수정·삭제는 로그인한 본인</b>(또는 관리자)만 할 수 있어요.</li>' +
@@ -7154,7 +7156,6 @@
         '<p style="color:var(--muted);font-size:0.82rem;margin-top:10px;">궁금하거나 불안한 점이 있으면 언제든 상단 &#128172; Q&amp;A 로 물어봐 주세요!</p>' +
       '</div></div>';
     var overlay = openModal(
-      '<h3 style="text-align:center;">안녕하세요! 베니브릿지입니다 &#128522;</h3>' +
       '<div class="role-toggle" style="margin-bottom:12px;">' +
         '<button type="button" class="role-btn active" data-anntab="greet">&#128075; 인사말</button>' +
         '<button type="button" class="role-btn" data-anntab="use">&#128214; 사용법</button>' +
