@@ -836,7 +836,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-191';
+  var APP_VERSION = '2026-09-09-192';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4678,7 +4678,7 @@
       '<div class="admin-bar">' +
         /* 1줄: 공지·사용법 / URL 복사 */
         '<div class="admin-bar-row">' +
-          '<button type="button" class="admin-link" id="show-notice" style="background:#1a73e8;border-color:#1a73e8;color:#fff;opacity:1;font-weight:700;">&#128227; 공지·사용법</button>' +
+          '<button type="button" class="admin-link" id="show-notice" style="background:#1a73e8;border-color:#1a73e8;color:#fff;opacity:1;font-weight:700;">&#128227; 인사말·공지사항·사용법</button>' +
           '<button type="button" class="admin-link" id="copy-url">&#128279; URL 복사</button>' +
         '</div>' +
         /* 2줄: 관리자 커피 사주기 / Q&A */
@@ -7070,7 +7070,7 @@
     });
   }
 
-  var ANNOUNCE_KEY = 'announce-v14'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
+  var ANNOUNCE_KEY = 'announce-v15'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
   function showAnnouncement(force) {
     if (!force) {
       try {
@@ -7079,8 +7079,18 @@
     }
     var box = 'background:var(--gold-soft);border:1px solid var(--gold);border-radius:10px;padding:10px 12px;margin-bottom:12px;';
     var li = 'margin:3px 0;';
+    var greetPanel =
+      '<div data-annpanel="greet">' +
+        '<p style="margin:0 0 10px;">안녕하세요, 베니입니다!👋</p>' +
+        '<p style="margin:0 0 10px;">그동안 소개팅 알아봐달라는 연락을 많이 받아왔는데, 바쁘다 보니 바로바로 매칭해드리지 못하는 경우가 많아 직접 플랫폼을 만들어봤습니다.</p>' +
+        '<p style="margin:0 0 10px;">지인 기반으로 시작한 거라 저와 직접 아는 사이가 아니어도 지인을 통해 연결되신 분이라면 언제든 환영이에요. 다만 익명으로 널리 오픈하기엔 아직 조심스러워서, 지인 네트워크 안에서부터 차근차근 넓혀가려고 합니다.</p>' +
+        '<p style="margin:0 0 10px;">링크로 들어가셔서 프로필을 등록하시면 등록된 분들을 자유롭게 둘러보실 수 있고, 마음에 드는 분께 직접 연락을 시도하시면 됩니다. 자동 매칭이 아닌 본인이 직접 다가가는 구조라 조금은 적극적인 마음가짐이 필요해요. 프로필 등록 시 <b>‘소개자’</b> 칸에 저를 중심으로 연결 경로를 “가능한” 자세히 적어주시면 감사하겠습니다. (예: ○○○ → △△△ → 베니)</p>' +
+        '<p style="margin:0 0 10px;">주변에 진지하게 좋은 인연을 찾고 계신 분들께 널리 알려주시면 감사하겠습니다. 다만 가벼운 마음으로 구경만 해보자는 마음가짐이시라면, 다른 분들의 시간과 진심을 위해 정중히 지양 부탁드립니다.</p>' +
+        '<p style="margin:0 0 10px;">아직 개발 초기 단계라 피드백을 받으며 다듬어가고 있어요. 사용 중 불편한 점이나 오류가 있을 시 너그러운 양해와 함께 편하게 알려주시면 큰 도움이 됩니다. 궁금한 점도 언제든 연락 주세요!</p>' +
+        '<p style="margin:0;">부디 이 작은 공간이 좋은 인연의 시작점이 되길 바랍니다 😊</p>' +
+      '</div>';
     var usePanel =
-      '<div data-annpanel="use">' +
+      '<div data-annpanel="use" hidden>' +
         '<div style="' + box + '">' +
           '&#128214; <b>사용 설명서</b><br>' +
           '<ul style="padding-left:18px;margin:6px 0;list-style:none;">' +
@@ -7119,10 +7129,11 @@
     var overlay = openModal(
       '<h3 style="text-align:center;">안녕하세요! 베니브릿지입니다 &#128522;</h3>' +
       '<div class="role-toggle" style="margin-bottom:12px;">' +
-        '<button type="button" class="role-btn active" data-anntab="use">&#128214; 사용법</button>' +
+        '<button type="button" class="role-btn active" data-anntab="greet">&#128075; 인사말</button>' +
+        '<button type="button" class="role-btn" data-anntab="use">&#128214; 사용법</button>' +
         '<button type="button" class="role-btn" data-anntab="sec">&#128274; 보안</button>' +
       '</div>' +
-      '<div class="modal-msg" style="text-align:left;line-height:1.7;font-size:0.86rem;">' + usePanel + secPanel + '</div>' +
+      '<div class="modal-msg" style="text-align:left;line-height:1.7;font-size:0.86rem;">' + greetPanel + usePanel + secPanel + '</div>' +
       '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">확인했어요</button></div>'
     );
     overlay.classList.add('wide-modal');
