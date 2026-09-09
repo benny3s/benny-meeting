@@ -836,7 +836,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-197';
+  var APP_VERSION = '2026-09-10-198';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3373,18 +3373,36 @@
       var friends = entriesManagedByMe(currentState).filter(function (e) { return !e.ownerSelf; });
       var editingFriend = editingEntryId && friends.some(function (f) { return f.id === editingEntryId; });
       var selfActive = (formRole === 'self') && !editingFriend;
-      var friendActive = !!editingFriend || (friends.length === 0 && !selfActive);
-      var addActive = (friends.length >= 1 && !selfActive && !editingFriend);
       return '<div class="role-toggle">' +
-        '<button type="button" class="role-btn' + (selfActive ? ' active' : '') + '" data-role="self">🧑‍💼 주선자</button>' +
-        '<button type="button" class="role-btn' + (friendActive ? ' active' : '') + '" data-role="friend-edit">🤝 친구</button>' +
-        (friends.length >= 1 ? '<button type="button" class="role-btn' + (addActive ? ' active' : '') + '" data-role="friend-add">🤝 추가</button>' : '') +
+        '<button type="button" class="role-btn' + (selfActive ? ' active' : '') + '" data-role="self">🙋 본인</button>' +
+        '<button type="button" class="role-btn' + (!selfActive ? ' active' : '') + '" data-role="friend">🤝 친구</button>' +
       '</div>';
     }
     var self = (formRole === 'self');
     return '<div class="role-toggle">' +
       '<button type="button" class="role-btn' + (self ? ' active' : '') + '" data-role="self">🙋 본인</button>' +
       '<button type="button" class="role-btn' + (!self ? ' active' : '') + '" data-role="matchmaker">🤝 주선자</button>' +
+    '</div>';
+  }
+  /* 주선자 [친구] 탭: 등록한 친구 목록 → 각자 수정 + 새 친구 추가 */
+  function friendManageHtml(state) {
+    var friends = entriesManagedByMe(state).filter(function (e) { return !e.ownerSelf; })
+      .sort(function (a, b) { return (a.submittedAt || '').localeCompare(b.submittedAt || ''); });
+    var pend = (state.pendingEntries || []).filter(function (e) { return e.managedBy === currentUser.id && !e.ownerSelf; });
+    var rows = friends.concat(pend).map(function (f) {
+      var isPend = pend.indexOf(f) >= 0;
+      return '<div class="pending-item">' +
+        '<div class="p-name">🤝 ' + escapeHtml(f.nickname) + (isPend ? ' <span class="chip" style="background:var(--gold-soft);color:var(--gold);">승인 대기</span>' : '') + '</div>' +
+        '<div class="p-meta">' + genderLabel(f.gender) + ' · ' + escapeHtml(f.region || '') + '</div>' +
+        '<div class="pending-actions">' +
+          '<button type="button" class="card-btn" data-action="edit" data-id="' + escapeHtml(f.id) + '">✏️ 수정</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    return '<div class="form-card">' +
+      '<div class="form-lede"><h2>🤝 친구 관리</h2><p>등록한 친구를 수정하거나, 새 친구를 추가하세요.</p></div>' +
+      (rows || '<p class="sub">아직 등록한 친구가 없어요.</p>') +
+      '<button type="button" class="submit-btn" id="add-friend-btn" style="width:100%;box-sizing:border-box;margin-top:12px;">＋ 새 친구 추가</button>' +
     '</div>';
   }
   /* 주선자: 로그인 또는 새 등록 선택 패널 (미로그인 시) */
@@ -3576,6 +3594,10 @@
     if (isEdit) {
       var _mmEdit = (state.entries || []).concat(state.pendingEntries || []).find(function (e) { return e.id === editingEntryId; });
       if (_mmEdit && _mmEdit.isMatchmaker) return renderMatchmakerEdit(state, _mmEdit);
+    }
+    /* 주선자: [친구] 탭 → 친구 관리 목록(수정/추가) */
+    if (!isEdit && formRole === 'friend-list' && isMatchmakerEntry(myAuthEntry(state))) {
+      return roleToggleHtml() + friendManageHtml(state);
     }
     var proxy = (proxyRegisterMode || (formRole === 'matchmaker' && currentUser)) && !isEdit; /* 친구 대신 소개(대리 등록) */
     /* 승인 대기 중인 계정(로그인은 됐지만 아직 명단에 없음)은 친구 소개 불가 → 본인 버튼과 동일하게 막음 */
@@ -6643,15 +6665,13 @@
       var rmode = roleBtn.getAttribute('data-role'); /* 'self' | 'matchmaker' | 'friend-edit' | 'friend-add' */
       proxyRegisterMode = false;
       photoDataUrls = [];
-      if (rmode === 'self') { openSelfForm(); return; } /* 주선자/본인 프로필: 있으면 수정, 없으면 작성 */
-      /* 주선자 전용: 친구 추가(새로 작성) */
-      if (rmode === 'friend-add') { formRole = 'matchmaker'; editingEntryId = null; activeTab = 'form'; paint(currentState); return; }
-      /* 주선자 전용: 친구 수정(있으면 활동 중/첫 친구 편집, 없으면 새로 작성) */
-      if (rmode === 'friend-edit') {
+      if (rmode === 'self') { openSelfForm(); return; } /* 본인(주선자 본인) 프로필: 있으면 수정, 없으면 작성 */
+      /* 주선자 전용: 친구 관리 — 친구가 있으면 목록(수정/추가), 없으면 바로 새 친구 작성 */
+      if (rmode === 'friend') {
         var myFriends = entriesManagedByMe(currentState).filter(function (e) { return !e.ownerSelf; });
-        if (!myFriends.length) { formRole = 'matchmaker'; editingEntryId = null; activeTab = 'form'; paint(currentState); return; }
-        var target = myFriends.find(function (f) { return f.id === actingAs; }) || myFriends[0];
-        startEditing(target); return;
+        formRole = myFriends.length ? 'friend-list' : 'matchmaker';
+        editingEntryId = null; activeTab = 'form'; paint(currentState);
+        return;
       }
       /* 주선자 탭(일반 회원): "친구 소개 = 주선자 전환" 흐름 */
       var meRole = currentUser && myAuthEntry(currentState);
@@ -6659,6 +6679,7 @@
       formRole = rmode; editingEntryId = null; paint(currentState);
       return;
     }
+    if (e.target.closest('#add-friend-btn')) { formRole = 'matchmaker'; editingEntryId = null; proxyRegisterMode = false; photoDataUrls = []; activeTab = 'form'; paint(currentState); return; }
     if (e.target.closest('#mm-new-btn')) { formRole = 'mm-new'; photoDataUrls = []; paint(currentState); return; }
     if (e.target.closest('#mm-back')) { formRole = 'matchmaker'; paint(currentState); return; }
     if (e.target.closest('#mm-login')) { handleLogin({ matchmakerOnly: true }); return; }
@@ -6667,7 +6688,10 @@
       var destTab = tabBtn.getAttribute('data-tab');
       if (destTab === 'form') {
         exampleTipDismissed = false; proxyRegisterMode = false; editingEntryId = null;
-        if (meIsMatchmaker()) { activeTab = 'form'; formRole = 'matchmaker'; paint(currentState); } /* 주선자 기본: 친구 추가 */
+        if (meIsMatchmaker()) { /* 주선자 기본: 친구가 있으면 친구 관리, 없으면 새 친구 작성 */
+          var _fr = entriesManagedByMe(currentState).filter(function (x) { return !x.ownerSelf; });
+          activeTab = 'form'; formRole = _fr.length ? 'friend-list' : 'matchmaker'; paint(currentState);
+        }
         else { activeTab = 'form'; openSelfForm(); } /* 일반 회원: 본인 프로필(있으면 수정, 없으면 새로) */
         window.scrollTo(0, 0);
         return;
@@ -7344,14 +7368,12 @@
       '<h3>&#9749; 관리자에게 커피 한 잔</h3>' +
       '<p class="modal-msg" style="text-align:center;">서버 운영과 기능 개선에 큰 힘이 돼요. 감사합니다! 🙏</p>' +
       '<div style="text-align:center;margin:6px 0 10px;"><img src="coffee-qr.png" alt="카카오페이 후원 QR" style="width:230px;max-width:80%;border-radius:12px;"></div>' +
-      '<p class="modal-msg" style="text-align:center;font-size:0.84rem;">휴대폰 카메라로 <b>QR을 스캔</b>하면 카카오페이로 후원할 수 있어요.</p>' +
+      '<p class="modal-msg" style="text-align:center;font-size:0.84rem;">휴대폰 카메라로 <b>QR을 스캔</b>하면 카카오페이로 후원할 수 있어요. <span style="color:var(--muted);">(링크 열기는 휴대폰에서만 동작해요)</span></p>' +
       '<div class="modal-actions" style="flex-direction:column;gap:8px;align-items:stretch;">' +
-        '<button type="button" class="card-btn primary" id="coffee-open">카카오페이로 열기</button>' +
-        '<button type="button" class="card-btn" id="coffee-copy">🔗 링크 복사</button>' +
+        '<button type="button" class="card-btn primary" id="coffee-copy">🔗 링크 복사</button>' +
         '<button type="button" class="card-btn" id="modal-cancel">닫기</button>' +
       '</div>'
     );
-    ov.querySelector('#coffee-open').addEventListener('click', function () { try { window.open(COFFEE_URL, '_blank'); } catch (e) { location.href = COFFEE_URL; } });
     ov.querySelector('#coffee-copy').addEventListener('click', function () {
       try { navigator.clipboard.writeText(COFFEE_URL); modalNotice('복사됨', '후원 링크를 복사했어요.'); } catch (e) { modalNotice('안내', COFFEE_URL); }
     });
