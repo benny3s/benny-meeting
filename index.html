@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-175';
+  var APP_VERSION = '2026-09-09-176';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4511,7 +4511,7 @@
       '<div class="admin-bar">' +
         '<div class="admin-bar-row">' +
           '<button type="button" class="admin-link" id="copy-url">&#128279; URL 복사</button>' +
-          '<button type="button" class="admin-link" id="show-notice">&#128227; 공지사항</button>' +
+          '<button type="button" class="admin-link" id="show-notice" style="background:#1a73e8;border-color:#1a73e8;color:#fff;opacity:1;font-weight:700;">&#128227; 공지·사용법</button>' +
           '<button type="button" class="admin-link" id="feedback-btn">&#128172; Q&amp;A</button>' +
         '</div>' +
         (NOTIF_ENABLED
@@ -6743,7 +6743,7 @@
     });
   }
 
-  var ANNOUNCE_KEY = 'announce-v10'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
+  var ANNOUNCE_KEY = 'announce-v11'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
   function showAnnouncement(force) {
     if (!force) {
       try {
@@ -6755,11 +6755,11 @@
     var usePanel =
       '<div data-annpanel="use">' +
         '<div style="' + box + '">' +
-          '&#128587; <b>본인으로 참여</b><br>' +
+          '&#128214; <b>사용 설명서</b><br>' +
           '<ul style="padding-left:18px;margin:6px 0;list-style:none;">' +
-            '<li style="' + li + '">① <b>[본인]</b>으로 신청서 제출 (<b>사진 1장↑ 필수</b>) → 관리자 승인 후 명단에.</li>' +
-            '<li style="' + li + '">② 마음에 들면 <b>&#128247; 사진 요청</b>(수락 시 서로 공개) 또는 <b>&#128156; 대화 신청</b>(수락 시 앱 안 채팅). <span style="color:var(--muted);">전화번호는 공개 안 해요.</span></li>' +
-            '<li style="' + li + '">③ 받은 요청은 <b>수락·보류·거절+답장</b>. 메시지함에서 <b>내 사진 본 사람 회수</b>도 가능.</li>' +
+            '<li style="' + li + '"><b>① 신청서 작성</b> — 얼굴 보이는 사진 <b>1장 이상 등록 필수</b> → 관리자 승인 후 명단 등록.</li>' +
+            '<li style="' + li + '"><b>② 명단 보기</b> — <b>&#128247; 사진 요청</b>(수락 시 서로 공개, 요청하면서 <b>먼저 공개도 가능</b>) 또는 <b>&#128172; 대화 요청</b>(수락 시 인앱 채팅). <span style="color:var(--muted);">전화번호는 추후 카카오톡 알림 및 지인과 서로 마주치지 않기 위해 받고 있어요.</span></li>' +
+            '<li style="' + li + '"><b>③ 메시지함</b> — 보낸/받은 요청을 관리하고, 권한을 회수할 수도 있어요.</li>' +
           '</ul>' +
         '</div>' +
         '<div style="' + box + '">' +
