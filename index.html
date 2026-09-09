@@ -576,6 +576,13 @@
   .req-sum-who { font-size: 0.92rem; font-weight: 600; }
   .req-sum-when { color: var(--muted); font-size: 0.74rem; margin-left: auto; padding-left: 8px; }
   .req-fold-body { padding: 0 14px 12px; }
+  /* 접기 카드 하단: 날짜 → 그 아래 버튼(왼쪽 정렬) */
+  .req-fold .req-foot { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 8px; padding-top: 10px; border-top: 1px dashed var(--line); }
+  .req-fold .req-foot .when { color: var(--muted); font-size: 0.8rem; }
+  .req-fold .req-foot-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  /* 요청 나이별 색 구분: 오늘=하늘색 / 5일 넘게 대기=회색 (테마 안전 tint) */
+  .req-fold.req-today { background: rgba(26,115,232,0.12); border-color: rgba(26,115,232,0.5); }
+  .req-fold.req-stale { background: rgba(120,120,120,0.14); border-color: rgba(120,120,120,0.45); }
   /* 사용량 현황 표 */
   .stats-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; margin: 6px 0 4px; }
   .stats-table th, .stats-table td { border: 1px solid var(--line); padding: 6px 8px; text-align: center; }
@@ -829,7 +836,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-190';
+  var APP_VERSION = '2026-09-09-191';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4078,7 +4085,7 @@
         '<thead><tr><th style="text-align:left;">날짜</th><th>누적 회원</th><th>가입</th><th>📷사진</th><th>💌대화</th></tr></thead>' +
         '<tbody>' + trendRows + '</tbody>' +
       '</table></div>';
-    return '<details style="margin-bottom:14px;"><summary style="cursor:pointer;font-weight:700;">📊 사용량 현황</summary>' +
+    return '<details style="margin-bottom:14px;"><summary style="cursor:pointer;font-weight:700;font-size:1.2rem;">📊 사용량 현황</summary>' +
       '<div style="margin-top:8px;">' + summary +
       '<p class="stats-sub" style="margin:10px 0 4px;">일자별 추이 (최신순 · 누적 회원=그 날까지 가입한 현재 회원, 가입=신규 프로필, 신청=보낸 날 기준)</p>' + trend +
       '<p class="stats-sub" style="margin-top:6px;">※ 탈퇴한 회원은 집계에 없어 누적은 현재 회원 기준이에요. 승인/탈퇴 시점은 별도로 기록되지 않아요.</p>' +
@@ -4246,26 +4253,32 @@
       } else {
         actionBtns = decideBtns;
       }
+      /* 오늘 요청=하늘색 · 5일 넘게 대기중=회색 */
+      var todayK = kstDay(new Date().toISOString());
+      var subK = r.submittedAt ? kstDay(r.submittedAt) : '';
+      var ageDays = r.submittedAt ? Math.floor((Date.now() - new Date(r.submittedAt).getTime()) / 86400000) : 0;
+      var isDoneR = (st === 'approved' || st === 'rejected');
+      var foldCls = 'req-fold' + (subK === todayK ? ' req-today' : (!isDoneR && ageDays > 5 ? ' req-stale' : ''));
       return (
-        '<details class="req-fold"' + (st === 'approved' || st === 'rejected' ? '' : '') + '>' +
+        '<details class="' + foldCls + '">' +
           summary +
           '<div class="req-fold-body">' +
             body +
             '<div class="req-foot">' +
               '<span class="when">' + new Date(r.submittedAt).toLocaleString('ko-KR') + '</span>' +
-              actionBtns +
+              '<div class="req-foot-btns">' + actionBtns + '</div>' +
             '</div>' +
           '</div>' +
         '</details>'
       );
     };
     var isDone = function (r) { var st = reqStatus(r); return st === 'approved' || st === 'rejected'; };
-    var activeReqs = reqs.filter(function (r) { return !isDone(r); });
+    var activeReqs = reqs.filter(function (r) { return !isDone(r); }).sort(function (a, b) { return (b.submittedAt || '').localeCompare(a.submittedAt || ''); }); /* 최신 위로 */
     var doneReqs = reqs.filter(isDone).sort(function (a, b) { return (b.decidedAt || b.submittedAt || '').localeCompare(a.decidedAt || a.submittedAt || ''); });
     var activeItems = activeReqs.map(adminReqRow).join('');
     var doneItems = doneReqs.map(adminReqRow).join('');
     var doneSection = doneReqs.length
-      ? '<details style="margin-top:12px;"><summary style="cursor:pointer;font-weight:700;font-size:0.95rem;">✅ 요청완료 (' + doneReqs.length + ')</summary>' +
+      ? '<details style="margin-top:12px;"><summary style="cursor:pointer;font-weight:700;font-size:1.2rem;">✅ 요청완료 (' + doneReqs.length + ')</summary>' +
           '<div style="margin-top:10px;">' + doneItems + '</div></details>'
       : '';
 
