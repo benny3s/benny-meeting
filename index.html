@@ -836,7 +836,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-201';
+  var APP_VERSION = '2026-09-10-202';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -6617,9 +6617,9 @@
     rows += '<div class="detail-row"><div class="detail-label">고유번호</div><div class="detail-value">' + escapeHtml(formatUid(entry) || '—') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">닉네임</div><div class="detail-value">' + escapeHtml(entry.nickname) + '</div></div>';
     if (isProxyEntry(entry)) rows += '<div class="detail-row"><div class="detail-label">등록 형태</div><div class="detail-value">' + (entry.ownerSelf ? '🙋 주선자 본인 프로필 (주선자: ' + escapeHtml(managerNickOf(state, entry)) + ')' : '🤝 대리 등록 (주선자: ' + escapeHtml(managerNickOf(state, entry)) + ')' + (entry.proxyConsentAt ? ' · 본인 동의 확인' : '')) + '</div></div>';
-    rows += '<div class="detail-row"><div class="detail-label">실명</div><div class="detail-value" id="detail-realname">복호화 중...</div></div>';
-    rows += '<div class="detail-row"><div class="detail-label">연락처</div><div class="detail-value" id="detail-contact">복호화 중...</div></div>';
-    rows += '<div class="detail-row"><div class="detail-label">소개자</div><div class="detail-value" id="detail-referrer">복호화 중...</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">실명</div><div class="detail-value" id="detail-realname">' + (entry.realNameEnc ? '복호화 중...' : '-') + '</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">연락처</div><div class="detail-value" id="detail-contact">' + (entry.contactEnc ? '복호화 중...' : '-') + '</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">소개자</div><div class="detail-value" id="detail-referrer">' + (entry.referrerEnc ? '복호화 중...' : '-') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">성별</div><div class="detail-value">' + genderLabel(entry.gender) + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">생년</div><div class="detail-value">' + (entry.birthYear || '-') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">지역</div><div class="detail-value">' + escapeHtml(entry.region || '-') + '</div></div>';
@@ -6691,16 +6691,16 @@
       decryptWithAdmin(adminPrivateKey, entry.realNameEnc).then(function (name) {
         var nameEl = document.getElementById('detail-realname');
         if (nameEl) nameEl.textContent = name;
-      }).catch(function () {});
+      }).catch(function () { var el = document.getElementById('detail-realname'); if (el) el.textContent = '(복호화 실패)'; });
     }
     if (isAdminUnlocked && adminPrivateKey && entry.referrerEnc) {
       decryptWithAdmin(adminPrivateKey, entry.referrerEnc).then(function (ref) {
         var refEl = document.getElementById('detail-referrer');
         if (refEl) refEl.textContent = ref;
-      }).catch(function () {});
+      }).catch(function () { var el = document.getElementById('detail-referrer'); if (el) el.textContent = '(복호화 실패)'; });
     }
-    rows += '<div class="detail-row"><div class="detail-label">실명</div><div class="detail-value" id="detail-realname">복호화 중...</div></div>';
-    rows += '<div class="detail-row"><div class="detail-label">소개자</div><div class="detail-value" id="detail-referrer">복호화 중...</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">실명</div><div class="detail-value" id="detail-realname">' + (entry.realNameEnc ? '복호화 중...' : '-') + '</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">소개자</div><div class="detail-value" id="detail-referrer">' + (entry.referrerEnc ? '복호화 중...' : '-') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">성별</div><div class="detail-value">' + genderLabel(entry.gender) + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">생년</div><div class="detail-value">' + (entry.birthYear || '-') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">지역</div><div class="detail-value">' + escapeHtml(entry.region) + '</div></div>';
