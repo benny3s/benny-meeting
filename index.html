@@ -836,7 +836,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-193';
+  var APP_VERSION = '2026-09-09-194';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2701,6 +2701,11 @@
   function openDmChat(otherId) {
     var me = findMyEntry(currentState);
     if (!me) { modalNotice('로그인 필요', '먼저 로그인해주세요.'); return; }
+    /* 채팅은 친구 본인만 — 주선자가 친구로 전환한 상태(대리)에서는 대신 채팅 불가 */
+    if (me.managedBy && me.managedBy === currentUser.id && !me.ownerSelf) {
+      modalNotice('안내', '채팅은 친구 본인이 직접 로그인해서 나눠야 해요. 상단 "🔄 누구로 활동할까요"에서 이 친구를 골라 🔑 1일 PIN을 발급해 전달하거나, 🎓 독립 계정으로 전환해 주세요.');
+      return;
+    }
     if (!canViewContactOf(currentState, me.id, otherId)) { modalNotice('안내', '대화 신청이 수락되면 채팅할 수 있어요.'); return; }
     var otherNick = nickForEntry(currentState, otherId);
     var overlay = openModal(
@@ -7070,7 +7075,7 @@
     });
   }
 
-  var ANNOUNCE_KEY = 'announce-v16'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
+  var ANNOUNCE_KEY = 'announce-v17'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
   function showAnnouncement(force) {
     if (!force) {
       try {
@@ -7122,6 +7127,7 @@
           '<li><b>사진</b>은 당사자가 직접 <b>수락</b>해야만 공개돼요 (수락 시 서로 공개). <b>전화번호는 서로 공개하지 않고</b>, 대화가 연결되면 <b>앱 안 채팅</b>으로만 대화해요.</li>' +
           '<li><b>데이터베이스 잠금</b> — 인증된 접속만 허용하고, 외부에서 데이터를 통째로 보거나 지울 수 없도록 규칙으로 막았어요.</li>' +
           '<li><b>개인 PIN·관리자 비밀번호</b>는 원문이 아닌 <b>강력한 해시(PBKDF2)</b>로만 저장돼, <b>관리자도 원문을 볼 수 없어요.</b></li>' +
+          '<li><b>회원 간 채팅</b>은 앱에서 <b>관리자에게 표시되지 않아요.</b> (안전·분쟁 대응을 위해 서버에는 보관돼요.)</li>' +
           '<li><b>수정·삭제는 로그인한 본인</b>(또는 관리자)만 할 수 있어요.</li>' +
         '</ul>' +
         '<p style="color:var(--muted);font-size:0.82rem;margin-top:10px;">궁금하거나 불안한 점이 있으면 언제든 상단 &#128172; Q&amp;A 로 물어봐 주세요!</p>' +
