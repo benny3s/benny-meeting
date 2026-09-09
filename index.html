@@ -836,7 +836,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-200';
+  var APP_VERSION = '2026-09-10-201';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4760,6 +4760,16 @@
     if (currentUser) {
       var myEntry = findMyEntry(state);
       var unread = userUnread(state, myEntry);
+      /* 주선자 계정: 지금 활동 중인 프로필뿐 아니라 내가 관리하는 친구들의 안 읽은 알림도 탭 배지에 합산 */
+      if (isMatchmakerEntry(myAuthEntry(state))) {
+        var counted = {};
+        if (myEntry) counted[myEntry.id] = true;
+        entriesManagedByMe(state).forEach(function (f) {
+          if (counted[f.id]) return;
+          counted[f.id] = true;
+          unread += userUnread(state, f);
+        });
+      }
       var unreadBadge = unread ? '<span class="count blink" title="안 읽은 알림">' + unread + '</span>' : '';
       tabs += '<button type="button" class="tab-btn" data-tab="mine" role="tab" aria-selected="' + (activeTab === 'mine') + '">메시지함' + unreadBadge + '</button>';
     }
