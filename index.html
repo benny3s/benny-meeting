@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-08-172';
+  var APP_VERSION = '2026-09-09-173';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3969,7 +3969,7 @@
         '<thead><tr><th style="text-align:left;">날짜</th><th>누적 회원</th><th>가입</th><th>📷사진</th><th>💌대화</th></tr></thead>' +
         '<tbody>' + trendRows + '</tbody>' +
       '</table></div>';
-    return '<details open style="margin-bottom:14px;"><summary style="cursor:pointer;font-weight:700;">📊 사용량 현황</summary>' +
+    return '<details style="margin-bottom:14px;"><summary style="cursor:pointer;font-weight:700;">📊 사용량 현황</summary>' +
       '<div style="margin-top:8px;">' + summary +
       '<p class="stats-sub" style="margin:10px 0 4px;">일자별 추이 (최신순 · 누적 회원=그 날까지 가입한 현재 회원, 가입=신규 프로필, 신청=보낸 날 기준)</p>' + trend +
       '<p class="stats-sub" style="margin-top:6px;">※ 탈퇴한 회원은 집계에 없어 누적은 현재 회원 기준이에요. 승인/탈퇴 시점은 별도로 기록되지 않아요.</p>' +
@@ -6719,7 +6719,7 @@
     });
   }
 
-  var ANNOUNCE_KEY = 'announce-v9'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
+  var ANNOUNCE_KEY = 'announce-v10'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
   function showAnnouncement(force) {
     if (!force) {
       try {
@@ -6741,9 +6741,9 @@
         '<div style="' + box + '">' +
           '&#129309; <b>주선자로 친구 소개</b> <span style="color:var(--muted);">(내가 소개팅 안 해도 OK)</span><br>' +
           '<ul style="padding-left:18px;margin:6px 0;list-style:none;">' +
-            '<li style="' + li + '">① 신청서 위 <b>[주선자]</b> → <b>친구 추가</b>로 대신 등록 <span style="color:var(--muted);">(친구 동의 후)</span>.</li>' +
-            '<li style="' + li + '">② 상단 <b>&#128260; 누구로 활동할까요</b>에서 친구로 <b>전환</b>해 대신 요청·승인.</li>' +
-            '<li style="' + li + '">③ 친구가 <b>직접</b> 보게 하려면 → <b>&#128273; 1일 임시 PIN</b> 발급.  아예 <b>넘겨주려면</b> → <b>&#129706; 독립 계정 전환</b>. <span style="color:var(--muted);">(친구로 전환 후 메시지함에서)</span></li>' +
+            '<li style="' + li + '">① <b>친구 등록</b> → 주선자가 <b>친구로 전환(로그인)</b>해서 대신 활동.</li>' +
+            '<li style="' + li + '">② 친구가 <b>잠깐 직접</b> 하고 싶으면 → <b>&#128273; 1일 PIN</b> 발급해 전달 → 친구가 하루 동안 로그인.</li>' +
+            '<li style="' + li + '">③ 친구가 <b>완전히 직접</b> 하고 싶으면 → <b>&#129706; 일반(독립) 계정으로 분리</b>.</li>' +
           '</ul>' +
         '</div>' +
         '<div style="' + box + 'margin-bottom:0;">' +
