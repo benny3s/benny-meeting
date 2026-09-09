@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-178';
+  var APP_VERSION = '2026-09-09-179';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2324,7 +2324,7 @@
     });
     return new Promise(function (resolve) {
       var overlay = openModal(
-        '<h3>로그인</h3>' +
+        '<h3 id="login-title" style="user-select:none;-webkit-user-select:none;cursor:default;">로그인</h3>' +
         '<div class="role-toggle" style="margin-bottom:10px;">' +
           '<button type="button" class="role-btn" data-lmode="self">🙋 본인</button>' +
           '<button type="button" class="role-btn" data-lmode="mm">🤝 주선자</button>' +
@@ -2402,6 +2402,19 @@
         if (e.key === 'Escape') finish(null);
       });
       overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
+      /* 숨은 관리자 진입: 제목 "로그인"을 3번 연달아 터치 → 관리자 비밀번호 입력 */
+      var _titleTaps = 0, _titleTimer = null;
+      var titleEl = overlay.querySelector('#login-title');
+      if (titleEl) titleEl.addEventListener('click', function () {
+        _titleTaps++;
+        clearTimeout(_titleTimer);
+        _titleTimer = setTimeout(function () { _titleTaps = 0; }, 900);
+        if (_titleTaps >= 3) {
+          _titleTaps = 0; clearTimeout(_titleTimer);
+          finish(null);           /* 로그인 창 닫고 */
+          handleAdminToggle();    /* 관리자 비밀번호 입력/인증 */
+        }
+      });
     });
   }
 
@@ -4509,31 +4522,33 @@
       '</div>' +
       '<p class="masthead-sub">관리자 주변 사람들 중심으로, 좋은 인연을 맺어주는 작은 공간이에요.</p>' +
       '<div class="admin-bar">' +
+        /* 1줄: 공지·사용법 / URL / Q&A */
         '<div class="admin-bar-row">' +
-          '<button type="button" class="admin-link" id="copy-url">&#128279; URL 복사</button>' +
           '<button type="button" class="admin-link" id="show-notice" style="background:#1a73e8;border-color:#1a73e8;color:#fff;opacity:1;font-weight:700;">&#128227; 공지·사용법</button>' +
+          '<button type="button" class="admin-link" id="copy-url">&#128279; URL</button>' +
           '<button type="button" class="admin-link" id="feedback-btn">&#128172; Q&amp;A</button>' +
         '</div>' +
-        (NOTIF_ENABLED
-          ? '<div class="admin-bar-row">' +
-              (isStandalone() ? '' : '<button type="button" class="admin-link" id="add-home">&#128241; 홈에 추가</button>') +
-              '<button type="button" class="admin-link' + (memberNotifActive() ? ' unlocked' : '') + '" id="notif-toggle">' +
-                (memberNotifBroken() ? '&#128276; 알림 재설정 필요' : (memberNotifActive() ? '&#128276; 알림 ON' : '&#128276; 알림 OFF')) + '</button>' +
-              '<button type="button" class="admin-link" id="notif-help">&#128718; 가이드</button>' +
-            '</div>'
-          : '') +
+        /* 2줄: 관리자 커피 사주기 */
         '<div class="admin-bar-row">' +
+          '<button type="button" class="admin-link" id="buy-coffee" style="background:var(--gold-soft);border-color:var(--gold);color:var(--gold);opacity:1;font-weight:700;">&#9749; 관리자 커피 사주기</button>' +
+        '</div>' +
+        /* 3줄: 홈에 추가 / 알림 / 로그인 */
+        '<div class="admin-bar-row">' +
+          ((NOTIF_ENABLED && !isStandalone()) ? '<button type="button" class="admin-link" id="add-home">&#128241; 홈에 추가</button>' : '') +
+          (NOTIF_ENABLED
+            ? '<button type="button" class="admin-link' + (memberNotifActive() ? ' unlocked' : '') + '" id="notif-toggle">' +
+                (memberNotifBroken() ? '&#128276; 알림 재설정' : (memberNotifActive() ? '&#128276; 알림 ON' : '&#128276; 알림 OFF')) + '</button>'
+            : '') +
           (currentUser
-            ? '<button type="button" class="admin-link unlocked" id="user-logout">' + ICON_UNLOCK + ' ' + escapeHtml(currentUser.nickname) + ' · 로그아웃</button>'
-            : (isAdminUnlocked ? '' : '<button type="button" class="admin-link" id="user-login">' + ICON_LOCK + ' 로그인</button>')) +
-          (currentUser
-            ? (canChangePin ? '<button type="button" class="admin-link" id="header-change-pin">&#128273; PIN 변경</button>' : '')
-            : '<button type="button" class="admin-link' + (isAdminUnlocked ? ' unlocked' : '') + '" id="admin-toggle">' +
-                (isAdminUnlocked ? ICON_UNLOCK + ' 관리자 모드' : ICON_LOCK + ' 관리자') + '</button>') +
+            ? '<button type="button" class="admin-link unlocked" id="user-logout">' + ICON_UNLOCK + ' ' + escapeHtml(currentUser.nickname) + ' · 로그아웃</button>' +
+              (canChangePin ? '<button type="button" class="admin-link" id="header-change-pin">&#128273; PIN 변경</button>' : '')
+            : (isAdminUnlocked
+                ? '<button type="button" class="admin-link unlocked" id="admin-toggle">' + ICON_UNLOCK + ' 관리자 해제</button>'
+                : '<button type="button" class="admin-link" id="user-login">' + ICON_LOCK + ' 로그인</button>')) +
         '</div>' +
       '</div></div>' +
       '<div class="notice-bar">' +
-        '<span class="notice-icon">&#128227;</span> 요청이 오거나 승인·거절되면 알림으로 바로 알려드려요. 위 <b>&#128276; 알림</b> 버튼으로 켜보세요! (방법은 <b>&#128718; 가이드</b>)' +
+        '<span class="notice-icon">&#128227;</span> 요청이 오거나 승인·거절되면 알림으로 바로 알려드려요. 위 <b>&#128276; 알림</b> 버튼을 눌러 켜보세요! (설정·테스트·방법 안내가 한 곳에 있어요)' +
       '</div>' +
       '<div class="page">' +
         '<div class="sticky-head">' +
@@ -6367,11 +6382,15 @@
       return;
     }
     if (e.target.closest('#notif-toggle')) {
-      handleNotifToggle();
+      showNotifHelp(); /* 이제 가이드(설정/테스트/ON·OFF 포함)로 이동 */
       return;
     }
     if (e.target.closest('#notif-help')) {
       showNotifHelp();
+      return;
+    }
+    if (e.target.closest('#buy-coffee')) {
+      handleBuyCoffee();
       return;
     }
     if (e.target.closest('#add-home')) {
@@ -6940,6 +6959,32 @@
       });
     }
   }
+  /* 관리자에게 커피 사주기(카카오페이 후원). PC=QR 모달, 모바일=링크 바로 열기 */
+  var COFFEE_URL = 'https://qr.kakaopay.com/281006011000080950628454';
+  function handleBuyCoffee() {
+    var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+    if (isMobile) {
+      try { window.open(COFFEE_URL, '_blank'); } catch (e) { location.href = COFFEE_URL; }
+      return;
+    }
+    var ov = openModal(
+      '<h3>&#9749; 관리자에게 커피 한 잔</h3>' +
+      '<p class="modal-msg" style="text-align:center;">서버 운영과 기능 개선에 큰 힘이 돼요. 감사합니다! 🙏</p>' +
+      '<div style="text-align:center;margin:6px 0 10px;"><img src="coffee-qr.png" alt="카카오페이 후원 QR" style="width:230px;max-width:80%;border-radius:12px;"></div>' +
+      '<p class="modal-msg" style="text-align:center;font-size:0.84rem;">휴대폰 카메라로 <b>QR을 스캔</b>하면 카카오페이로 후원할 수 있어요.</p>' +
+      '<div class="modal-actions" style="flex-direction:column;gap:8px;align-items:stretch;">' +
+        '<button type="button" class="card-btn primary" id="coffee-open">카카오페이로 열기</button>' +
+        '<button type="button" class="card-btn" id="coffee-copy">🔗 링크 복사</button>' +
+        '<button type="button" class="card-btn" id="modal-cancel">닫기</button>' +
+      '</div>'
+    );
+    ov.querySelector('#coffee-open').addEventListener('click', function () { try { window.open(COFFEE_URL, '_blank'); } catch (e) { location.href = COFFEE_URL; } });
+    ov.querySelector('#coffee-copy').addEventListener('click', function () {
+      try { navigator.clipboard.writeText(COFFEE_URL); modalNotice('복사됨', '후원 링크를 복사했어요.'); } catch (e) { modalNotice('안내', COFFEE_URL); }
+    });
+    ov.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(ov); });
+    ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(ov); });
+  }
   function showNotifHelp() {
     var ua = navigator.userAgent || '';
     var isIOS = /iPhone|iPad|iPod/i.test(ua);
@@ -6953,8 +6998,12 @@
         '<ol style="margin:0;padding-left:18px;font-size:0.84rem;line-height:1.6;color:var(--ink);">' + steps + '</ol></div>';
     }
     var html =
-      '<h3>🔔 알림 켜는 법</h3>' +
-      '<button type="button" class="submit-btn" id="notif-test-btn" style="width:100%;box-sizing:border-box;margin:2px 0 12px;padding:11px;font-size:0.92rem;">🔔 테스트 알림 보내기</button>' +
+      '<h3>🔔 알림 설정</h3>' +
+      '<div style="display:flex;gap:8px;margin:2px 0 12px;">' +
+        '<button type="button" class="submit-btn" id="notif-test-btn" style="flex:1;box-sizing:border-box;padding:11px;font-size:0.9rem;">🔔 테스트 알림</button>' +
+        '<button type="button" class="submit-btn" id="notif-toggle-btn" style="flex:1;box-sizing:border-box;padding:11px;font-size:0.9rem;' + (memberNotifActive() ? '' : 'background:var(--muted);') + '">' +
+          (memberNotifBroken() ? '⚠️ 알림 재설정' : (memberNotifActive() ? '✅ 알림 켜짐 (끄기)' : '🔕 알림 꺼짐 (켜기)')) + '</button>' +
+      '</div>' +
       '<p class="modal-msg" style="margin-bottom:6px;">요청이 오거나 승인·거절되면 기기로 바로 알림을 받아요. 기기별로 켜는 방법이 조금 달라요.</p>' +
       sec('android', '🤖 안드로이드 (크롬)',
         '<li>(선택) 상단 <b>📱 홈 화면에 추가</b> 로 앱을 설치하면 더 안정적이에요.</li>' +
@@ -6979,6 +7028,17 @@
     overlay.querySelector('#modal-ok').addEventListener('click', finish);
     var tb = overlay.querySelector('#notif-test-btn');
     if (tb) tb.addEventListener('click', sendTestNotification);
+    var tg = overlay.querySelector('#notif-toggle-btn');
+    if (tg) tg.addEventListener('click', function () {
+      handleNotifToggle();
+      /* 토글 흐름(권한/토스트) 후 버튼 라벨 갱신 */
+      setTimeout(function () {
+        try {
+          tg.textContent = memberNotifBroken() ? '⚠️ 알림 재설정' : (memberNotifActive() ? '✅ 알림 켜짐 (끄기)' : '🔕 알림 꺼짐 (켜기)');
+          tg.style.background = memberNotifActive() ? '' : 'var(--muted)';
+        } catch (e) {}
+      }, 1500);
+    });
     overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(); });
   }
   function handleNotifToggle() {
