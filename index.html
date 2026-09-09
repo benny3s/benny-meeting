@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-180';
+  var APP_VERSION = '2026-09-09-181';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2951,6 +2951,64 @@
     var d = decryptedRequests[r.id];
     return (d && d.note) || '';
   }
+  /* 추천인 선택 모달 — 로그인창과 동일한 회원 검색/선택, PIN만 없음.
+     resolve: 선택한 표시문자열 | '' (없음) | ' MANUAL' (직접 입력) | null (취소) */
+  function pickReferrer() {
+    var state = currentState || {};
+    var showTest = testAccountsShown() || meIsTest();
+    var pool = (state.entries || []).slice()
+      .filter(function (e) { return (!e.testAccount || showTest); })
+      .sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); })
+      .map(function (e) { var uid = formatUid(e); return { id: e.id, nickname: e.nickname || '', uid: uid, search: ((uid || '') + ' ' + (e.nickname || '')).toLowerCase() }; });
+    return new Promise(function (resolve) {
+      var overlay = openModal(
+        '<h3>👥 추천인 선택</h3>' +
+        '<p class="modal-msg">나를 추천한 회원을 골라주세요. <span style="color:var(--muted);">(선택)</span></p>' +
+        '<input type="text" class="modal-input" id="ref-search" placeholder="🔍 고유번호 또는 닉네임 검색" autocomplete="off">' +
+        '<div class="login-list" id="ref-list"></div>' +
+        '<div class="modal-actions" style="flex-wrap:wrap;gap:6px;">' +
+          '<button type="button" class="card-btn" id="ref-cancel">취소</button>' +
+          '<button type="button" class="card-btn" id="ref-none">없음</button>' +
+          '<button type="button" class="card-btn" id="ref-manual">✏️ 직접 입력</button>' +
+        '</div>'
+      );
+      overlay.classList.add('login-modal');
+      var searchInput = overlay.querySelector('#ref-search'), listEl = overlay.querySelector('#ref-list');
+      function finish(v) { closeModal(overlay); resolve(v); }
+      function render() {
+        var q = searchInput.value.trim().toLowerCase();
+        var m = pool.filter(function (o) { return !q || o.search.indexOf(q) >= 0; });
+        listEl.innerHTML = m.length ? m.map(function (o) {
+          return '<div class="login-item" data-cid="' + escapeHtml(o.id) + '" data-label="' + escapeHtml(o.nickname + (o.uid ? ' (' + o.uid + ')' : '')) + '">' +
+            '<span style="color:var(--muted);font-size:0.8rem;margin-right:10px;">' + escapeHtml(o.uid || '') + '</span><b style="color:var(--ink);">' + escapeHtml(o.nickname) + '</b></div>';
+        }).join('') : '<div class="combo-empty">검색 결과가 없어요 — “직접 입력”을 이용하세요</div>';
+      }
+      render();
+      searchInput.addEventListener('input', render);
+      listEl.addEventListener('click', function (e) { var it = e.target.closest('[data-cid]'); if (it) finish(it.getAttribute('data-label')); });
+      overlay.querySelector('#ref-cancel').addEventListener('click', function () { finish(null); });
+      overlay.querySelector('#ref-none').addEventListener('click', function () { finish(''); });
+      overlay.querySelector('#ref-manual').addEventListener('click', function () { finish(' MANUAL'); });
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
+    });
+  }
+  function setReferrerField(val) {
+    var inp = document.getElementById('f-referrer'); if (inp) inp.value = val;
+    var disp = document.getElementById('referrer-display');
+    if (disp) { disp.textContent = val ? ('✓ ' + val) : '없음'; disp.style.color = val ? 'var(--gold)' : 'var(--muted)'; }
+  }
+  function handlePickReferrer() {
+    pickReferrer().then(function (v) {
+      if (v === null) return;
+      if (v === ' MANUAL') {
+        modalMessage('추천인 직접 입력', '추천인을 적어주세요 (목록에 없는 경우).', '확인', 'primary', '예: 홍길동 (관리자 친구)').then(function (t) {
+          if (t == null) return; setReferrerField((t || '').trim());
+        });
+        return;
+      }
+      setReferrerField(v);
+    });
+  }
 
   /* ---- rendering ---- */
   /* ---- 사진: 목록은 썸네일, 원본은 photos/{id} 문서에서 필요할 때 로드 ---- */
@@ -3530,9 +3588,11 @@
               ? '<div class="field"><label for="f-referrer">소개 대상과의 관계 <span class="opt">(선택)</span></label>' +
                   '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 대학 후배 / 회사 동료">' +
                   '<span class="hint">' + ICON_LOCK + ' 주선자(나)와 소개 대상의 관계예요. 관리자만 볼 수 있어요.</span></div>'
-              : '<div class="field"><label for="f-referrer">누구를 통해 알게 되셨나요? ' + (isEdit ? '<span class="opt">(비우면 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
-                  '<input type="text" id="f-referrer" name="referrerText" maxlength="60"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 홍길동 (관리자 친구 통해)" required') + '>' +
-                  '<span class="hint">예: <span class="ex">홍길동 (관리자 친구)</span> · <span class="ex">김철수 (소개한 친구)</span> · <span class="ex">우연히·SNS</span><br>' + ICON_LOCK + ' 연락용이며, 암호화되어 관리자만 볼 수 있어요.</span></div>') +
+              : '<div class="field"><label>추천인 <span class="opt">(선택)</span></label>' +
+                  '<input type="hidden" id="f-referrer" name="referrerText" value="">' +
+                  '<button type="button" class="card-btn" id="pick-referrer" style="width:100%;box-sizing:border-box;">👥 추천인 선택 (회원 검색)</button>' +
+                  '<div id="referrer-display" class="hint" style="margin-top:6px;color:var(--muted);">' + (isEdit ? '(비우면 기존 값 유지)' : '아직 선택 안 함') + '</div>' +
+                  '<span class="hint">나를 추천한 회원을 골라주세요. 목록에 없으면 “직접 입력”. ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>') +
             '<div class="field"><label>사진 ' + (isEdit ? '<span class="opt">(최대 3장)</span>' : '<span class="req">필수</span> <span class="opt">1~3장</span>') + '</label>' +
               '<span class="hint">기본은 <b class="ex">흐리게(비공개)</b> — 요청을 승인한 사람에게만 보여요. 아래 체크를 풀면 <b class="ex">전체 공개</b>가 됩니다.</span>' +
               '<div class="photo-upload-area" id="photo-upload-area"></div>' +
@@ -4632,7 +4692,7 @@
     var setVal = function (n, v) { var el = form.querySelector('[name="' + n + '"]'); if (el && v) el.value = v; };
     setVal('nickname', d.nickname); setVal('realName', d.realName); setVal('contact', d.contact);
     setVal('birthYear', d.birthYear); setVal('region', d.region); setVal('workplace', d.workplace);
-    setVal('referrerText', d.referrerText); setVal('height', d.height);
+    setVal('referrerText', d.referrerText); if (d.referrerText) { try { setReferrerField(d.referrerText); } catch (e) {} } setVal('height', d.height);
     setVal('intro', d.intro); setVal('idealType', d.idealType); setVal('dealbreaker', d.dealbreaker);
     if (d.gender) { var gr = form.querySelector('[name="gender"][value="' + d.gender + '"]'); if (gr) gr.checked = true; }
     if (d.degreeChoice) { var dr = form.querySelector('[name="degreeChoice"][value="' + d.degreeChoice + '"]'); if (dr) dr.checked = true; }
@@ -4863,7 +4923,7 @@
     if (!isEdit) {
       if (!realName) missing.push('실명');
       if (!contact) missing.push('전화번호');
-      if (!managedCreate && !referrerText) missing.push('소개자'); /* 대리/주선자본인 등록은 소개자 선택 */
+      /* 추천인은 선택 항목 (필수 아님) */
       if (!managedCreate && !pin && !currentUser) missing.push('개인 PIN'); /* 로그인 상태면 기존 PIN 재사용 가능 */
       if (intro.length < 20) missing.push('자기소개(20자 이상)');
       if (idealType.length < 10) missing.push('원하는 이성 조건(10자 이상)');
@@ -6391,6 +6451,10 @@
     }
     if (e.target.closest('#buy-coffee')) {
       handleBuyCoffee();
+      return;
+    }
+    if (e.target.closest('#pick-referrer')) {
+      handlePickReferrer();
       return;
     }
     if (e.target.closest('#add-home')) {
