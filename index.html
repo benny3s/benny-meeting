@@ -601,6 +601,25 @@
     font-family: 'Gowun Dodum', sans-serif;
   }
 
+  /* 관리자 폴딩 섹션 — 모든 섹션 통일 (네이티브 ▶ 마커 제거, 우측 커스텀 ⌄) */
+  .admin-fold { margin-bottom: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+  .admin-fold[open] { border-color: var(--gold); }
+  .admin-fold > summary {
+    cursor: pointer; list-style: none; padding: 13px 15px;
+    display: flex; align-items: center; gap: 4px;
+    font-weight: 700; font-size: 1.05rem; color: var(--ink);
+  }
+  .admin-fold > summary::-webkit-details-marker { display: none; }
+  .admin-fold > summary::after {
+    content: '⌄'; margin-left: auto; padding-left: 8px; color: var(--muted);
+    font-size: 1.15rem; line-height: 1; transform: translateY(-3px);
+    transition: transform 0.15s ease;
+  }
+  .admin-fold[open] > summary::after { transform: translateY(1px) rotate(180deg); }
+  .admin-fold > summary .pending-count { margin-left: 6px; }
+  .admin-fold-body { padding: 0 15px 15px; }
+  .admin-fold-body > .sub:first-child { margin-top: 0; }
+
   /* Pending section in admin */
   .pending-section { margin-bottom: 28px; }
   .pending-item {
@@ -836,7 +855,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-203';
+  var APP_VERSION = '2026-09-10-204';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1670,7 +1689,7 @@
     return new Promise(function (resolve) {
       var overlay = openModal(
         '<h3>관리자 비밀번호 설정</h3>' +
-        '<p class="modal-msg">대문자·소문자·숫자·특수문자를 포함해 8자 이상으로 설정하세요. 이 비밀번호로만 실명, 연락처, 소개자, 신청함을 볼 수 있어요.</p>' +
+        '<p class="modal-msg">대문자·소문자·숫자·특수문자를 포함해 8자 이상으로 설정하세요. 이 비밀번호로만 실명, 연락처, 알게 된 경로, 신청함을 볼 수 있어요.</p>' +
         '<input type="password" class="modal-input" id="modal-pin1" placeholder="비밀번호 입력" maxlength="64" autocomplete="new-password">' +
         '<input type="password" class="modal-input" id="modal-pin2" placeholder="비밀번호 확인" maxlength="64" autocomplete="new-password" style="margin-top:8px;">' +
         '<div class="modal-actions">' +
@@ -3622,7 +3641,7 @@
       ? '<div class="readonly-note">관리자 초기 설정이 아직 안 됐어요. 운영자라면 위의 "관리자" 버튼을 눌러 PIN을 먼저 설정해주세요.</div>'
       : '';
     var editNote = isEdit
-      ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">프로필 수정 모드입니다. 실명·연락처·소개자·PIN은 비워두면 기존 값이 유지돼요. <button type="button" class="card-btn" id="cancel-edit" style="margin-left:8px;padding:4px 12px;">수정 취소</button></div>'
+      ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">프로필 수정 모드입니다. 실명·연락처·알게 된 경로·PIN은 비워두면 기존 값이 유지돼요. <button type="button" class="card-btn" id="cancel-edit" style="margin-left:8px;padding:4px 12px;">수정 취소</button></div>'
       : '';
     var proxyNote = proxy
       ? (formRole === 'matchmaker'
@@ -3688,10 +3707,10 @@
               ? '<div class="field"><label for="f-referrer">소개 대상과의 관계 <span class="opt">(선택)</span></label>' +
                   '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 대학 후배 / 회사 동료">' +
                   '<span class="hint">' + ICON_LOCK + ' 주선자(나)와 소개 대상의 관계예요. 관리자만 볼 수 있어요.</span></div>'
-              : '<div class="field"><label for="f-referrer">알게 된 경로 <span class="opt">(선택)</span></label>' +
-                  '<input type="text" id="f-referrer" name="referrerText" maxlength="60"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 홍길동 소개 / 베니 지인"') + '>' +
+              : '<div class="field"><label for="f-referrer">알게 된 경로 ' + (isEdit ? '<span class="opt">(비우면 기존 값 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
+                  '<input type="text" id="f-referrer" name="referrerText" maxlength="60"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 홍길동 소개 / 베니 지인" required') + '>' +
                   '<button type="button" class="card-btn" id="pick-referrer" style="width:100%;box-sizing:border-box;margin-top:6px;">👥 회원 목록에서 선택</button>' +
-                  '<span class="hint">직접 입력하거나, 회원 목록에서 골라 채울 수 있어요. ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>') +
+                  '<span class="hint">어떻게 알게 됐는지 적어주세요 (소개자·경로 등). 회원 목록에서 골라 채울 수도 있어요. ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>') +
             '<div class="field"><label>사진 ' + (isEdit ? '<span class="opt">(최대 3장)</span>' : '<span class="req">필수</span> <span class="opt">1~3장</span>') + '</label>' +
               '<span class="hint">기본은 <b class="ex">흐리게(비공개)</b> — 요청을 승인한 사람에게만 보여요. 아래 체크를 풀면 <b class="ex">전체 공개</b>가 됩니다.</span>' +
               '<div class="photo-upload-area" id="photo-upload-area"></div>' +
@@ -3737,7 +3756,7 @@
             : '<div class="consent-box">' +
                 '<label class="consent-label"><input type="checkbox" id="f-consent">' +
                   ' <span>개인정보 수집 및 이용에 동의합니다.</span></label>' +
-                '<p class="consent-detail">수집 항목: 닉네임, 실명, 연락처, 소개자, 성별, 생년, 지역, 직장, 사진, 자기소개 등<br>' +
+                '<p class="consent-detail">수집 항목: 닉네임, 실명, 연락처, 알게 된 경로, 성별, 생년, 지역, 직장, 사진, 자기소개 등<br>' +
                   '수집 목적: 소개팅 매칭 및 관리자 연락<br>' +
                   '보유 기간: 서비스 이용 종료 시 즉시 삭제<br>' +
                   '동의를 거부할 권리가 있으며, 거부 시 신청이 불가합니다.</p>' +
@@ -4245,8 +4264,8 @@
         '<thead><tr><th style="text-align:left;">날짜</th><th>누적 회원</th><th>가입</th><th>📷사진</th><th>💌대화</th></tr></thead>' +
         '<tbody>' + trendRows + '</tbody>' +
       '</table></div>';
-    return '<details style="margin-bottom:14px;"><summary style="cursor:pointer;font-weight:700;font-size:1.2rem;">📊 사용량 현황</summary>' +
-      '<div style="margin-top:8px;">' + summary +
+    return '<details class="admin-fold"><summary>📊 사용량 현황</summary>' +
+      '<div class="admin-fold-body">' + summary +
       '<p class="stats-sub" style="margin:10px 0 4px;">일자별 추이 (최신순 · 누적 회원=그 날까지 가입한 현재 회원, 가입=신규 프로필, 신청=보낸 날 기준)</p>' + trend +
       '<p class="stats-sub" style="margin-top:6px;">※ 탈퇴한 회원은 집계에 없어 누적은 현재 회원 기준이에요. 승인/탈퇴 시점은 별도로 기록되지 않아요.</p>' +
       '</div></details>';
@@ -4254,7 +4273,15 @@
 
   function renderAdmin(state) {
     if (!isAdminUnlocked) {
-      return '<div class="admin-panel"><h2>관리자 모드</h2><p class="sub">위쪽 "관리자" 버튼으로 PIN을 입력하면 승인 대기 명단, 실명, 연락처, 소개자, 대화 신청함을 볼 수 있어요.</p></div>';
+      return '<div class="admin-panel"><h2>관리자 모드</h2><p class="sub">위쪽 "관리자" 버튼으로 PIN을 입력하면 승인 대기 명단, 실명, 연락처, 알게 된 경로, 대화 신청함을 볼 수 있어요.</p></div>';
+    }
+    /* 관리자 섹션 통일 폴딩: 제목 + 개수 배지 + 본문. count가 null이면 배지 생략 */
+    function adminFold(title, count, body, open) {
+      var cnt = (count === null || count === undefined) ? '' : '<span class="pending-count">' + count + '</span>';
+      return '<details class="admin-fold"' + (open ? ' open' : '') + '>' +
+        '<summary>' + title + cnt + '</summary>' +
+        '<div class="admin-fold-body">' + body + '</div>' +
+      '</details>';
     }
     var pending = state.pendingEntries || [];
     var pendingItems = pending.map(function (e) {
@@ -4297,15 +4324,12 @@
         '</div>'
       );
     }).join('');
-    var pendingSection =
-      '<div class="pending-section">' +
-        '<h2>승인 대기<span class="pending-count">' + pending.length + '</span></h2>' +
-        (pending.length ? pendingItems : '<p class="sub">대기 중인 신청이 없어요.</p>') +
-      '</div>';
+    var pendingSection = adminFold('⏳ 승인 대기', pending.length,
+      (pending.length ? pendingItems : '<p class="sub">대기 중인 신청이 없어요.</p>'), pending.length > 0);
     /* 삭제 요청 (회원이 삭제 요청 → 관리자 승인 후 삭제. 삭제 후 튀기 방지) */
     var delReqs = (state.entries || []).filter(function (e) { return e.deleteRequested; });
     var deleteReqSection = delReqs.length
-      ? '<div class="pending-section"><h2>🗑 삭제 요청<span class="pending-count">' + delReqs.length + '</span></h2>' +
+      ? adminFold('🗑 삭제 요청', delReqs.length,
           delReqs.map(function (e) {
             return '<div class="pending-item">' +
               '<div class="p-name" data-action="card-detail" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(e.nickname) + ' <span class="chip" style="background:#fce8e6;color:#c5221f;">삭제 요청</span></div>' +
@@ -4316,13 +4340,12 @@
                 '<button type="button" class="card-btn" data-action="cancel-delete" data-id="' + escapeHtml(e.id) + '">요청 취소</button>' +
               '</div>' +
             '</div>';
-          }).join('') +
-        '</div>'
+          }).join(''), delReqs.length > 0)
       : '';
     /* 비활성화(보관) 요청 */
     var deacReqs = (state.entries || []).filter(function (e) { return e.deactivateRequested; });
     var deacReqSection = deacReqs.length
-      ? '<div class="pending-section"><h2>🗄 비활성화 요청<span class="pending-count">' + deacReqs.length + '</span></h2>' +
+      ? adminFold('🗄 비활성화 요청', deacReqs.length,
           deacReqs.map(function (e) {
             return '<div class="pending-item">' +
               '<div class="p-name" data-action="card-detail" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(e.nickname) + ' <span class="chip" style="background:var(--gold-soft);color:var(--gold);">비활성화 요청</span></div>' +
@@ -4333,13 +4356,12 @@
                 '<button type="button" class="card-btn" data-action="cancel-deactivate" data-id="' + escapeHtml(e.id) + '">요청 취소</button>' +
               '</div>' +
             '</div>';
-          }).join('') +
-        '</div>'
+          }).join(''), deacReqs.length > 0)
       : '';
     /* 보관(비활성) 계정 목록 — 사유·재활성화·연결 안내 */
     var deacList = (state.entries || []).filter(function (e) { return e.deactivated; });
     var deacListSection = deacList.length
-      ? '<div class="pending-section"><h2>🗄 보관 계정<span class="pending-count">' + deacList.length + '</span></h2>' +
+      ? adminFold('🗄 보관 계정', deacList.length,
           '<p class="sub">비활성화(보관)된 계정이에요. 명단엔 안 보여요. 사유 확인·다시 활성화·연결 회원 안내를 할 수 있어요.</p>' +
           deacList.map(function (e) {
             return '<div class="pending-item">' +
@@ -4351,8 +4373,7 @@
                 '<button type="button" class="card-btn" data-action="notify-connected" data-id="' + escapeHtml(e.id) + '">📢 연결 회원 안내</button>' +
               '</div>' +
             '</div>';
-          }).join('') +
-        '</div>'
+          }).join(''), false)
       : '';
     var allEntries = state.entries;
     var uidOf = function (eid) {
@@ -4438,8 +4459,7 @@
     var activeItems = activeReqs.map(adminReqRow).join('');
     var doneItems = doneReqs.map(adminReqRow).join('');
     var doneSection = doneReqs.length
-      ? '<details style="margin-top:12px;"><summary style="cursor:pointer;font-weight:700;font-size:1.2rem;">✅ 요청완료 (' + doneReqs.length + ')</summary>' +
-          '<div style="margin-top:10px;">' + doneItems + '</div></details>'
+      ? adminFold('✅ 요청완료', doneReqs.length, doneItems, false)
       : '';
 
     /* 회원 명단 (트리): 로그인 계정(주선자/일반)이 최상위, 그 아래 관리 프로필(본인/친구) */
@@ -4528,15 +4548,14 @@
     function seenTh(col, label) {
       return '<th data-action="seen-sort" data-col="' + col + '" style="cursor:pointer;user-select:none;white-space:nowrap;">' + label + sortArrow(adminSeenSort, col) + '</th>';
     }
-    var seenSection =
-      '<h2>👥 회원 명단</h2>' +
+    var seenSection = adminFold('👥 회원 명단', tops.length,
       '<p class="sub">로그인 계정이 상위, 그 아래 <span class="chip" style="background:#fdeef0;color:var(--accent);">🙋 본인</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 친구</span> 가 붙어요. <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자</span> <span class="chip" style="background:#f1f1f1;color:#777;">일반</span>. 헤더로 정렬 · 닉네임 클릭 = 프로필 · <b>접속 시간 클릭 = 그 사람 활동 기록</b> · 📷/📱 = <b>이 사람이 볼 수 있는</b> 사진·번호 수(클릭해서 관리).</p>' +
       typeFilterBtns +
       (tops.length
         ? '<div class="admin-table-wrap"><table class="seen-table"><thead><tr>' +
             seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 사진') + seenTh('contact', '💬 채팅') + '<th style="white-space:nowrap;">🙈 필터</th>' +
           '</tr></thead><tbody>' + seenRows + '</tbody></table></div>'
-        : '<p class="sub">등록된 사람이 없어요.</p>');
+        : '<p class="sub">등록된 사람이 없어요.</p>'), false);
 
     /* 서버 용량 */
     var capSection = capacityHtml(state);
@@ -4587,10 +4606,13 @@
     function logTh(col, label) {
       return '<th data-action="log-sort" data-col="' + col + '" style="cursor:pointer;user-select:none;white-space:nowrap;">' + label + sortArrow(adminLogSort, col) + '</th>';
     }
+    var logFilterActive = !!(adminLogFilterActor || adminLogFilterTime || adminLogFilterNick);
     var logSection =
-      '<h2 id="activity-log-section">📜 활동 기록</h2>' +
+      '<details class="admin-fold" id="activity-log-section"' + (logFilterActive ? ' open' : '') + '>' +
+      '<summary>📜 활동 기록<span class="pending-count">' + logData.length + '</span></summary>' +
+      '<div class="admin-fold-body">' +
       '<p class="sub">헤더로 정렬, 아래 칸으로 검색해요. 최근 ' + LOG_LIMIT + '건까지 보관. (관리자만)</p>' +
-      ((adminLogFilterActor || adminLogFilterTime || adminLogFilterNick)
+      (logFilterActive
         ? '<p class="sub" style="margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
             '<span class="chip" style="background:var(--gold-soft);color:var(--gold);">🔎 ' + escapeHtml(adminLogFilterNick || adminLogFilterActor || adminLogFilterTime) + '</span>' +
             '<button type="button" class="card-btn" data-action="log-clear" style="flex:none;padding:2px 10px;">✕ 필터 해제</button>' +
@@ -4607,7 +4629,8 @@
             '</tr>' +
           '</thead><tbody>' + logRows + '</tbody></table></div>' +
           '<p class="sub" id="log-empty-note" hidden>검색 결과가 없어요.</p>'
-        : '<p class="sub">아직 기록이 없어요.</p>');
+        : '<p class="sub">아직 기록이 없어요.</p>') +
+      '</div></details>';
 
     /* 관리자 메시지 (회원별 스레드) */
     var msgByEntry = {};
@@ -4645,11 +4668,30 @@
         '</div>' +
       '</details>';
     }).join('');
-    var adminMsgSection =
-      '<h2>💬 관리자 메시지<span class="pending-count">' + msgEntryIds.length + '</span></h2>' +
+    var adminMsgUnreadTotal = (state.messages || []).filter(function (m) { return m.from === 'user' && !m.hiddenByAdmin && !m.readByAdmin; }).length;
+    var adminMsgSection = adminFold('💬 관리자 메시지', msgEntryIds.length,
       '<p class="sub">회원별로 한 줄씩 보여요. 눌러서 대화를 펼치고 답장할 수 있어요. (✕ 개별 삭제 / 전체 삭제)</p>' +
-      (msgEntryIds.length ? adminMsgItems : '<p class="sub">아직 메시지가 없어요.</p>');
+      (msgEntryIds.length ? adminMsgItems : '<p class="sub">아직 메시지가 없어요.</p>'), adminMsgUnreadTotal > 0);
 
+    var activeReqSection = adminFold('📬 요청함', activeReqs.length,
+      '<p class="sub">아직 처리하지 않은 사진 요청·대화 신청이에요.</p>' +
+      (activeReqs.length ? activeItems : '<p class="sub">처리할 요청이 없어요.</p>'), activeReqs.length > 0);
+    var testBody =
+      '<p class="sub">체크한 계정은 테스트 계정이 돼요. 일반 회원 명단에서는 숨겨지고, 아래 "테스트 계정 표시"를 켜야 관리자 명단에 보여요.</p>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">' +
+        '<b style="font-size:0.9rem;">테스트 계정 표시 (관리자 명단)</b>' +
+        '<button type="button" class="card-btn' + (testAccountsShown() ? ' approve' : '') + '" id="toggle-show-test" style="flex:none;">' + (testAccountsShown() ? '켜짐' : '꺼짐') + '</button>' +
+      '</div>' +
+      '<div class="test-acct-list" style="border:1px solid var(--line);border-radius:12px;max-height:340px;overflow-y:auto;">' +
+        (allEntries.filter(function (e) { return !e.isMatchmaker; }).sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); }).map(function (e) {
+          var kind = e.ownerSelf ? '🙋 주선자 본인' : (e.managedBy ? '🤝 주선자 친구' : '일반 회원');
+          return '<label style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);cursor:pointer;">' +
+            '<input type="checkbox" data-testtoggle="' + escapeHtml(e.id) + '"' + (e.testAccount ? ' checked' : '') + ' style="width:17px;height:17px;accent-color:var(--accent);flex:none;">' +
+            '<span style="font-variant-numeric:tabular-nums;"><b>' + escapeHtml(formatUid(e) || '—') + '</b> ' + escapeHtml(e.nickname) + ' <span style="color:var(--muted);font-size:0.78rem;">' + kind + '</span>' + (e.testAccount ? ' <span class="chip" style="background:#e8eaed;color:#5f6368;">🧪</span>' : '') + '</span>' +
+          '</label>';
+        }).join('') || '<p class="sub" style="padding:12px 14px;margin:0;">등록된 계정이 없어요.</p>') +
+      '</div>';
+    var testSection = adminFold('🧪 테스트 계정', null, testBody, false);
     return (
       '<div class="admin-panel">' +
         '<div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
@@ -4658,39 +4700,16 @@
         '</div>' +
         usageStatsHtml(state) +
         pendingSection +
-        (deleteReqSection ? '<hr class="perforation">' + deleteReqSection : '') +
-        (deacReqSection ? '<hr class="perforation">' + deacReqSection : '') +
-        (deacListSection ? '<hr class="perforation">' + deacListSection : '') +
-        '<hr class="perforation">' +
-        '<h2>📬 요청함<span class="pending-count">' + activeReqs.length + '</span></h2>' +
-        '<p class="sub">아직 처리하지 않은 사진 요청·대화 신청이에요.</p>' +
-        (activeReqs.length ? activeItems : '<p class="sub">처리할 요청이 없어요.</p>') +
-        '<hr class="perforation">' +
+        deleteReqSection +
+        deacReqSection +
+        deacListSection +
+        activeReqSection +
         adminMsgSection +
-        '<hr class="perforation">' +
         doneSection +
-        '<hr class="perforation">' +
         capSection +
-        '<hr class="perforation">' +
         seenSection +
-        '<hr class="perforation">' +
         logSection +
-        '<hr class="perforation">' +
-        '<h2>🧪 테스트 계정</h2>' +
-        '<p class="sub">체크한 계정은 테스트 계정이 돼요. 일반 회원 명단에서는 숨겨지고, 아래 "테스트 계정 표시"를 켜야 관리자 명단에 보여요.</p>' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">' +
-          '<b style="font-size:0.9rem;">테스트 계정 표시 (관리자 명단)</b>' +
-          '<button type="button" class="card-btn' + (testAccountsShown() ? ' approve' : '') + '" id="toggle-show-test" style="flex:none;">' + (testAccountsShown() ? '켜짐' : '꺼짐') + '</button>' +
-        '</div>' +
-        '<div class="test-acct-list" style="border:1px solid var(--line);border-radius:12px;max-height:340px;overflow-y:auto;">' +
-          (allEntries.filter(function (e) { return !e.isMatchmaker; }).sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); }).map(function (e) {
-            var kind = e.ownerSelf ? '🙋 주선자 본인' : (e.managedBy ? '🤝 주선자 친구' : '일반 회원');
-            return '<label style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);cursor:pointer;">' +
-              '<input type="checkbox" data-testtoggle="' + escapeHtml(e.id) + '"' + (e.testAccount ? ' checked' : '') + ' style="width:17px;height:17px;accent-color:var(--accent);flex:none;">' +
-              '<span style="font-variant-numeric:tabular-nums;"><b>' + escapeHtml(formatUid(e) || '—') + '</b> ' + escapeHtml(e.nickname) + ' <span style="color:var(--muted);font-size:0.78rem;">' + kind + '</span>' + (e.testAccount ? ' <span class="chip" style="background:#e8eaed;color:#5f6368;">🧪</span>' : '') + '</span>' +
-            '</label>';
-          }).join('') || '<p class="sub" style="padding:12px 14px;margin:0;">등록된 계정이 없어요.</p>') +
-        '</div>' +
+        testSection +
       '</div>'
     );
   }
@@ -4728,7 +4747,7 @@
     if (pct > 85) warn = '<p class="sub" style="color:#c5221f;margin-top:10px;">⚠️ 메인 문서가 거의 찼어요. 회원 텍스트를 버킷으로 나눌 때가 됐어요.</p>';
     else if (pct > 60) warn = '<p class="sub" style="color:#b06000;margin-top:10px;">메인 문서 사용량이 절반을 넘었어요.</p>';
     return (
-      '<h2>💾 서버 용량 (메인 문서)</h2>' +
+      '<details class="admin-fold"><summary>💾 서버 용량 (메인 문서)</summary><div class="admin-fold-body">' +
       '<p class="sub">사진은 회원별 문서로 분리 저장돼요. 이 표는 1MB 한계가 걸리는 메인 문서(회원 텍스트·썸네일·요청·로그)만 표시해요.</p>' +
       '<div class="cap-bar"><div class="cap-fill" style="width:' + pct.toFixed(1) + '%;background:' + barColor + ';"></div></div>' +
       '<div class="cap-total">' + fmtBytes(total) + ' / 1 MB 사용 중 <b>(' + pct.toFixed(1) + '%)</b> · 남은 용량 ' + fmtBytes(roomLeft) + '</div>' +
@@ -4742,7 +4761,8 @@
           '<tr><td><b>메인 문서에 더 담을 수 있는 인원 (추정)</b></td><td class="seen-date"><b>약 ' + morePeople + '명</b></td></tr>' +
         '</tbody>' +
       '</table>' +
-      warn
+      warn +
+      '</div></details>'
     );
   }
 
@@ -5190,7 +5210,8 @@
     if (!isEdit) {
       if (!realName) missing.push('실명');
       if (!contact) missing.push('전화번호');
-      /* 추천인은 선택 항목 (필수 아님) */
+      /* 알게 된 경로: 일반 회원 본인 등록은 필수. 대리/주선자 본인 생성은 아래에서 자동 설정하므로 제외 */
+      if (!managedCreate && !referrerText) missing.push('알게 된 경로');
       if (!managedCreate && !pin && !currentUser) missing.push('개인 PIN'); /* 로그인 상태면 기존 PIN 재사용 가능 */
       if (intro.length < 20) missing.push('자기소개(20자 이상)');
       if (idealType.length < 10) missing.push('원하는 이성 조건(10자 이상)');
@@ -6621,7 +6642,7 @@
     if (isProxyEntry(entry)) rows += '<div class="detail-row"><div class="detail-label">등록 형태</div><div class="detail-value">' + (entry.ownerSelf ? '🙋 주선자 본인 프로필 (주선자: ' + escapeHtml(managerNickOf(state, entry)) + ')' : '🤝 대리 등록 (주선자: ' + escapeHtml(managerNickOf(state, entry)) + ')' + (entry.proxyConsentAt ? ' · 본인 동의 확인' : '')) + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">실명</div><div class="detail-value" id="detail-realname">' + (entry.realNameEnc ? '복호화 중...' : '-') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">연락처</div><div class="detail-value" id="detail-contact">' + (entry.contactEnc ? '복호화 중...' : '-') + '</div></div>';
-    rows += '<div class="detail-row"><div class="detail-label">소개자</div><div class="detail-value" id="detail-referrer">' + (entry.referrerEnc ? '복호화 중...' : '-') + '</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">알게 된 경로</div><div class="detail-value" id="detail-referrer">' + (entry.referrerEnc ? '복호화 중...' : '-') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">성별</div><div class="detail-value">' + genderLabel(entry.gender) + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">생년</div><div class="detail-value">' + (entry.birthYear || '-') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">지역</div><div class="detail-value">' + escapeHtml(entry.region || '-') + '</div></div>';
@@ -6702,7 +6723,7 @@
       }).catch(function () { var el = document.getElementById('detail-referrer'); if (el) el.textContent = '(복호화 실패)'; });
     }
     rows += '<div class="detail-row"><div class="detail-label">실명</div><div class="detail-value" id="detail-realname">' + (entry.realNameEnc ? '복호화 중...' : '-') + '</div></div>';
-    rows += '<div class="detail-row"><div class="detail-label">소개자</div><div class="detail-value" id="detail-referrer">' + (entry.referrerEnc ? '복호화 중...' : '-') + '</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">알게 된 경로</div><div class="detail-value" id="detail-referrer">' + (entry.referrerEnc ? '복호화 중...' : '-') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">성별</div><div class="detail-value">' + genderLabel(entry.gender) + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">생년</div><div class="detail-value">' + (entry.birthYear || '-') + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">지역</div><div class="detail-value">' + escapeHtml(entry.region) + '</div></div>';
@@ -7258,7 +7279,7 @@
     });
   }
 
-  var ANNOUNCE_KEY = 'announce-v21'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
+  var ANNOUNCE_KEY = 'announce-v22'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
   function showAnnouncement(force) {
     if (!force) {
       try {
@@ -7272,7 +7293,7 @@
         '<p style="margin:0 0 10px;">안녕하세요, 베니입니다!👋</p>' +
         '<p style="margin:0 0 10px;">그동안 소개팅 알아봐달라는 연락을 많이 받아왔는데, 바쁘다 보니 바로바로 매칭해드리지 못하는 경우가 많아 직접 플랫폼을 만들어봤습니다.</p>' +
         '<p style="margin:0 0 10px;">지인 기반으로 시작한 거라 저와 직접 아는 사이가 아니어도 지인을 통해 연결되신 분이라면 언제든 환영이에요. 다만 익명으로 널리 오픈하기엔 아직 조심스러워서, 지인 네트워크 안에서부터 차근차근 넓혀가려고 합니다.</p>' +
-        '<p style="margin:0 0 10px;">프로필을 등록하시면 등록된 분들을 자유롭게 둘러보실 수 있고, 마음에 드는 분께 직접 연락을 시도하시면 됩니다. 자동 매칭이 아닌 본인이 직접 다가가는 구조라 조금은 적극적인 마음가짐이 필요해요. 프로필 등록 시 <b>‘소개자’</b> 칸에 저를 중심으로 연결 경로를 “가능한” 자세히 적어주시면 감사하겠습니다. (예: ○○○ → △△△ → 베니)</p>' +
+        '<p style="margin:0 0 10px;">프로필을 등록하시면 등록된 분들을 자유롭게 둘러보실 수 있고, 마음에 드는 분께 직접 연락을 시도하시면 됩니다. 자동 매칭이 아닌 본인이 직접 다가가는 구조라 조금은 적극적인 마음가짐이 필요해요. 프로필 등록 시 <b>‘알게 된 경로’</b> 칸에 저를 중심으로 연결 경로를 “가능한” 자세히 적어주시면 감사하겠습니다. (예: ○○○ → △△△ → 베니)</p>' +
         '<p style="margin:0 0 10px;">주변에 진지하게 좋은 인연을 찾고 계신 분들께 널리 알려주시면 감사하겠습니다. 다만 가벼운 마음으로 구경만 해보자는 마음가짐이시라면, 다른 분들의 시간과 진심을 위해 정중히 지양 부탁드립니다.</p>' +
         '<p style="margin:0 0 10px;">아직 개발 초기 단계라 피드백을 받으며 다듬어가고 있어요. 사용 중 불편한 점이나 오류가 있을 시 너그러운 양해와 함께 편하게 알려주시면 큰 도움이 됩니다. 궁금한 점도 언제든 연락 주세요!</p>' +
         '<p style="margin:0;">부디 이 작은 공간이 좋은 인연의 시작점이 되길 바랍니다 😊</p>' +
