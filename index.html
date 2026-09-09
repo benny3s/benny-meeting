@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-183';
+  var APP_VERSION = '2026-09-09-184';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2966,11 +2966,7 @@
         '<p class="modal-msg">나를 추천한 회원을 골라주세요. <span style="color:var(--muted);">(선택)</span></p>' +
         '<input type="text" class="modal-input" id="ref-search" placeholder="🔍 고유번호 또는 닉네임 검색" autocomplete="off">' +
         '<div class="login-list" id="ref-list"></div>' +
-        '<div class="modal-actions" style="flex-wrap:wrap;gap:6px;">' +
-          '<button type="button" class="card-btn" id="ref-cancel">취소</button>' +
-          '<button type="button" class="card-btn" id="ref-none">없음</button>' +
-          '<button type="button" class="card-btn" id="ref-manual">✏️ 직접 입력</button>' +
-        '</div>'
+        '<div class="modal-actions"><button type="button" class="card-btn" id="ref-cancel">취소</button></div>'
       );
       overlay.classList.add('login-modal');
       var searchInput = overlay.querySelector('#ref-search'), listEl = overlay.querySelector('#ref-list');
@@ -2987,8 +2983,6 @@
       searchInput.addEventListener('input', render);
       listEl.addEventListener('click', function (e) { var it = e.target.closest('[data-cid]'); if (it) finish(it.getAttribute('data-label')); });
       overlay.querySelector('#ref-cancel').addEventListener('click', function () { finish(null); });
-      overlay.querySelector('#ref-none').addEventListener('click', function () { finish(''); });
-      overlay.querySelector('#ref-manual').addEventListener('click', function () { finish(' MANUAL'); });
       overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
     });
   }
@@ -3003,16 +2997,7 @@
     }
   }
   function handlePickReferrer() {
-    pickReferrer().then(function (v) {
-      if (v === null) return;
-      if (v === ' MANUAL') {
-        modalMessage('추천인 직접 입력', '추천인을 적어주세요 (목록에 없는 경우).', '확인', 'primary', '예: 홍길동 (관리자 친구)').then(function (t) {
-          if (t == null) return; setReferrerField((t || '').trim());
-        });
-        return;
-      }
-      setReferrerField(v);
-    });
+    pickReferrer().then(function (v) { if (v) setReferrerField(v); });
   }
 
   /* ---- rendering ---- */
@@ -3593,11 +3578,10 @@
               ? '<div class="field"><label for="f-referrer">소개 대상과의 관계 <span class="opt">(선택)</span></label>' +
                   '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 대학 후배 / 회사 동료">' +
                   '<span class="hint">' + ICON_LOCK + ' 주선자(나)와 소개 대상의 관계예요. 관리자만 볼 수 있어요.</span></div>'
-              : '<div class="field"><label>추천인 <span class="opt">(선택)</span></label>' +
-                  '<input type="hidden" id="f-referrer" name="referrerText" value="">' +
-                  '<button type="button" class="card-btn" id="pick-referrer" style="width:100%;box-sizing:border-box;">👥 추천인 입력 (회원 검색)</button>' +
-                  '<div id="referrer-display" style="margin-top:8px;"><span style="display:inline-block;background:var(--card);border:1px solid var(--line);color:var(--muted);font-weight:600;border-radius:9px;padding:6px 12px;font-size:0.98rem;">' + (isEdit ? '비우면 기존 값 유지' : '선택된 추천인 없음') + '</span></div>' +
-                  '<span class="hint">나를 추천한 회원을 골라주세요. 목록에 없으면 “직접 입력”. ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>') +
+              : '<div class="field"><label for="f-referrer">추천인 <span class="opt">(선택)</span></label>' +
+                  '<input type="text" id="f-referrer" name="referrerText" maxlength="60"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 홍길동 (관리자 친구)"') + '>' +
+                  '<button type="button" class="card-btn" id="pick-referrer" style="width:100%;box-sizing:border-box;margin-top:6px;">👥 회원 목록에서 선택</button>' +
+                  '<span class="hint">직접 입력하거나, 회원 목록에서 골라 채울 수 있어요. ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>') +
             '<div class="field"><label>사진 ' + (isEdit ? '<span class="opt">(최대 3장)</span>' : '<span class="req">필수</span> <span class="opt">1~3장</span>') + '</label>' +
               '<span class="hint">기본은 <b class="ex">흐리게(비공개)</b> — 요청을 승인한 사람에게만 보여요. 아래 체크를 풀면 <b class="ex">전체 공개</b>가 됩니다.</span>' +
               '<div class="photo-upload-area" id="photo-upload-area"></div>' +
