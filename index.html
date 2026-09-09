@@ -836,7 +836,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-192';
+  var APP_VERSION = '2026-09-09-193';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -7070,7 +7070,7 @@
     });
   }
 
-  var ANNOUNCE_KEY = 'announce-v15'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
+  var ANNOUNCE_KEY = 'announce-v16'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
   function showAnnouncement(force) {
     if (!force) {
       try {
@@ -7080,7 +7080,7 @@
     var box = 'background:var(--gold-soft);border:1px solid var(--gold);border-radius:10px;padding:10px 12px;margin-bottom:12px;';
     var li = 'margin:3px 0;';
     var greetPanel =
-      '<div data-annpanel="greet">' +
+      '<div data-annpanel="greet"><div style="' + box + 'margin-bottom:0;">' +
         '<p style="margin:0 0 10px;">안녕하세요, 베니입니다!👋</p>' +
         '<p style="margin:0 0 10px;">그동안 소개팅 알아봐달라는 연락을 많이 받아왔는데, 바쁘다 보니 바로바로 매칭해드리지 못하는 경우가 많아 직접 플랫폼을 만들어봤습니다.</p>' +
         '<p style="margin:0 0 10px;">지인 기반으로 시작한 거라 저와 직접 아는 사이가 아니어도 지인을 통해 연결되신 분이라면 언제든 환영이에요. 다만 익명으로 널리 오픈하기엔 아직 조심스러워서, 지인 네트워크 안에서부터 차근차근 넓혀가려고 합니다.</p>' +
@@ -7088,7 +7088,7 @@
         '<p style="margin:0 0 10px;">주변에 진지하게 좋은 인연을 찾고 계신 분들께 널리 알려주시면 감사하겠습니다. 다만 가벼운 마음으로 구경만 해보자는 마음가짐이시라면, 다른 분들의 시간과 진심을 위해 정중히 지양 부탁드립니다.</p>' +
         '<p style="margin:0 0 10px;">아직 개발 초기 단계라 피드백을 받으며 다듬어가고 있어요. 사용 중 불편한 점이나 오류가 있을 시 너그러운 양해와 함께 편하게 알려주시면 큰 도움이 됩니다. 궁금한 점도 언제든 연락 주세요!</p>' +
         '<p style="margin:0;">부디 이 작은 공간이 좋은 인연의 시작점이 되길 바랍니다 😊</p>' +
-      '</div>';
+      '</div></div>';
     var usePanel =
       '<div data-annpanel="use" hidden>' +
         '<div style="' + box + '">' +
@@ -7116,16 +7116,16 @@
         '</div>' +
       '</div>';
     var secPanel =
-      '<div data-annpanel="sec" hidden>' +
+      '<div data-annpanel="sec" hidden><div style="' + box + 'margin-bottom:0;">' +
         '<ul style="padding-left:20px;margin:6px 0;">' +
           '<li>실명·연락처·소개자 정보는 <b>암호화</b>되어 저장돼요.</li>' +
           '<li><b>사진</b>은 당사자가 직접 <b>수락</b>해야만 공개돼요 (수락 시 서로 공개). <b>전화번호는 서로 공개하지 않고</b>, 대화가 연결되면 <b>앱 안 채팅</b>으로만 대화해요.</li>' +
           '<li><b>데이터베이스 잠금</b> — 인증된 접속만 허용하고, 외부에서 데이터를 통째로 보거나 지울 수 없도록 규칙으로 막았어요.</li>' +
-          '<li>개인 PIN은 원본이 아닌 <b>강력한 해시(PBKDF2)</b>로만 저장돼요.</li>' +
+          '<li><b>개인 PIN·관리자 비밀번호</b>는 원문이 아닌 <b>강력한 해시(PBKDF2)</b>로만 저장돼, <b>관리자도 원문을 볼 수 없어요.</b></li>' +
           '<li><b>수정·삭제는 로그인한 본인</b>(또는 관리자)만 할 수 있어요.</li>' +
         '</ul>' +
         '<p style="color:var(--muted);font-size:0.82rem;margin-top:10px;">궁금하거나 불안한 점이 있으면 언제든 상단 &#128172; Q&amp;A 로 물어봐 주세요!</p>' +
-      '</div>';
+      '</div></div>';
     var overlay = openModal(
       '<h3 style="text-align:center;">안녕하세요! 베니브릿지입니다 &#128522;</h3>' +
       '<div class="role-toggle" style="margin-bottom:12px;">' +
