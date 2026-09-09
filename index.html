@@ -836,7 +836,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-198';
+  var APP_VERSION = '2026-09-10-199';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3152,10 +3152,8 @@
     if (detailMode && isAdminUnlocked) {
       var canSelfLogin = !!(entry.pinAuth || entry.pinHash);
       if (canSelfLogin) {
-        var seenTxt = entry.lastSeenAt ? new Date(entry.lastSeenAt).toLocaleString('ko-KR') : '기록 없음';
         adminInfoHtml =
           '<div class="pf-admininfo">' +
-            '<div class="pf-ai-row"><span class="pf-ai-label">🕘 최근 접속</span><span class="pf-ai-val">' + escapeHtml(seenTxt) + '</span></div>' +
             '<div class="pf-ai-row"><span class="pf-ai-label">🔔 알람 설정</span><span class="pf-ai-val" id="detail-notif-' + escapeHtml(entry.id) + '">확인 중…</span></div>' +
           '</div>';
       } else {
@@ -3920,6 +3918,74 @@
       }).catch(function (err) { modalNotice('오류', '삭제 실패: ' + (err.message || err)); });
     });
   }
+  /* 대화 연결 회수: 나와 상대 사이 승인된 대화(번호) 요청을 해제 → 서로 채팅 불가 */
+  function handleRevokeContactLink(otherId) {
+    var me = findMyEntry(currentState);
+    if (!me) return modalNotice('로그인 필요', '먼저 로그인해주세요.');
+    var otherNick = nickForEntry(currentState, otherId);
+    modalConfirm('대화 연결 해제', otherNick + '님과의 대화 연결을 해제할까요? 해제하면 서로 채팅할 수 없어요. (다시 대화 신청·수락하면 재연결돼요)', '해제', 'danger').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).map(function (r) {
+            if ((r.type || 'contact') !== 'contact' || !r.approved) return r;
+            var between = (r.fromId === me.id && r.toId === otherId) || (r.fromId === otherId && r.toId === me.id);
+            if (!between) return r;
+            var c = JSON.parse(JSON.stringify(r)); c.approved = false; c.userApproved = false; return c;
+          });
+          tx.update(stateRef, { dateRequests: reqs });
+        });
+      }).then(function () {
+        appendLog('request', me.nickname, '대화 연결 해제 → ' + otherNick);
+        return refreshNow();
+      }).then(function () {
+        modalNotice('해제 완료', otherNick + '님과의 대화 연결이 해제됐어요.');
+      }).catch(function (err) { modalNotice('오류', '해제 실패: ' + (err.message || err)); });
+    });
+  }
+  /* 메시지함 요약: 내가 사진을 볼 수 있는 사람 / 대화할 수 있는 사람 (이름 클릭=프로필, 회수 가능) */
+  function connectionsSummaryHtml(state, me) {
+    if (!me) return '';
+    var others = (state.entries || []).filter(function (x) { return x.id !== me.id && !x.isMatchmaker; });
+    var photoList = others.filter(function (x) { return canViewPhotoOf(state, me.id, x.id) && photoCountOf(x) > 0; });
+    var talkList = others.filter(function (x) { return canViewContactOf(state, me.id, x.id); });
+    function nameLink(x) {
+      return '<b data-action="card-detail" data-id="' + escapeHtml(x.id) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(x.nickname) + '</b>';
+    }
+    function scrollWrap(inner, n) {
+      return '<div style="' + (n > 5 ? 'max-height:230px;overflow-y:auto;-webkit-overflow-scrolling:touch;' : '') + '">' + inner + '</div>';
+    }
+    var photoRows = photoList.length
+      ? scrollWrap(photoList.map(function (x) {
+          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line);">' +
+            '<span><b style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(x) || '—') + '</b> ' + nameLink(x) + '</span>' +
+            '<span style="display:flex;gap:6px;flex:none;">' +
+              '<button type="button" class="card-btn approve" data-action="gallery" data-id="' + escapeHtml(x.id) + '" style="padding:4px 10px;">📷 보기</button>' +
+              '<button type="button" class="card-btn danger" data-action="revoke-photo-link" data-id="' + escapeHtml(x.id) + '" style="padding:4px 10px;">회수</button>' +
+            '</span></div>';
+        }).join(''), photoList.length)
+      : '<p class="sub" style="margin:0;">아직 없어요.</p>';
+    var talkRows = talkList.length
+      ? scrollWrap(talkList.map(function (x) {
+          var unread = dmUnreadFrom(state, me.id, x.id);
+          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line);">' +
+            '<span><b style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(x) || '—') + '</b> ' + nameLink(x) + '</span>' +
+            '<span style="display:flex;gap:6px;flex:none;">' +
+              '<button type="button" class="card-btn primary" data-action="dm-chat" data-id="' + escapeHtml(x.id) + '" style="padding:4px 10px;">💬 채팅' + (unread ? ' <span class="count blink">' + unread + '</span>' : '') + '</button>' +
+              '<button type="button" class="card-btn danger" data-action="revoke-contact-link" data-id="' + escapeHtml(x.id) + '" style="padding:4px 10px;">회수</button>' +
+            '</span></div>';
+        }).join(''), talkList.length)
+      : '<p class="sub" style="margin:0;">아직 없어요.</p>';
+    return '<div class="mine-section">' +
+        '<h3>🔗 내 연결 요약</h3>' +
+        '<p class="sub" style="margin:0 0 6px;">이름을 누르면 프로필이 열려요.</p>' +
+        '<div style="font-weight:700;font-size:0.92rem;margin:6px 0 2px;">📷 내가 사진 볼 수 있는 사람 <span class="count">' + photoList.length + '</span></div>' +
+        photoRows +
+        '<div style="font-weight:700;font-size:0.92rem;margin:12px 0 2px;">💬 대화할 수 있는 사람 <span class="count">' + talkList.length + '</span></div>' +
+        talkRows +
+      '</div>';
+  }
   function renderMine(state) {
     var me = findMyEntry(state);
     var myPending = findMyPending(state);
@@ -3954,6 +4020,25 @@
         : '';
       var mmThread = threadFor(state, currentUser.id, 'user');
       var joinSection = joinRequestSectionHtml(state, true); /* 주선자는 항상 표시 */
+      /* 🔔 친구들 소식: 주선자로 있어도 친구에게 온 알림(요청·승인·관리자 메시지)을 바로 보고 그 친구로 전환 */
+      var mmFriends = entriesManagedByMe(state).filter(function (e) { return !e.ownerSelf; })
+        .sort(function (a, b) { return (a.submittedAt || '').localeCompare(b.submittedAt || ''); });
+      var newsRows = mmFriends.map(function (f) {
+        var un = userUnread(state, f);
+        var incPend = (state.dateRequests || []).filter(function (r) { return r.toId === f.id && (r.hiddenBy || []).indexOf(f.id) < 0 && reqStatus(r) === 'pending'; }).length;
+        var badge = un ? '<span class="count blink" style="margin-left:2px;">' + un + '</span>' : '<span class="sub" style="font-size:0.8rem;">새 소식 없음</span>';
+        var detail = incPend ? '<span class="sub" style="font-size:0.8rem;color:var(--accent);"> · 응답 필요 ' + incPend + '건</span>' : '';
+        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);">' +
+          '<span>🤝 <b data-action="card-detail" data-id="' + escapeHtml(f.id) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(f.nickname) + '</b> ' + badge + detail + '</span>' +
+          '<button type="button" class="card-btn' + (un ? ' primary' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(f.id) + '" style="flex:none;padding:4px 12px;">' + (un ? '📬 보기' : '열기') + '</button>' +
+        '</div>';
+      }).join('');
+      var newsTotal = mmFriends.reduce(function (a, f) { return a + userUnread(state, f); }, 0);
+      var friendsNews = mmFriends.length
+        ? '<div class="mine-section"><h3>🔔 친구들 소식<span class="count' + (newsTotal ? ' blink' : '') + '">' + newsTotal + '</span></h3>' +
+            '<p class="sub" style="margin:0 0 4px;">친구에게 온 요청·승인·메시지예요. <b>보기</b>를 누르면 그 친구로 전환돼 응답할 수 있어요.</p>' +
+            newsRows + '</div>'
+        : '';
       mmHome =
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
             '<h2 style="margin:0 0 4px;">🤝 주선자 홈</h2>' +
@@ -3963,6 +4048,7 @@
           '<p class="sub">친구 전환·임시 PIN은 위 <b>🔄 누구로 활동할까요</b>에서 친구를 고르면 돼요.</p>' +
           '<button type="button" class="submit-btn" id="start-proxy" style="width:100%;box-sizing:border-box;margin:4px 0 12px;">🤝 새 친구 소개하기</button>' +
           pendNote +
+          friendsNews +
           joinSection +
           '<div class="mine-section"><h3>💬 관리자 메시지<span class="count">' + mmThread.length + '</span></h3>' +
             (mmThread.length ? mmThread.map(function (m) { return msgLineHtml(m, false); }).join('') : '<p class="sub" style="margin:0;">아직 없어요.</p>') +
@@ -3992,14 +4078,26 @@
         if ((r.hiddenBy || []).indexOf(me.id) >= 0) return false;
         return g.incoming ? r.toId === me.id : r.fromId === me.id;
       }).sort(function (a, b) { return (b.submittedAt || '').localeCompare(a.submittedAt || ''); });
-      var body = items.length
+      /* 응답이 필요한 항목: 받은=대기/보류, 보낸=보류/거절 → 이런 게 있으면 기본 펼침 */
+      var needCnt = items.filter(function (r) {
+        var st = reqStatus(r);
+        return g.incoming ? (st === 'pending' || st === 'held') : (st === 'held' || st === 'rejected');
+      }).length;
+      var inner = items.length
         ? items.map(function (r) { return reqRowHtml(r, state, g.incoming); }).join('')
         : '<p class="sub" style="margin:0;">아직 없어요.</p>';
+      /* 5개 초과면 스크롤 */
+      var body = items.length > 5
+        ? '<div style="max-height:300px;overflow-y:auto;-webkit-overflow-scrolling:touch;">' + inner + '</div>'
+        : inner;
+      /* 기본 펼침: 응답 필요 항목이 있거나, 1~5개로 적을 때. 그 외(0개 또는 6개+ 조용함)는 접힘 */
+      var openByDefault = needCnt > 0 || (items.length > 0 && items.length <= 5);
+      var needBadge = needCnt ? '<span class="count blink" style="margin-left:4px;">응답 ' + needCnt + '</span>' : '';
       return (
-        '<div class="mine-section">' +
-          '<h3>' + g.title + '<span class="count">' + items.length + '</span></h3>' +
-          body +
-        '</div>'
+        '<details class="mine-section"' + (openByDefault ? ' open' : '') + '>' +
+          '<summary style="cursor:pointer;font-weight:700;list-style:revert;">' + g.title + '<span class="count">' + items.length + '</span>' + needBadge + '</summary>' +
+          '<div style="margin-top:8px;">' + body + '</div>' +
+        '</details>'
       );
     }).join('');
     var thread = threadFor(state, me.id, 'user');
@@ -4027,6 +4125,7 @@
           '</div>' +
           '<div class="my-uid">고유번호 ' + escapeHtml(formatUid(me) || '—') + '</div>' +
           '<p class="sub">내 소개팅 프로필로 받고 보낸 요청이에요.</p>' +
+          connectionsSummaryHtml(state, me) +
           sections +
           photoViewersSectionHtml(state, me) +
         '</div>'
@@ -4079,6 +4178,7 @@
         (me.deactivateRequested ? '<div class="mine-note" style="margin-top:10px;background:var(--gold-soft);border-color:var(--gold);">🗄 비활성화(보관) 요청이 접수되어 <b>관리자 확인 중</b>이에요. <button type="button" class="card-btn" data-action="cancel-deactivate" data-id="' + escapeHtml(me.id) + '" style="flex:none;padding:4px 12px;margin-left:8px;">요청 취소</button></div>' : '') +
         (me.deactivated ? '<div class="mine-note" style="margin-top:10px;background:var(--gold-soft);border-color:var(--gold);">🗄 <b>보관 상태</b>예요 (명단에 노출되지 않아요). 복구는 상단 <b>💬 Q&amp;A</b>로 문의하거나 카카오톡으로 요청해 주세요.</div>' : '') +
         (isSubProfile ? '' : joinRequestSectionHtml(state, false)) + /* 나에게 온 주선자 요청 있으면 표시 */
+        connectionsSummaryHtml(state, me) +
         sections +
         photoViewersSectionHtml(state, me) +
         (isSubProfile ? '' : msgSection) +
@@ -6877,6 +6977,8 @@
       else if (action === 'reveal-mine') handleRevealMine(id);
       else if (action === 'dm-chat') openDmChat(id);
       else if (action === 'revoke-photo-viewer') handleRevokePhotoViewer(id);
+      else if (action === 'revoke-photo-link') handleRevokePhotoViewer(id);
+      else if (action === 'revoke-contact-link') handleRevokeContactLink(id);
       else if (action === 'revoke-approve') handleRevokeApprove(id);
       else if (action === 'perm-photo') { if (isAdminUnlocked) openPermPopup(id, 'photo'); }
       else if (action === 'perm-contact') { if (isAdminUnlocked) openPermPopup(id, 'contact'); }
@@ -7144,7 +7246,7 @@
     });
   }
 
-  var ANNOUNCE_KEY = 'announce-v19'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
+  var ANNOUNCE_KEY = 'announce-v20'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
   function showAnnouncement(force) {
     if (!force) {
       try {
@@ -7158,7 +7260,7 @@
         '<p style="margin:0 0 10px;">안녕하세요, 베니입니다!👋</p>' +
         '<p style="margin:0 0 10px;">그동안 소개팅 알아봐달라는 연락을 많이 받아왔는데, 바쁘다 보니 바로바로 매칭해드리지 못하는 경우가 많아 직접 플랫폼을 만들어봤습니다.</p>' +
         '<p style="margin:0 0 10px;">지인 기반으로 시작한 거라 저와 직접 아는 사이가 아니어도 지인을 통해 연결되신 분이라면 언제든 환영이에요. 다만 익명으로 널리 오픈하기엔 아직 조심스러워서, 지인 네트워크 안에서부터 차근차근 넓혀가려고 합니다.</p>' +
-        '<p style="margin:0 0 10px;">링크로 들어가셔서 프로필을 등록하시면 등록된 분들을 자유롭게 둘러보실 수 있고, 마음에 드는 분께 직접 연락을 시도하시면 됩니다. 자동 매칭이 아닌 본인이 직접 다가가는 구조라 조금은 적극적인 마음가짐이 필요해요. 프로필 등록 시 <b>‘소개자’</b> 칸에 저를 중심으로 연결 경로를 “가능한” 자세히 적어주시면 감사하겠습니다. (예: ○○○ → △△△ → 베니)</p>' +
+        '<p style="margin:0 0 10px;">프로필을 등록하시면 등록된 분들을 자유롭게 둘러보실 수 있고, 마음에 드는 분께 직접 연락을 시도하시면 됩니다. 자동 매칭이 아닌 본인이 직접 다가가는 구조라 조금은 적극적인 마음가짐이 필요해요. 프로필 등록 시 <b>‘소개자’</b> 칸에 저를 중심으로 연결 경로를 “가능한” 자세히 적어주시면 감사하겠습니다. (예: ○○○ → △△△ → 베니)</p>' +
         '<p style="margin:0 0 10px;">주변에 진지하게 좋은 인연을 찾고 계신 분들께 널리 알려주시면 감사하겠습니다. 다만 가벼운 마음으로 구경만 해보자는 마음가짐이시라면, 다른 분들의 시간과 진심을 위해 정중히 지양 부탁드립니다.</p>' +
         '<p style="margin:0 0 10px;">아직 개발 초기 단계라 피드백을 받으며 다듬어가고 있어요. 사용 중 불편한 점이나 오류가 있을 시 너그러운 양해와 함께 편하게 알려주시면 큰 도움이 됩니다. 궁금한 점도 언제든 연락 주세요!</p>' +
         '<p style="margin:0;">부디 이 작은 공간이 좋은 인연의 시작점이 되길 바랍니다 😊</p>' +
