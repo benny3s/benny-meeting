@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-182';
+  var APP_VERSION = '2026-09-09-183';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2999,8 +2999,7 @@
     if (val) {
       disp.innerHTML = '<span style="display:inline-block;background:var(--gold-soft);border:1px solid var(--gold);color:var(--gold);font-weight:700;border-radius:9px;padding:6px 12px;font-size:0.98rem;">✓ 추천인: ' + escapeHtml(val) + '</span>';
     } else {
-      disp.textContent = '선택된 추천인 없음';
-      disp.style.color = 'var(--muted)';
+      disp.innerHTML = '<span style="display:inline-block;background:var(--card);border:1px solid var(--line);color:var(--muted);font-weight:600;border-radius:9px;padding:6px 12px;font-size:0.98rem;">선택된 추천인 없음</span>';
     }
   }
   function handlePickReferrer() {
@@ -3597,7 +3596,7 @@
               : '<div class="field"><label>추천인 <span class="opt">(선택)</span></label>' +
                   '<input type="hidden" id="f-referrer" name="referrerText" value="">' +
                   '<button type="button" class="card-btn" id="pick-referrer" style="width:100%;box-sizing:border-box;">👥 추천인 입력 (회원 검색)</button>' +
-                  '<div id="referrer-display" style="margin-top:8px;font-size:0.95rem;color:var(--muted);">' + (isEdit ? '(비우면 기존 값 유지)' : '아직 선택 안 함') + '</div>' +
+                  '<div id="referrer-display" style="margin-top:8px;"><span style="display:inline-block;background:var(--card);border:1px solid var(--line);color:var(--muted);font-weight:600;border-radius:9px;padding:6px 12px;font-size:0.98rem;">' + (isEdit ? '비우면 기존 값 유지' : '선택된 추천인 없음') + '</span></div>' +
                   '<span class="hint">나를 추천한 회원을 골라주세요. 목록에 없으면 “직접 입력”. ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>') +
             '<div class="field"><label>사진 ' + (isEdit ? '<span class="opt">(최대 3장)</span>' : '<span class="req">필수</span> <span class="opt">1~3장</span>') + '</label>' +
               '<span class="hint">기본은 <b class="ex">흐리게(비공개)</b> — 요청을 승인한 사람에게만 보여요. 아래 체크를 풀면 <b class="ex">전체 공개</b>가 됩니다.</span>' +
