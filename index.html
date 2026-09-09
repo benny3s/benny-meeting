@@ -836,7 +836,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-194';
+  var APP_VERSION = '2026-09-09-195';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2638,11 +2638,12 @@
     }).then(function () { return refreshNow(); }).catch(function (err) { modalNotice('오류', '삭제 실패: ' + (err.message || err)); });
   }
   /* ---- 관리자 <-> 회원 메시지 ---- */
-  function sendMessageTo(entryId, from, text, guestName) {
+  function sendMessageTo(entryId, from, text, guestName, extra) {
     text = (text || '').trim();
     if (!text || !entryId) return Promise.resolve();
     var m = { id: genId(), entryId: entryId, from: from, text: text, at: new Date().toISOString() };
     if (guestName) m.guestName = guestName;
+    if (extra) Object.keys(extra).forEach(function (k) { if (extra[k] != null) m[k] = extra[k]; });
     return db.runTransaction(function (tx) {
       return tx.get(stateRef).then(function (doc) {
         var s = doc.data();
@@ -2802,10 +2803,12 @@
   function openGuestMsgModal() {
     var ov = openModal(
       '<h3>💬 Q&amp;A · 관리자에게 문의</h3>' +
-      '<p class="modal-msg" style="margin:0 0 8px;">로그인 없이도 문의할 수 있어요. 답변받을 방법(연락처 등)이 필요하면 내용에 함께 적어주세요.</p>' +
+      '<p class="modal-msg" style="margin:0 0 8px;">로그인 없이도 문의할 수 있어요. 답변드릴 수 있게 연락처를 남겨주세요.</p>' +
       '<input type="text" class="modal-input" id="guest-name" maxlength="30" placeholder="이름/닉네임 (예: 홍길동)">' +
+      '<input type="tel" class="modal-input" id="guest-phone" inputmode="numeric" maxlength="13" placeholder="전화번호 (예: 01012345678)" style="margin-top:8px;">' +
       '<textarea class="modal-input" id="guest-text" rows="4" maxlength="300" placeholder="궁금한 점이나 건의사항을 남겨주세요" style="margin-top:8px;"></textarea>' +
-      '<p id="guest-warn" class="modal-msg" style="color:var(--accent);margin:4px 0 0;font-size:0.82rem;" hidden>이름과 내용을 모두 입력해주세요.</p>' +
+      '<p id="guest-warn" class="modal-msg" style="color:var(--accent);margin:4px 0 0;font-size:0.82rem;" hidden>이름·전화번호·내용을 모두 입력해주세요. (전화번호는 01012345678 형식)</p>' +
+      '<p class="modal-msg" style="color:var(--muted);margin:6px 0 0;font-size:0.78rem;">' + ICON_LOCK + ' 전화번호는 암호화되어 관리자만 확인할 수 있어요.</p>' +
       '<div class="modal-actions">' +
         '<button type="button" class="card-btn" id="modal-cancel">닫기</button>' +
         '<button type="button" class="card-btn primary" id="guest-send">보내기</button>' +
@@ -2815,15 +2818,29 @@
     ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(ov); });
     ov.querySelector('#guest-send').addEventListener('click', function () {
       var name = (ov.querySelector('#guest-name').value || '').trim();
+      var phone = (ov.querySelector('#guest-phone').value || '').trim().replace(/[^0-9]/g, '');
       var text = (ov.querySelector('#guest-text').value || '').trim();
-      if (!name || !text) { ov.querySelector('#guest-warn').hidden = false; return; }
-      sendMessageTo('guest-' + genId(), 'user', text, name).then(function () {
+      if (!name || !text || !/^01[0-9]{8,9}$/.test(phone)) { ov.querySelector('#guest-warn').hidden = false; return; }
+      var pubJwk = currentState && currentState.adminAuth && currentState.adminAuth.publicKeyJwk;
+      var encP = pubJwk ? encryptForAdmin(pubJwk, phone) : Promise.resolve(null);
+      encP.then(function (guestPhoneEnc) {
+        return sendMessageTo('guest-' + genId(), 'user', text, name, { guestPhoneEnc: guestPhoneEnc });
+      }).then(function () {
         appendLog('message', name + ' (비로그인)', '관리자에게 문의');
         try { notifyAdmin('💬 비로그인 문의', name + ': ' + text.slice(0, 40)); } catch (e) {}
         closeModal(ov);
         modalNotice('보냈어요 ✅', '관리자에게 문의를 전달했어요. 감사합니다!');
       }).catch(function (err) { modalNotice('오류', '전송 실패: ' + (err.message || err)); });
     });
+  }
+  /* 관리자: 비로그인 문의 연락처(암호화) 복호화해서 보기 */
+  function handleGuestPhone(msgId) {
+    if (!isAdminUnlocked || !adminPrivateKey) { modalNotice('안내', '관리자 모드에서만 확인할 수 있어요.'); return; }
+    var m = (currentState.messages || []).find(function (x) { return x.id === msgId; });
+    if (!m || !m.guestPhoneEnc) { modalNotice('안내', '연락처 정보가 없어요.'); return; }
+    decryptWithAdmin(adminPrivateKey, m.guestPhoneEnc).then(function (phone) {
+      modalNotice('📞 문의자 연락처', (m.guestName ? m.guestName + '님 · ' : '') + phone);
+    }).catch(function () { modalNotice('오류', '연락처를 복호화하지 못했어요.'); });
   }
   function deleteMyThread() {
     var uid = currentUser && currentUser.id;
@@ -4481,7 +4498,10 @@
         '<div style="padding:2px 14px 14px;border-top:1px solid var(--line);">' +
           '<div style="margin-top:8px;">' + lines + '</div>' +
           '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">' +
-            '<button type="button" class="card-btn primary" data-action="admin-msg-reply" data-id="' + escapeHtml(eid) + '" style="flex:none;">✍️ 답장</button>' +
+            (eid.indexOf('guest-') === 0
+              ? (msgs.filter(function (m) { return m.guestPhoneEnc; })[0]
+                  ? '<button type="button" class="card-btn primary" data-action="guest-phone" data-id="' + escapeHtml(msgs.filter(function (m) { return m.guestPhoneEnc; })[0].id) + '" style="flex:none;">📞 연락처 확인</button>' : '')
+              : '<button type="button" class="card-btn primary" data-action="admin-msg-reply" data-id="' + escapeHtml(eid) + '" style="flex:none;">✍️ 답장</button>') +
             '<button type="button" class="card-btn danger" data-action="admin-msg-delall" data-id="' + escapeHtml(eid) + '" style="flex:none;">전체 삭제</button>' +
           '</div>' +
         '</div>' +
@@ -6829,6 +6849,7 @@
       else if (action === 'reset-pin') handleAdminResetPin(id);
       else if (action === 'admin-msg') handleAdminMessageCompose(id);
       else if (action === 'admin-msg-reply') handleAdminMessageCompose(id);
+      else if (action === 'guest-phone') handleGuestPhone(id);
       else if (action === 'msg-del') { if (isAdminUnlocked) deleteAdminMessage(id); }
       else if (action === 'admin-msg-delall') {
         if (isAdminUnlocked) modalConfirm('전체 삭제', nickForEntry(currentState, id) + '님과의 메시지를 모두 지울까요?').then(function (ok) { if (ok) deleteAdminThread(id); });
@@ -7075,7 +7096,7 @@
     });
   }
 
-  var ANNOUNCE_KEY = 'announce-v17'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
+  var ANNOUNCE_KEY = 'announce-v18'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
   function showAnnouncement(force) {
     if (!force) {
       try {
@@ -7123,11 +7144,11 @@
     var secPanel =
       '<div data-annpanel="sec" hidden><div style="' + box + 'margin-bottom:0;">' +
         '<ul style="padding-left:20px;margin:6px 0;">' +
-          '<li>실명·연락처·소개자 정보는 <b>암호화</b>되어 저장돼요.</li>' +
-          '<li><b>사진</b>은 당사자가 직접 <b>수락</b>해야만 공개돼요 (수락 시 서로 공개). <b>전화번호는 서로 공개하지 않고</b>, 대화가 연결되면 <b>앱 안 채팅</b>으로만 대화해요.</li>' +
-          '<li><b>데이터베이스 잠금</b> — 인증된 접속만 허용하고, 외부에서 데이터를 통째로 보거나 지울 수 없도록 규칙으로 막았어요.</li>' +
-          '<li><b>개인 PIN·관리자 비밀번호</b>는 원문이 아닌 <b>강력한 해시(PBKDF2)</b>로만 저장돼, <b>관리자도 원문을 볼 수 없어요.</b></li>' +
+          '<li><b>개인 PIN·관리자 비밀번호</b>는 원문이 아닌 <b>강력한 해시(PBKDF2)</b>로만 저장돼요. <b>유출돼도 원문 복원이 사실상 불가</b>하고, <b>관리자도 볼 수 없어요.</b></li>' +
+          '<li><b>실명·전화번호·소개자</b>는 <b>암호화</b> 저장돼요. <b>다른 회원에겐 비공개</b>이고, 연락·확인용으로 <b>관리자만</b> 열람할 수 있어요.</li>' +
           '<li><b>회원 간 채팅</b>은 앱에서 <b>관리자에게 표시되지 않아요.</b> (안전·분쟁 대응을 위해 서버에는 보관돼요.)</li>' +
+          '<li><b>사진</b>은 당사자가 직접 <b>수락</b>해야만 공개돼요 (수락 시 서로 공개). 전화번호는 서로 공개하지 않고, 대화가 연결되면 <b>앱 안 채팅</b>으로 대화해요.</li>' +
+          '<li><b>데이터베이스 잠금</b> — 인증된 접속만 허용하고, 외부에서 데이터를 통째로 보거나 지울 수 없도록 규칙으로 막았어요.</li>' +
           '<li><b>수정·삭제는 로그인한 본인</b>(또는 관리자)만 할 수 있어요.</li>' +
         '</ul>' +
         '<p style="color:var(--muted);font-size:0.82rem;margin-top:10px;">궁금하거나 불안한 점이 있으면 언제든 상단 &#128172; Q&amp;A 로 물어봐 주세요!</p>' +
