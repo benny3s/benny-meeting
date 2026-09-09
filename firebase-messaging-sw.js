@@ -13,6 +13,8 @@ firebase.initializeApp({
 
 var messaging = firebase.messaging();
 var APP_URL = 'https://benny3s.github.io/benny-meeting/';
+var NOTIF_ICON = 'https://benny3s.github.io/benny-meeting/notif-icon.png';   /* 큰 아이콘(브랜드 로고) */
+var NOTIF_BADGE = 'https://benny3s.github.io/benny-meeting/notif-badge.png'; /* 상태바 모노크롬 배지 */
 
 /* 앱이 꺼져 있거나 백그라운드일 때 (data 메시지) */
 messaging.onBackgroundMessage(function (payload) {
@@ -20,7 +22,8 @@ messaging.onBackgroundMessage(function (payload) {
   var title = n.title || '베니브릿지';
   var options = {
     body: n.body || '',
-    icon: n.icon || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"%3E%3Crect width="48" height="48" fill="%23B23A48"/%3E%3Ctext x="24" y="34" font-size="26" text-anchor="middle" fill="white"%3E%E2%99%A5%3C/text%3E%3C/svg%3E',
+    icon: n.icon || NOTIF_ICON,
+    badge: NOTIF_BADGE,
     data: { url: (payload && payload.data && payload.data.url) || APP_URL }
   };
   self.registration.showNotification(title, options);

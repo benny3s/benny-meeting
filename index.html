@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-177';
+  var APP_VERSION = '2026-09-09-178';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -6915,10 +6915,11 @@
       return;
     }
     if (!('Notification' in window)) { modalNotice('안내', '이 브라우저는 알림을 지원하지 않아요.'); return; }
-    var icon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"%3E%3Crect width="48" height="48" fill="%23B23A48"/%3E%3Ctext x="24" y="34" font-size="26" text-anchor="middle" fill="white"%3E%E2%99%A5%3C/text%3E%3C/svg%3E';
+    var icon = 'https://benny3s.github.io/benny-meeting/notif-icon.png';
+    var badge = 'https://benny3s.github.io/benny-meeting/notif-badge.png';
     function fire() {
       /* 매번 새로 뜨도록 태그를 매번 다르게 (같은 태그면 조용히 교체돼서 두 번째부터 안 떠요) */
-      var opts = { body: '이 알림이 보이면 정상이에요! 실제 요청이 오면 이렇게 알려드려요.', icon: icon, tag: 'benchinso-test-' + Date.now(), renotify: true };
+      var opts = { body: '이 알림이 보이면 정상이에요! 실제 요청이 오면 이렇게 알려드려요.', icon: icon, badge: badge, tag: 'benchinso-test-' + Date.now(), renotify: true };
       if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
         navigator.serviceWorker.getRegistration().then(function (reg) {
           if (reg && reg.showNotification) { reg.showNotification('베니브릿지 테스트 알림 🔔', opts); }
