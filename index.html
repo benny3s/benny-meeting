@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-174';
+  var APP_VERSION = '2026-09-09-175';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -5306,34 +5306,40 @@
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
           '<button type="button" class="card-btn primary" id="modal-ok">요청하기</button>' +
-        '</div>'
+          (isPhoto ? '<button type="button" class="card-btn approve" id="modal-ok-reveal">요청 + 내 사진 공개</button>' : '') +
+        '</div>' +
+        (isPhoto ? '<p class="modal-msg" style="color:var(--muted);font-size:0.8rem;margin:6px 0 0;">“요청 + 내 사진 공개”를 누르면 상대가 수락 전에도 내 사진을 볼 수 있어요 (수락률↑).</p>' : '')
       );
       new Promise(function (resolve) {
         function finish(val) { closeModal(noteOverlay); resolve(val); }
         var noteEl = noteOverlay.querySelector('#modal-note');
         var warnEl = noteOverlay.querySelector('#modal-note-warn');
-        noteOverlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
-        noteOverlay.querySelector('#modal-ok').addEventListener('click', function () {
+        function submit(reveal) {
           var v = noteEl.value.trim();
           if (v.length < 10) { warnEl.hidden = false; noteEl.focus(); return; } /* 코멘트 최소 10자 필수 */
-          finish(v);
-        });
+          finish({ note: v, reveal: reveal });
+        }
+        noteOverlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
+        noteOverlay.querySelector('#modal-ok').addEventListener('click', function () { submit(false); });
+        var revBtn = noteOverlay.querySelector('#modal-ok-reveal');
+        if (revBtn) revBtn.addEventListener('click', function () { submit(true); });
         noteOverlay.addEventListener('click', function (e) { if (e.target === noteOverlay) finish(null); });
-      }).then(function (note) {
-        if (note === null || note === undefined) return;
+      }).then(function (result) {
+        if (!result) return;
         /* 대화 신청은 번호를 공유하지 않음 — 수락되면 앱 내 채팅으로만 대화 */
         var req = {
           id: genId(), type: type, fromId: fromEntry.id, toId: toId,
-          note: note || '', submittedAt: new Date().toISOString()
+          note: result.note || '', submittedAt: new Date().toISOString()
         };
+        if (isPhoto && result.reveal) req.fromRevealed = true; /* 요청과 동시에 내 사진 미리 공개 */
         return stateRef.update({
           dateRequests: firebase.firestore.FieldValue.arrayUnion(req)
         }).then(function () {
-          appendLog('request', fromEntry.nickname, actionText + ' → ' + target.nickname);
+          appendLog('request', fromEntry.nickname, actionText + ' → ' + target.nickname + (req.fromRevealed ? ' (사진 공개)' : ''));
           notifyAdmin(actionText, fromEntry.nickname + '님이 ' + target.nickname + '님에게 ' + actionText + '을 보냈어요!');
           return refreshNow();
         }).then(function () {
-          modalNotice('요청 완료', target.nickname + '님에게 ' + actionText + '을 보냈어요! "메시지함" 탭에서 상태를 볼 수 있어요.');
+          modalNotice('요청 완료', target.nickname + '님에게 ' + actionText + '을 보냈어요!' + (req.fromRevealed ? ' 내 사진도 함께 공개했어요.' : '') + ' "메시지함" 탭에서 상태를 볼 수 있어요.');
         });
       }).catch(function (err) {
         modalNotice('오류', '요청에 실패했어요: ' + (err.message || err));
@@ -5870,6 +5876,11 @@
     if (!req || req.fromId !== me.id) return;
     modalConfirm('요청 취소', '보낸 요청을 취소할까요?', '요청 취소').then(function (ok) {
       if (!ok) return;
+      /* 즉시 화면에서 제거 (서버 재조회 전에 바로 사라지게) */
+      try {
+        currentState.dateRequests = (currentState.dateRequests || []).filter(function (r) { return r.id !== id; });
+        paint(currentState);
+      } catch (e) {}
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
           var s = doc.data();
@@ -5957,6 +5968,13 @@
     if (!req || (req.fromId !== me.id && req.toId !== me.id)) return;
     modalConfirm('내역 삭제', '이 내역을 목록에서 삭제할까요?').then(function (ok) {
       if (!ok) return;
+      /* 즉시 화면에서 숨김 (서버 재조회 전에 바로 사라지게) */
+      try {
+        (currentState.dateRequests || []).forEach(function (r) {
+          if (r.id === id) { r.hiddenBy = r.hiddenBy || []; if (r.hiddenBy.indexOf(me.id) < 0) r.hiddenBy.push(me.id); }
+        });
+        paint(currentState);
+      } catch (e) {}
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
           var s = doc.data();
