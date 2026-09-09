@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-179';
+  var APP_VERSION = '2026-09-09-180';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4522,15 +4522,15 @@
       '</div>' +
       '<p class="masthead-sub">관리자 주변 사람들 중심으로, 좋은 인연을 맺어주는 작은 공간이에요.</p>' +
       '<div class="admin-bar">' +
-        /* 1줄: 공지·사용법 / URL / Q&A */
+        /* 1줄: 공지·사용법 / URL 복사 */
         '<div class="admin-bar-row">' +
           '<button type="button" class="admin-link" id="show-notice" style="background:#1a73e8;border-color:#1a73e8;color:#fff;opacity:1;font-weight:700;">&#128227; 공지·사용법</button>' +
-          '<button type="button" class="admin-link" id="copy-url">&#128279; URL</button>' +
-          '<button type="button" class="admin-link" id="feedback-btn">&#128172; Q&amp;A</button>' +
+          '<button type="button" class="admin-link" id="copy-url">&#128279; URL 복사</button>' +
         '</div>' +
-        /* 2줄: 관리자 커피 사주기 */
+        /* 2줄: 관리자 커피 사주기 / Q&A */
         '<div class="admin-bar-row">' +
           '<button type="button" class="admin-link" id="buy-coffee" style="background:var(--gold-soft);border-color:var(--gold);color:var(--gold);opacity:1;font-weight:700;">&#9749; 관리자 커피 사주기</button>' +
+          '<button type="button" class="admin-link" id="feedback-btn">&#128172; Q&amp;A</button>' +
         '</div>' +
         /* 3줄: 홈에 추가 / 알림 / 로그인 */
         '<div class="admin-bar-row">' +
