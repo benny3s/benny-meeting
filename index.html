@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-187';
+  var APP_VERSION = '2026-09-09-188';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3132,6 +3132,12 @@
       } else {
         adminInfoHtml = '<div class="pf-admininfo"><div class="pf-ai-row"><span class="pf-ai-val" style="color:var(--muted);">🤝 주선자가 대리 관리하는 계정이에요 (직접 로그인·접속 없음)</span></div></div>';
       }
+      if (entry.deactivated) {
+        adminInfoHtml += '<div class="pf-admininfo" style="margin-top:6px;">' +
+          '<div class="pf-ai-row"><span class="pf-ai-label">🗄 보관 사유</span><span class="pf-ai-val">' + (entry.deactivatedReason ? escapeHtml(entry.deactivatedReason) : '<span style="color:var(--muted);">(사유 없음)</span>') + '</span></div>' +
+          (entry.deactivatedAt ? '<div class="pf-ai-row"><span class="pf-ai-label">🗄 보관 일시</span><span class="pf-ai-val">' + escapeHtml(new Date(entry.deactivatedAt).toLocaleString('ko-KR')) + '</span></div>' : '') +
+          '</div>';
+      }
     }
     var adminBtn = isAdminUnlocked
       ? '<button type="button" class="card-btn admin-detail-btn" data-action="detail" data-id="' + escapeHtml(entry.id) + '">🔍 상세</button>' +
@@ -5421,7 +5427,7 @@
           var s = doc.data();
           var entries = (s.entries || []).map(function (e) {
             if (e.id !== id) return e;
-            var c = JSON.parse(JSON.stringify(e)); c.testAccount = true; c.deactivated = true; delete c.deactivateRequested; delete c.deactivateReqAt; delete c.deactivateReason; return c;
+            var c = JSON.parse(JSON.stringify(e)); c.testAccount = true; c.deactivated = true; c.deactivatedReason = c.deactivateReason || ''; c.deactivatedAt = new Date().toISOString(); delete c.deactivateRequested; delete c.deactivateReqAt; delete c.deactivateReason; return c;
           });
           tx.update(stateRef, { entries: entries });
         });
