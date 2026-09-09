@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-173';
+  var APP_VERSION = '2026-09-09-174';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4464,6 +4464,7 @@
           .sort(function (a, b) { return (a.submittedAt || '').localeCompare(b.submittedAt || ''); });
         var ownerRow = '<button type="button" class="pf-owner-chip' + (ownerActive ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(ownerTargetId) + '">' +
           selfIcon + ' ' + escapeHtml(currentUser.nickname) + selfSuffix + (ownerActive && iAmMM ? ' · 홈' : '') + '</button>';
+        var friendUnreadTotal = 0;
         var childChips = friendSubs.map(function (s) {
           var on = actingAs === s.id;
           /* 🔑 = 임시 PIN 활성(친구가 직접 로그인 가능) · "N시간 전" = 친구가 직접 마지막 로그인 */
@@ -4472,14 +4473,19 @@
           var loginBadge = s.lastSelfLoginAt
             ? ' <span class="ps-login" style="font-weight:400;opacity:.7;font-size:.82em;">· ' + escapeHtml(relTimeShort(s.lastSelfLoginAt)) + '</span>'
             : '';
+          /* 이 친구에게 온 안 읽은 알림(요청·승인·관리자 메시지) — 주선자가 전환 안 해도 보이게 배지 */
+          var un = userUnread(state, s); friendUnreadTotal += un;
+          var unBadge = un ? ' <span class="count blink" style="padding:0 6px;margin-left:2px;">' + un + '</span>' : '';
           var tip = pinActive ? ('임시 PIN ' + subPinUntilText(s)) : '임시 PIN 없음(전환해서 발급 가능)';
+          if (un) tip += ' · 안 읽은 알림 ' + un + '건';
           if (s.lastSelfLoginAt) tip += ' · 친구 직접 로그인 ' + new Date(s.lastSelfLoginAt).toLocaleString('ko-KR');
-          return '<button type="button" class="pf-switch-chip' + (on ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '" title="' + escapeHtml(tip) + '">🤝 ' + escapeHtml(s.nickname) + keyBadge + loginBadge + '</button>';
+          return '<button type="button" class="pf-switch-chip' + (on ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '" title="' + escapeHtml(tip) + '">🤝 ' + escapeHtml(s.nickname) + unBadge + keyBadge + loginBadge + '</button>';
         }).join('');
         childChips += '<button type="button" class="pf-switch-chip pf-switch-add" data-action="switch-add">＋ 추가</button>';
+        var friendUnreadLabel = friendUnreadTotal ? ' <span class="count blink" title="친구들에게 온 안 읽은 알림">친구 ' + friendUnreadTotal + '</span>' : '';
         /* 접기 여부는 렌더 후 실제 높이로 판단(adjustSwitcherClip) — 화면 폭에 따라 2줄 넘칠 때만 */
         switcher = '<div class="profile-switch">' +
-            '<span class="ps-label">🔄 누구로 활동할까요? <span class="ps-hint">눌러서 전환</span></span>' +
+            '<span class="ps-label">🔄 누구로 활동할까요? <span class="ps-hint">눌러서 전환</span>' + friendUnreadLabel + '</span>' +
             '<div class="ps-tree">' + ownerRow + '<div class="ps-children" id="ps-children">' + childChips + '</div>' +
               '<button type="button" class="ps-expand-btn" id="ps-expand" hidden></button>' +
             '</div>' +
