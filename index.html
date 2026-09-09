@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-184';
+  var APP_VERSION = '2026-09-09-185';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3127,7 +3127,7 @@
             '<span class="chip chip--gender-' + escapeHtml(entry.gender) + '">' + genderLabel(entry.gender) + '</span>' +
             '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
             (entry.height ? '<span class="chip">' + escapeHtml(entry.height) + 'cm</span>' : '') +
-            (entry.testAccount && isAdminUnlocked ? '<span class="chip" style="background:#e8eaed;color:#5f6368;">🧪 테스트</span>' : '') +
+            (isAdminUnlocked && entry.deactivated ? '<span class="chip" style="background:var(--gold-soft);color:var(--gold);">🗄 보관</span>' : (entry.testAccount && isAdminUnlocked ? '<span class="chip" style="background:#e8eaed;color:#5f6368;">🧪 테스트</span>' : '')) +
             (isAdminUnlocked && isProxyEntry(entry) && !entry.ownerSelf ? '<span class="chip" data-action="card-detail" data-id="' + escapeHtml(entry.managedBy || '') + '" style="background:var(--gold-soft);color:var(--gold);border-color:var(--gold);cursor:pointer;text-decoration:underline dotted;" title="주선자 정보 보기">🤝 ' + escapeHtml(managerNickOf(state, entry)) + '님이 소개</span>' : '') +
           '</div>' +
           '<ul class="pf-meta">' +
@@ -3139,12 +3139,16 @@
           adminInfoHtml +
         '</div>' +
         '<div class="pf-actions">' +
-          reqBtns +
-          adminBtn +
-          '<button type="button" class="card-btn" data-action="edit" data-id="' + escapeHtml(entry.id) + '">수정</button>' +
           (isAdminUnlocked
-            ? '<button type="button" class="card-btn danger" data-action="admin-manage" data-id="' + escapeHtml(entry.id) + '">보류·삭제</button>'
-            : '<button type="button" class="card-btn danger" data-action="delete" data-id="' + escapeHtml(entry.id) + '">삭제</button>') +
+            ? adminBtn +
+              (entry.deactivated ? '<button type="button" class="card-btn approve" data-action="reactivate" data-id="' + escapeHtml(entry.id) + '">♻️ 다시 활성화</button>' : '') +
+              '<button type="button" class="card-btn" data-action="edit" data-id="' + escapeHtml(entry.id) + '">수정</button>' +
+              '<button type="button" class="card-btn danger" data-action="admin-manage" data-id="' + escapeHtml(entry.id) + '">보류·삭제</button>'
+            : mineOrManaged
+              ? '<button type="button" class="card-btn" data-action="edit" data-id="' + escapeHtml(entry.id) + '">수정</button>' +
+                '<button type="button" class="card-btn" data-action="deactivate" data-id="' + escapeHtml(entry.id) + '">🗄 비활성화</button>' +
+                '<button type="button" class="card-btn danger" data-action="delete" data-id="' + escapeHtml(entry.id) + '">삭제</button>'
+              : reqBtns) +
         '</div>' +
       '</article>'
     );
@@ -3237,7 +3241,7 @@
             '<span class="chip chip--gender-' + escapeHtml(entry.gender) + '">' + genderLabel(entry.gender) + '</span>' +
             '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
             (entry.height ? '<span class="chip">' + escapeHtml(entry.height) + 'cm</span>' : '') +
-            (entry.testAccount && isAdminUnlocked ? '<span class="chip" style="background:#e8eaed;color:#5f6368;">🧪 테스트</span>' : '') +
+            (isAdminUnlocked && entry.deactivated ? '<span class="chip" style="background:var(--gold-soft);color:var(--gold);">🗄 보관</span>' : (entry.testAccount && isAdminUnlocked ? '<span class="chip" style="background:#e8eaed;color:#5f6368;">🧪 테스트</span>' : '')) +
             (isAdminUnlocked && isProxyEntry(entry) && !entry.ownerSelf ? '<span class="chip" style="background:var(--gold-soft);color:var(--gold);border-color:var(--gold);">🤝 소개</span>' : '') +
           '</div>' +
           '<div class="compact-meta">' + ICON_PIN + '<span>' + escapeHtml(entry.region || '-') + '</span>' +
@@ -3965,6 +3969,8 @@
         actingBanner +
         '<p class="sub">' + escapeHtml(me.nickname) + '님, 반가워요! 받은 요청은 직접 승인하거나 거절할 수 있어요.</p>' +
         (me.deleteRequested ? '<div class="mine-note reject" style="margin-top:10px;">🗑 삭제 요청이 접수되어 <b>관리자 확인 중</b>이에요. <button type="button" class="card-btn" data-action="cancel-delete" data-id="' + escapeHtml(me.id) + '" style="flex:none;padding:4px 12px;margin-left:8px;">삭제 요청 취소</button></div>' : '') +
+        (me.deactivateRequested ? '<div class="mine-note" style="margin-top:10px;background:var(--gold-soft);border-color:var(--gold);">🗄 비활성화(보관) 요청이 접수되어 <b>관리자 확인 중</b>이에요. <button type="button" class="card-btn" data-action="cancel-deactivate" data-id="' + escapeHtml(me.id) + '" style="flex:none;padding:4px 12px;margin-left:8px;">요청 취소</button></div>' : '') +
+        (me.deactivated ? '<div class="mine-note" style="margin-top:10px;background:var(--gold-soft);border-color:var(--gold);">🗄 <b>보관 상태</b>예요 (명단에 노출되지 않아요). 복구는 상단 <b>💬 Q&amp;A</b>로 문의하거나 카카오톡으로 요청해 주세요.</div>' : '') +
         (isSubProfile ? '' : joinRequestSectionHtml(state, false)) + /* 나에게 온 주선자 요청 있으면 표시 */
         sections +
         photoViewersSectionHtml(state, me) +
@@ -4099,6 +4105,22 @@
               '<div class="pending-actions">' +
                 '<button type="button" class="card-btn danger" data-action="approve-delete" data-id="' + escapeHtml(e.id) + '">삭제 승인</button>' +
                 '<button type="button" class="card-btn" data-action="cancel-delete" data-id="' + escapeHtml(e.id) + '">요청 취소</button>' +
+              '</div>' +
+            '</div>';
+          }).join('') +
+        '</div>'
+      : '';
+    /* 비활성화(보관) 요청 */
+    var deacReqs = (state.entries || []).filter(function (e) { return e.deactivateRequested; });
+    var deacReqSection = deacReqs.length
+      ? '<div class="pending-section"><h2>🗄 비활성화 요청<span class="pending-count">' + deacReqs.length + '</span></h2>' +
+          deacReqs.map(function (e) {
+            return '<div class="pending-item">' +
+              '<div class="p-name" data-action="card-detail" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(e.nickname) + ' <span class="chip" style="background:var(--gold-soft);color:var(--gold);">비활성화 요청</span></div>' +
+              '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(e.region || '') + ' · 요청: ' + fmtDate(e.deactivateReqAt) + '</div>' +
+              '<div class="pending-actions">' +
+                '<button type="button" class="card-btn approve" data-action="approve-deactivate" data-id="' + escapeHtml(e.id) + '">보관 전환 승인</button>' +
+                '<button type="button" class="card-btn" data-action="cancel-deactivate" data-id="' + escapeHtml(e.id) + '">요청 취소</button>' +
               '</div>' +
             '</div>';
           }).join('') +
@@ -4395,6 +4417,7 @@
         usageStatsHtml(state) +
         pendingSection +
         (deleteReqSection ? '<hr class="perforation">' + deleteReqSection : '') +
+        (deacReqSection ? '<hr class="perforation">' + deacReqSection : '') +
         '<hr class="perforation">' +
         '<h2>📬 요청함<span class="pending-count">' + activeReqs.length + '</span></h2>' +
         '<p class="sub">아직 처리하지 않은 사진 요청·대화 신청이에요.</p>' +
@@ -4488,6 +4511,7 @@
       var st = reqStatus(r); return st !== 'approved' && st !== 'rejected';
     }).length;
     var deleteReqCount = (state.entries || []).filter(function (e) { return e.deleteRequested; }).length;
+    var deacReqCount = (state.entries || []).filter(function (e) { return e.deactivateRequested; }).length;
     var tabs =
       '<button type="button" class="tab-btn" data-tab="form" role="tab" aria-selected="' + (activeTab === 'form') + '">신청서 작성</button>' +
       '<button type="button" class="tab-btn" data-tab="list" role="tab" aria-selected="' + (activeTab === 'list') + '">명단 보기<span class="count">' + entries.length + '</span></button>';
@@ -4504,6 +4528,7 @@
         '<span class="count' + (pendingCount >= 1 ? ' blink' : '') + '" title="승인 대기">대기 ' + pendingCount + '</span>' +
         '<span class="count" title="요청">요청 ' + reqCount + '</span>' +
         (deleteReqCount >= 1 ? '<span class="count blink" title="삭제 요청">삭제 ' + deleteReqCount + '</span>' : '') +
+        (deacReqCount >= 1 ? '<span class="count blink" title="비활성화 요청">보관 ' + deacReqCount + '</span>' : '') +
         '<span class="count' + (msgUnread >= 1 ? ' blink' : '') + '" title="안 읽은 Q&A">Q&A ' + msgUnread + '</span></button>';
     }
     /* 주선자 프로필 전환 바: 주선자 계정이거나 대리 프로필이 1개 이상일 때 표시 (주선자는 sub 없어도 항상 보임).
@@ -5312,6 +5337,102 @@
     }).then(function () {
       modalNotice('취소됨', '삭제 요청을 취소했어요.');
     }).catch(function (err) { modalNotice('오류', '취소 실패: ' + (err.message || err)); });
+  }
+
+  /* ── 비활성화(보관) 흐름 — 본인이 요청 → 관리자 승인 시 보관(테스트 계정) 처리 ── */
+  function handleDeactivate(id) {
+    var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
+    if (!entry) return;
+    if (!(currentUser && (currentUser.id === id || iManageTarget(currentState, id)))) {
+      return modalNotice('안내', '본인(또는 내가 소개한 친구) 프로필만 비활성화할 수 있어요.');
+    }
+    if (entry.deactivateRequested) { modalNotice('안내', '이미 비활성화 요청됐어요. 관리자 확인 중이에요.'); return; }
+    modalConfirm('비활성화(보관)',
+      '개인적인 사정으로 소개팅을 잠시 중단할 경우, 보관 상태로 전환됩니다. 추후 복구는 관리자에게 Q&A로 연락하거나 카카오톡을 통해 가능합니다. 관리자에게 비활성화를 요청할까요?',
+      '비활성화 요청', 'primary').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var entries = (s.entries || []).map(function (e) {
+            if (e.id !== id) return e;
+            var c = JSON.parse(JSON.stringify(e)); c.deactivateRequested = true; c.deactivateReqAt = new Date().toISOString(); return c;
+          });
+          tx.update(stateRef, { entries: entries });
+        });
+      }).then(function () {
+        appendLog('request', entry.nickname, '프로필 비활성화(보관) 요청');
+        notifyAdmin('🗄 비활성화 요청', entry.nickname + '님이 프로필 비활성화(보관)를 요청했어요.');
+        return refreshNow();
+      }).then(function () {
+        modalNotice('요청 접수', '관리자 확인 후 보관 상태로 전환돼요. 그때까지는 명단에 남아 있어요.');
+      }).catch(function (err) { modalNotice('오류', '요청 실패: ' + (err.message || err)); });
+    });
+  }
+  function handleApproveDeactivate(id) {
+    if (!isAdminUnlocked) return;
+    var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
+    if (!entry) return;
+    modalConfirm('비활성화 승인', escapeHtml(entry.nickname) + '님을 보관 상태로 전환할까요? 명단에서 숨겨지고, 복구는 다시 활성화하면 돼요.', '보관 전환', 'primary').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var entries = (s.entries || []).map(function (e) {
+            if (e.id !== id) return e;
+            var c = JSON.parse(JSON.stringify(e)); c.testAccount = true; c.deactivated = true; delete c.deactivateRequested; delete c.deactivateReqAt; return c;
+          });
+          tx.update(stateRef, { entries: entries });
+        });
+      }).then(function () {
+        appendLog('admin', '관리자', '비활성화(보관) 승인 · ' + entry.nickname);
+        return refreshNow();
+      }).then(function () {
+        modalNotice('보관 전환 완료', entry.nickname + '님을 보관 상태로 전환했어요. (명단 비노출)');
+      }).catch(function (err) { modalNotice('오류', '전환 실패: ' + (err.message || err)); });
+    });
+  }
+  function handleCancelDeactivateReq(id) {
+    var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
+    if (!entry) return;
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var entries = (s.entries || []).map(function (e) {
+          if (e.id !== id) return e;
+          var c = JSON.parse(JSON.stringify(e)); delete c.deactivateRequested; delete c.deactivateReqAt; return c;
+        });
+        tx.update(stateRef, { entries: entries });
+      });
+    }).then(function () {
+      appendLog(isAdminUnlocked ? 'admin' : 'request', isAdminUnlocked ? '관리자' : entry.nickname, '비활성화 요청 취소 · ' + entry.nickname);
+      return refreshNow();
+    }).then(function () {
+      modalNotice('취소됨', '비활성화 요청을 취소했어요.');
+    }).catch(function (err) { modalNotice('오류', '취소 실패: ' + (err.message || err)); });
+  }
+  /* 관리자: 보관(비활성) 계정을 다시 활성화 */
+  function handleReactivate(id) {
+    if (!isAdminUnlocked) return;
+    var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
+    if (!entry) return;
+    modalConfirm('다시 활성화', escapeHtml(entry.nickname) + '님을 다시 명단에 노출할까요?', '활성화', 'approve').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var entries = (s.entries || []).map(function (e) {
+            if (e.id !== id) return e;
+            var c = JSON.parse(JSON.stringify(e)); delete c.testAccount; delete c.deactivated; return c;
+          });
+          tx.update(stateRef, { entries: entries });
+        });
+      }).then(function () {
+        appendLog('admin', '관리자', '다시 활성화 · ' + entry.nickname);
+        return refreshNow();
+      }).then(function () { modalNotice('활성화 완료', entry.nickname + '님을 다시 명단에 노출했어요.'); })
+        .catch(function (err) { modalNotice('오류', '활성화 실패: ' + (err.message || err)); });
+    });
   }
 
   function handleRequest(toId, type) {
@@ -6519,6 +6640,10 @@
       else if (action === 'reject') handleReject(id);
       else if (action === 'approve-delete') handleApproveDelete(id);
       else if (action === 'cancel-delete') handleCancelDeleteReq(id);
+      else if (action === 'deactivate') handleDeactivate(id);
+      else if (action === 'approve-deactivate') handleApproveDeactivate(id);
+      else if (action === 'cancel-deactivate') handleCancelDeactivateReq(id);
+      else if (action === 'reactivate') handleReactivate(id);
       else if (action === 'approve-request') handleApproveRequest(id);
       else if (action === 'hold-request') handleHoldRequest(id);
       else if (action === 'reject-request') handleRejectRequest(id);
@@ -6815,7 +6940,7 @@
     });
   }
 
-  var ANNOUNCE_KEY = 'announce-v12'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
+  var ANNOUNCE_KEY = 'announce-v13'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
   function showAnnouncement(force) {
     if (!force) {
       try {
@@ -6829,10 +6954,12 @@
         '<div style="' + box + '">' +
           '&#128214; <b>사용 설명서</b><br>' +
           '<ul style="padding-left:18px;margin:6px 0;list-style:none;">' +
-            '<li style="' + li + '"><b>① 신청서 작성</b> — 얼굴 보이는 사진 <b>1장 이상 등록 필수</b> → 관리자 승인 후 명단 등록.</li>' +
-            '<li style="' + li + '"><b>② 명단 보기</b> — <b>&#128247; 사진 요청</b>(수락 시 서로 공개) 또는 <b>&#128172; 대화 요청</b>(수락 시 인앱 채팅).' +
-              '<div style="color:var(--muted);font-size:0.76rem;margin-top:2px;">※ 전화번호는 추후 카카오톡 알림 및 지인과 서로 마주치지 않기 위해 받고 있어요.</div></li>' +
-            '<li style="' + li + '"><b>③ 메시지함</b> — 보낸/받은 요청을 관리하고, 권한을 회수할 수도 있어요.</li>' +
+            '<li style="' + li + '"><b>① 신청서 작성</b> <span style="color:var(--muted);">(관리자 승인 후 등록)</span>' +
+              '<div style="color:var(--muted);font-size:0.76rem;margin-top:2px;">※ 전화번호는 카카오톡 알림 및 지인과 서로 마주치지 않기 위해 받고 있어요. <b>보안 탭</b> 참고</div></li>' +
+            '<li style="' + li + '"><b>② 명단 보기</b><br>' +
+              '&nbsp;&nbsp;<b>&#128247; 사진 요청</b>(수락 시 서로 공개)<br>' +
+              '&nbsp;&nbsp;<b>&#128172; 대화 요청</b>(수락 시 인앱 채팅, 번호 교환 가능)</li>' +
+            '<li style="' + li + '"><b>③ 메시지함</b> — 사진/대화 요청 <b>승인·보류·거절·회수</b> 가능.</li>' +
           '</ul>' +
         '</div>' +
         '<div style="' + box + '">' +
@@ -6844,8 +6971,8 @@
           '</ul>' +
         '</div>' +
         '<div style="' + box + 'margin-bottom:0;">' +
-          '&#128276; <b>알림</b> — 요청·메시지가 오면 <b>기기로 바로</b> (앱 꺼둬도). 상단 <b>&#128276; 알림</b>으로 켜기. ' +
-          '<span style="color:var(--muted);">아이폰은 <b>"홈 화면에 추가"</b>한 앱에서만. 방법은 &#128718; 가이드.</span>' +
+          '&#128276; <b>알림</b><br>' +
+          '<span style="color:var(--muted);">카카오톡 알림을 준비 중이에요. 현재는 상단 <b>&#128276; 알림</b>을 눌러 <b>가이드에 따라 설정</b>해 주세요.</span>' +
         '</div>' +
       '</div>';
     var secPanel =
