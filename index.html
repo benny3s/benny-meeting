@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-186';
+  var APP_VERSION = '2026-09-09-187';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4153,6 +4153,7 @@
             return '<div class="pending-item">' +
               '<div class="p-name" data-action="card-detail" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(e.nickname) + ' <span class="chip" style="background:var(--gold-soft);color:var(--gold);">비활성화 요청</span></div>' +
               '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(e.region || '') + ' · 요청: ' + fmtDate(e.deactivateReqAt) + '</div>' +
+              (e.deactivateReason ? '<div class="p-meta" style="color:var(--ink);">사유: "' + escapeHtml(e.deactivateReason) + '"</div>' : '') +
               '<div class="pending-actions">' +
                 '<button type="button" class="card-btn approve" data-action="approve-deactivate" data-id="' + escapeHtml(e.id) + '">보관 전환 승인</button>' +
                 '<button type="button" class="card-btn" data-action="cancel-deactivate" data-id="' + escapeHtml(e.id) + '">요청 취소</button>' +
@@ -5387,22 +5388,22 @@
       return modalNotice('안내', '본인(또는 내가 소개한 친구) 프로필만 비활성화할 수 있어요.');
     }
     if (entry.deactivateRequested) { modalNotice('안내', '이미 비활성화 요청됐어요. 관리자 확인 중이에요.'); return; }
-    modalConfirm('비활성화(보관)',
-      '개인적인 사정으로 소개팅을 잠시 중단할 경우, 보관 상태로 전환됩니다. 추후 복구는 관리자에게 Q&A로 연락하거나 카카오톡을 통해 가능합니다. 관리자에게 비활성화를 요청할까요?',
-      '비활성화 요청', 'primary').then(function (ok) {
-      if (!ok) return;
+    modalMessage('비활성화(보관)',
+      '개인적인 사정으로 소개팅을 잠시 중단할 경우, 보관 상태로 전환됩니다. 추후 복구는 관리자에게 Q&A로 연락하거나 카카오톡을 통해 가능합니다. 비활성화 사유를 꼭 남겨주세요.',
+      '비활성화 요청', 'primary', '예: 좋은 인연을 만났어요 / 잠시 쉬어갈게요', true).then(function (reason) {
+      if (reason === null || reason === undefined) return;
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
           var s = doc.data();
           var entries = (s.entries || []).map(function (e) {
             if (e.id !== id) return e;
-            var c = JSON.parse(JSON.stringify(e)); c.deactivateRequested = true; c.deactivateReqAt = new Date().toISOString(); return c;
+            var c = JSON.parse(JSON.stringify(e)); c.deactivateRequested = true; c.deactivateReqAt = new Date().toISOString(); c.deactivateReason = reason; return c;
           });
           tx.update(stateRef, { entries: entries });
         });
       }).then(function () {
-        appendLog('request', entry.nickname, '프로필 비활성화(보관) 요청');
-        notifyAdmin('🗄 비활성화 요청', entry.nickname + '님이 프로필 비활성화(보관)를 요청했어요.');
+        appendLog('request', entry.nickname, '프로필 비활성화(보관) 요청 · ' + reason);
+        notifyAdmin('🗄 비활성화 요청', entry.nickname + '님이 프로필 비활성화(보관)를 요청했어요. (' + reason + ')');
         return refreshNow();
       }).then(function () {
         modalNotice('요청 접수', '관리자 확인 후 보관 상태로 전환돼요. 그때까지는 명단에 남아 있어요.');
@@ -5420,7 +5421,7 @@
           var s = doc.data();
           var entries = (s.entries || []).map(function (e) {
             if (e.id !== id) return e;
-            var c = JSON.parse(JSON.stringify(e)); c.testAccount = true; c.deactivated = true; delete c.deactivateRequested; delete c.deactivateReqAt; return c;
+            var c = JSON.parse(JSON.stringify(e)); c.testAccount = true; c.deactivated = true; delete c.deactivateRequested; delete c.deactivateReqAt; delete c.deactivateReason; return c;
           });
           tx.update(stateRef, { entries: entries });
         });
@@ -5440,7 +5441,7 @@
         var s = doc.data();
         var entries = (s.entries || []).map(function (e) {
           if (e.id !== id) return e;
-          var c = JSON.parse(JSON.stringify(e)); delete c.deactivateRequested; delete c.deactivateReqAt; return c;
+          var c = JSON.parse(JSON.stringify(e)); delete c.deactivateRequested; delete c.deactivateReqAt; delete c.deactivateReason; return c;
         });
         tx.update(stateRef, { entries: entries });
       });
