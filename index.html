@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-188';
+  var APP_VERSION = '2026-09-09-189';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3181,7 +3181,8 @@
         '<div class="pf-actions">' +
           (isAdminUnlocked
             ? adminBtn +
-              (entry.deactivated ? '<button type="button" class="card-btn approve" data-action="reactivate" data-id="' + escapeHtml(entry.id) + '">♻️ 다시 활성화</button>' : '') +
+              (entry.deactivated ? '<button type="button" class="card-btn approve" data-action="reactivate" data-id="' + escapeHtml(entry.id) + '">♻️ 다시 활성화</button>' +
+                '<button type="button" class="card-btn" data-action="notify-connected" data-id="' + escapeHtml(entry.id) + '">📢 연결 회원 안내</button>' : '') +
               '<button type="button" class="card-btn" data-action="edit" data-id="' + escapeHtml(entry.id) + '">수정</button>' +
               '<button type="button" class="card-btn danger" data-action="admin-manage" data-id="' + escapeHtml(entry.id) + '">보류·삭제</button>'
             : mineOrManaged
@@ -5341,13 +5342,47 @@
       }).catch(function (err) { modalNotice('오류', '요청 실패: ' + (err.message || err)); });
     });
   }
-  /* 관리자: 삭제 요청 승인 → 실제 삭제 */
+  /* 해당 계정과 실제로 연결된(사진 승인·대화 연결·DM) 회원 id 목록 */
+  function connectedMemberIds(state, targetId) {
+    var ids = {};
+    (state.dateRequests || []).forEach(function (r) {
+      if (!r.approved) return;
+      if (r.fromId === targetId && r.toId) ids[r.toId] = 1;
+      else if (r.toId === targetId && r.fromId) ids[r.fromId] = 1;
+    });
+    (state.dm || []).forEach(function (m) {
+      if (m.fromId === targetId && m.toId) ids[m.toId] = 1;
+      else if (m.toId === targetId && m.fromId) ids[m.fromId] = 1;
+    });
+    delete ids[targetId];
+    var valid = [];
+    (state.entries || []).forEach(function (e) { if (ids[e.id] && !e.deactivated) valid.push(e.id); });
+    return valid;
+  }
+  /* 관리자: 연결된 회원에게 안내 일괄 발송 */
+  function handleNotifyConnected(id) {
+    if (!isAdminUnlocked) return;
+    var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
+    var ids = connectedMemberIds(currentState, id);
+    if (!ids.length) { modalNotice('안내', '이 계정과 연결된(사진 승인·대화 연결) 회원이 없어요.'); return; }
+    modalMessage('📢 연결 회원 안내 (' + ids.length + '명)',
+      ids.length + '명에게 관리자 명의로 보낼 안내를 입력하세요. (누가 나갔는지 이름은 밝히지 않는 완곡한 표현을 권장)',
+      '보내기', 'primary', '예: 회원님과 연결됐던 상대분이 개인 사정으로 잠시 소개팅을 쉬어가게 되었어요. 새로운 인연을 응원할게요 🙏', true).then(function (text) {
+      if (text == null) return;
+      Promise.all(ids.map(function (cid) { return sendMessageTo(cid, 'admin', text); })).then(function () {
+        appendLog('admin', '관리자', '연결 회원 안내 ' + ids.length + '명 · ' + (entry ? entry.nickname : id));
+        return refreshNow();
+      }).then(function () { modalNotice('전송 완료', ids.length + '명에게 안내를 보냈어요.'); })
+        .catch(function (err) { modalNotice('오류', '전송 실패: ' + (err.message || err)); });
+    });
+  }
+  /* 관리자: 삭제 요청 승인 → (연결 회원 안내 옵션) → 실제 삭제 */
   function handleApproveDelete(id) {
     if (!isAdminUnlocked) return;
     var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
     if (!entry) return;
-    modalConfirm('삭제 승인', escapeHtml(entry.nickname) + '님을 정말 삭제할까요? 되돌릴 수 없어요.', '삭제', 'danger').then(function (ok) {
-      if (!ok) return;
+    var connected = connectedMemberIds(currentState, id);
+    function doDelete() {
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
           var s = doc.data();
@@ -5363,6 +5398,21 @@
       }).then(function () {
         modalNotice('삭제 완료', entry.nickname + '님을 삭제했어요.');
       }).catch(function (err) { modalNotice('오류', '삭제 실패: ' + (err.message || err)); });
+    }
+    modalConfirm('삭제 승인', escapeHtml(entry.nickname) + '님을 정말 삭제할까요? 되돌릴 수 없어요.' + (connected.length ? ' (연결된 회원 ' + connected.length + '명)' : ''), '삭제', 'danger').then(function (ok) {
+      if (!ok) return;
+      if (!connected.length) { doDelete(); return; }
+      /* 삭제하면 연결 정보가 사라지므로, 삭제 전에 안내 발송 여부를 먼저 물음 */
+      modalConfirm('연결 회원 안내', '삭제 전에 연결된 ' + connected.length + '명에게 안내를 먼저 보낼까요? (삭제하면 연결 정보가 사라져 이후엔 보낼 수 없어요)', '안내 보내고 삭제', 'primary').then(function (sendFirst) {
+        if (!sendFirst) { doDelete(); return; }
+        modalMessage('📢 연결 회원 안내 (' + connected.length + '명)', '삭제 전에 보낼 안내를 입력하세요. (이름은 밝히지 않는 완곡한 표현 권장)', '보내고 삭제', 'primary', '예: 회원님과 연결됐던 상대분이 개인 사정으로 소개팅을 마치게 되었어요. 새로운 인연을 응원할게요 🙏', true).then(function (text) {
+          if (text == null) { doDelete(); return; } /* 안내 취소해도 삭제는 이미 승인됨 → 삭제 진행 */
+          Promise.all(connected.map(function (cid) { return sendMessageTo(cid, 'admin', text); })).then(function () {
+            appendLog('admin', '관리자', '연결 회원 안내 ' + connected.length + '명(삭제 전) · ' + entry.nickname);
+            doDelete();
+          }).catch(function () { doDelete(); });
+        });
+      });
     });
   }
   /* 관리자 또는 본인: 삭제 요청 취소 (플래그 해제) */
@@ -6691,6 +6741,7 @@
       else if (action === 'approve-deactivate') handleApproveDeactivate(id);
       else if (action === 'cancel-deactivate') handleCancelDeactivateReq(id);
       else if (action === 'reactivate') handleReactivate(id);
+      else if (action === 'notify-connected') handleNotifyConnected(id);
       else if (action === 'approve-request') handleApproveRequest(id);
       else if (action === 'hold-request') handleHoldRequest(id);
       else if (action === 'reject-request') handleRejectRequest(id);
