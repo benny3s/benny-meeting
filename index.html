@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-176';
+  var APP_VERSION = '2026-09-09-177';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -6743,7 +6743,7 @@
     });
   }
 
-  var ANNOUNCE_KEY = 'announce-v11'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
+  var ANNOUNCE_KEY = 'announce-v12'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
   function showAnnouncement(force) {
     if (!force) {
       try {
@@ -6758,7 +6758,8 @@
           '&#128214; <b>사용 설명서</b><br>' +
           '<ul style="padding-left:18px;margin:6px 0;list-style:none;">' +
             '<li style="' + li + '"><b>① 신청서 작성</b> — 얼굴 보이는 사진 <b>1장 이상 등록 필수</b> → 관리자 승인 후 명단 등록.</li>' +
-            '<li style="' + li + '"><b>② 명단 보기</b> — <b>&#128247; 사진 요청</b>(수락 시 서로 공개, 요청하면서 <b>먼저 공개도 가능</b>) 또는 <b>&#128172; 대화 요청</b>(수락 시 인앱 채팅). <span style="color:var(--muted);">전화번호는 추후 카카오톡 알림 및 지인과 서로 마주치지 않기 위해 받고 있어요.</span></li>' +
+            '<li style="' + li + '"><b>② 명단 보기</b> — <b>&#128247; 사진 요청</b>(수락 시 서로 공개) 또는 <b>&#128172; 대화 요청</b>(수락 시 인앱 채팅).' +
+              '<div style="color:var(--muted);font-size:0.76rem;margin-top:2px;">※ 전화번호는 추후 카카오톡 알림 및 지인과 서로 마주치지 않기 위해 받고 있어요.</div></li>' +
             '<li style="' + li + '"><b>③ 메시지함</b> — 보낸/받은 요청을 관리하고, 권한을 회수할 수도 있어요.</li>' +
           '</ul>' +
         '</div>' +
