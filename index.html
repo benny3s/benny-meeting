@@ -829,7 +829,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-09-189';
+  var APP_VERSION = '2026-09-09-190';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4169,6 +4169,24 @@
           }).join('') +
         '</div>'
       : '';
+    /* 보관(비활성) 계정 목록 — 사유·재활성화·연결 안내 */
+    var deacList = (state.entries || []).filter(function (e) { return e.deactivated; });
+    var deacListSection = deacList.length
+      ? '<div class="pending-section"><h2>🗄 보관 계정<span class="pending-count">' + deacList.length + '</span></h2>' +
+          '<p class="sub">비활성화(보관)된 계정이에요. 명단엔 안 보여요. 사유 확인·다시 활성화·연결 회원 안내를 할 수 있어요.</p>' +
+          deacList.map(function (e) {
+            return '<div class="pending-item">' +
+              '<div class="p-name" data-action="card-detail" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(e.nickname) + ' <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🗄 보관</span></div>' +
+              '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(e.region || '') + (e.deactivatedAt ? ' · 보관: ' + fmtDate(e.deactivatedAt) : '') + '</div>' +
+              (e.deactivatedReason ? '<div class="p-meta" style="color:var(--ink);">사유: "' + escapeHtml(e.deactivatedReason) + '"</div>' : '') +
+              '<div class="pending-actions">' +
+                '<button type="button" class="card-btn approve" data-action="reactivate" data-id="' + escapeHtml(e.id) + '">♻️ 다시 활성화</button>' +
+                '<button type="button" class="card-btn" data-action="notify-connected" data-id="' + escapeHtml(e.id) + '">📢 연결 회원 안내</button>' +
+              '</div>' +
+            '</div>';
+          }).join('') +
+        '</div>'
+      : '';
     var allEntries = state.entries;
     var uidOf = function (eid) {
       if (eid && eid.indexOf('guest-') === 0) return '🙋';
@@ -4466,6 +4484,7 @@
         pendingSection +
         (deleteReqSection ? '<hr class="perforation">' + deleteReqSection : '') +
         (deacReqSection ? '<hr class="perforation">' + deacReqSection : '') +
+        (deacListSection ? '<hr class="perforation">' + deacListSection : '') +
         '<hr class="perforation">' +
         '<h2>📬 요청함<span class="pending-count">' + activeReqs.length + '</span></h2>' +
         '<p class="sub">아직 처리하지 않은 사진 요청·대화 신청이에요.</p>' +
