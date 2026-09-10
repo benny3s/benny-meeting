@@ -745,11 +745,11 @@
   .pf-owner-chip:hover { border-color: var(--accent); }
   .pf-owner-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   .ps-children {
-    display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+    display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
     margin-left: 12px; padding-left: 14px; border-left: 2px solid var(--gold);
   }
   .ps-children:empty { display: none; }
-  .ps-children.ps-clip { max-height: 78px; overflow: hidden; } /* 약 2줄만 보이게 */
+  .ps-line { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .ps-expand-btn {
     align-self: flex-start; margin-left: 14px; border: none; background: none;
     color: var(--gold); font-weight: 700; font-size: 0.8rem; cursor: pointer;
@@ -878,7 +878,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-219';
+  var APP_VERSION = '2026-09-10-220';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4256,7 +4256,7 @@
           '<hr class="perforation">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
             '<h2 style="margin:12px 0 4px;">🙋 내 소개팅 (본인)</h2>' +
-            '<button type="button" class="card-btn primary" data-action="card-detail" data-id="' + escapeHtml(me.id) + '" style="flex:none;">👤 프로필</button>' +
+            '<button type="button" class="card-btn primary" data-action="card-detail" data-id="' + escapeHtml(me.id) + '" style="flex:none;">👤 내 프로필 보기</button>' +
           '</div>' +
           '<div class="my-uid">고유번호 ' + escapeHtml(formatUid(me) || '—') + '</div>' +
           '<p class="sub">내 소개팅 프로필로 받고 보낸 요청이에요.</p>' +
@@ -4278,12 +4278,13 @@
       var pinBtn = pinOn
         ? '<button type="button" class="card-btn approve" data-action="sub-pin-manage" data-id="' + escapeHtml(me.id) + '" style="flex:none;" title="눌러서 연장/회수">🔑 임시 PIN (' + escapeHtml(subPinUntilText(me)) + ')</button>'
         : '<button type="button" class="card-btn" data-action="sub-pin-issue" data-id="' + escapeHtml(me.id) + '" style="flex:none;">🔑 1일 PIN 발급</button>';
-      headBtns = '<button type="button" class="card-btn primary" data-action="card-detail" data-id="' + escapeHtml(me.id) + '" style="flex:none;">👤 프로필</button>' +
-        pinBtn +
-        '<button type="button" class="card-btn" data-action="sub-detach" data-id="' + escapeHtml(me.id) + '" style="flex:none;">🪪 일반 계정 전환</button>';
+      headBtns = '<button type="button" class="card-btn primary" data-action="card-detail" data-id="' + escapeHtml(me.id) + '" style="flex:none;">👤 내 프로필 보기</button>' +
+        '<div style="flex-basis:100%;height:0;"></div>' + /* 줄바꿈: 아래 줄에 일반 계정 전환(왼쪽) · 1일 PIN(오른쪽) */
+        '<button type="button" class="card-btn" data-action="sub-detach" data-id="' + escapeHtml(me.id) + '" style="flex:none;">🪪 일반 계정 전환</button>' +
+        pinBtn;
     } else if (isSubProfile) {
       /* 친구(sub)가 임시 PIN으로 직접 로그인한 경우: 프로필 수정 + 만료 시각 표시 */
-      headBtns = '<button type="button" class="card-btn primary" data-action="card-detail" data-id="' + escapeHtml(me.id) + '" style="flex:none;">👤 프로필</button>';
+      headBtns = '<button type="button" class="card-btn primary" data-action="card-detail" data-id="' + escapeHtml(me.id) + '" style="flex:none;">👤 내 프로필 보기</button>';
       if (me.pinAuth && !subPinExpired(me)) {
         headBtns += '<span class="chip" style="background:#e6f4ea;color:#137333;align-self:center;">🔑 임시 로그인 ' + escapeHtml(subPinUntilText(me)) + ' (' + escapeHtml(subPinRemainText(me)) + ')</span>';
       }
@@ -4296,7 +4297,7 @@
         : (myJoinReq
             ? '<button type="button" class="card-btn" id="cancel-mm-req" style="flex:none;">⏳ 주선자 승인 대기 (취소)</button>'
             : '<button type="button" class="card-btn" id="request-mm" style="flex:none;">🤝 주선자 요청</button>');
-      headBtns = '<button type="button" class="card-btn primary" data-action="card-detail" data-id="' + escapeHtml(me.id) + '" style="flex:none;">👤 프로필</button>' +
+      headBtns = '<button type="button" class="card-btn primary" data-action="card-detail" data-id="' + escapeHtml(me.id) + '" style="flex:none;">👤 내 프로필 보기</button>' +
         reqBtn + '<button type="button" class="card-btn" id="start-proxy" style="flex:none;">🤝 친구 대신 소개하기</button>';
     }
     return (
@@ -5011,19 +5012,23 @@
           return { on: on, html: '<button type="button" class="pf-switch-chip' + (on ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '" title="' + escapeHtml(tip) + '">🤝 ' + escapeHtml(s.nickname) + unBadge + keyBadge + '</button>' };
         });
         var addBtn = '<button type="button" class="pf-switch-chip pf-switch-add" data-action="switch-add">＋ 추가</button>';
-        /* 폴딩: 친구 2명 이상이면 접힘 상태에선 선택된 친구만, 펼치면 전체(등록순)+추가 */
+        function line(inner) { return '<div class="ps-line">' + inner + '</div>'; }
+        /* 친구는 세로로 한 줄씩. 폴딩(2명+): 접힘=한 명+더보기, 펼침=전체(등록순)+추가.
+           더보기/접기 버튼은 항상 첫 줄(첫 친구) 오른쪽에. +추가는 마지막 친구 아래 줄. */
         var canFold = friendSubs.length >= 2;
         var childChips;
         if (!canFold) {
-          childChips = chipList.map(function (c) { return c.html; }).join('') + addBtn;
+          childChips = chipList.map(function (c) { return line(c.html); }).join('') + line(addBtn);
         } else if (!switcherExpanded) {
-          /* 접힘: 선택된 친구(없으면 첫 번째 친구) 한 명 + 오른쪽 "더보기" */
+          /* 접힘: 선택된 친구(없으면 첫 번째) 한 명 + 오른쪽 "더보기" */
           var actives = chipList.filter(function (c) { return c.on; });
           var head = actives.length ? actives[0].html : chipList[0].html;
-          childChips = head + '<button type="button" class="pf-switch-chip pf-switch-fold" data-action="ps-toggle">더보기 ▾</button>';
+          childChips = line(head + '<button type="button" class="pf-switch-chip pf-switch-fold" data-action="ps-toggle">더보기 ▾</button>');
         } else {
-          childChips = chipList.map(function (c) { return c.html; }).join('') + addBtn +
-            '<button type="button" class="pf-switch-chip pf-switch-fold" data-action="ps-toggle">▴ 접기</button>';
+          /* 펼침: 첫 줄=첫 친구+접기, 나머지 친구 세로, 마지막에 +추가 */
+          childChips = line(chipList[0].html + '<button type="button" class="pf-switch-chip pf-switch-fold" data-action="ps-toggle">접기 ▴</button>') +
+            chipList.slice(1).map(function (c) { return line(c.html); }).join('') +
+            line(addBtn);
         }
         switcher = '<div class="profile-switch">' +
             '<span class="ps-label">🔄 누구로 활동할까요? <span class="ps-hint">눌러서 전환</span></span>' +
