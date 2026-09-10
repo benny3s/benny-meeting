@@ -763,6 +763,8 @@
   .pf-switch-chip:hover { border-color: var(--gold); }
   .pf-switch-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
   .pf-switch-chip.pf-switch-add { border-style: dashed; color: var(--accent); }
+  .pf-switch-chip.pf-switch-fold { color: var(--muted); background: transparent; }
+  .ps-none { align-self: center; color: var(--muted); font-size: 0.85rem; padding: 4px 2px; }
   .cap-bar {
     height: 12px; border-radius: 999px; background: var(--line);
     overflow: hidden; margin-top: 4px;
@@ -876,7 +878,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-214';
+  var APP_VERSION = '2026-09-10-215';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1305,17 +1307,7 @@
     return ' <span style="color:var(--accent);font-size:0.72rem;">' + (s.dir === 'asc' ? '▲' : '▼') + '</span>';
   }
   /* 전환창 친구 목록: 실제 높이가 2줄을 넘으면 접고 "모두 보기" 토글 표시 (화면 폭 무관) */
-  function adjustSwitcherClip() {
-    var kids = document.getElementById('ps-children');
-    var btn = document.getElementById('ps-expand');
-    if (!kids || !btn) return;
-    kids.classList.remove('ps-clip');           /* 자연 높이 측정 위해 잠시 해제 */
-    var TWO_ROWS = 82;                            /* 대략 2줄 (칩높이~34 + gap 6, 여유 포함) */
-    if (kids.scrollHeight <= TWO_ROWS + 4) { btn.hidden = true; return; }
-    btn.hidden = false;
-    if (switcherExpanded) { btn.textContent = '▴ 접기'; }
-    else { kids.classList.add('ps-clip'); btn.textContent = '▾ 친구 모두 보기'; }
-  }
+  function adjustSwitcherClip() { /* 폴딩을 렌더 시점에 처리하므로 더 이상 클립 계산 불필요 (호환용 no-op) */ }
   /* 활동 기록 행을 필터값으로 즉시 숨김/표시 (paint 없이 → 입력 포커스 유지) */
   function applyLogFilter() {
     var rows = document.querySelectorAll('.log-trow');
@@ -1928,6 +1920,7 @@
       var sub = ((currentState && currentState.entries) || []).find(function (e) { return e.id === id && e.managedBy === currentUser.id; });
       actingAs = sub ? id : null;
     }
+    switcherExpanded = false; /* 전환하면 전환창은 접어서 선택된 친구만 보이게 */
     /* 현재 탭 유지 (예전엔 전환 시 메시지함으로 강제 이동했음) */
     paint(currentState);
     /* 전환한 프로필 기준으로 지인 필터 숨김 목록 재계산 — 실제로 바뀔 때만 다시 그림(이중 새로고침 방지) */
@@ -5002,29 +4995,37 @@
         var ownerRow = '<button type="button" class="pf-owner-chip' + (ownerActive ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(ownerTargetId) + '">' +
           selfIcon + ' ' + escapeHtml(currentUser.nickname) + selfSuffix + (ownerActive && iAmMM ? ' · 홈' : '') + '</button>';
         var friendUnreadTotal = 0;
-        var childChips = friendSubs.map(function (s) {
+        var chipList = friendSubs.map(function (s) {
           var on = actingAs === s.id;
-          /* 🔑 = 임시 PIN 활성(친구가 직접 로그인 가능) · "N시간 전" = 친구가 직접 마지막 로그인 */
+          /* 🔑 = 임시 PIN 활성(친구가 직접 로그인 가능) */
           var pinActive = s.pinAuth && !subPinExpired(s);
           var keyBadge = pinActive ? ' <span style="opacity:.9;">🔑</span>' : '';
-          var loginBadge = s.lastSelfLoginAt
-            ? ' <span class="ps-login" style="font-weight:400;opacity:.7;font-size:.82em;">· ' + escapeHtml(relTimeShort(s.lastSelfLoginAt)) + '</span>'
-            : '';
           /* 이 친구에게 온 안 읽은 알림(요청·승인·관리자 메시지) — 주선자가 전환 안 해도 보이게 배지 */
           var un = userUnread(state, s); friendUnreadTotal += un;
           var unBadge = un ? ' <span class="count blink" style="padding:0 6px;margin-left:2px;">' + un + '</span>' : '';
           var tip = pinActive ? ('임시 PIN ' + subPinUntilText(s)) : '임시 PIN 없음(전환해서 발급 가능)';
           if (un) tip += ' · 안 읽은 알림 ' + un + '건';
-          if (s.lastSelfLoginAt) tip += ' · 친구 직접 로그인 ' + new Date(s.lastSelfLoginAt).toLocaleString('ko-KR');
-          return '<button type="button" class="pf-switch-chip' + (on ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '" title="' + escapeHtml(tip) + '">🤝 ' + escapeHtml(s.nickname) + unBadge + keyBadge + loginBadge + '</button>';
-        }).join('');
-        childChips += '<button type="button" class="pf-switch-chip pf-switch-add" data-action="switch-add">＋ 추가</button>';
+          return { on: on, html: '<button type="button" class="pf-switch-chip' + (on ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '" title="' + escapeHtml(tip) + '">🤝 ' + escapeHtml(s.nickname) + unBadge + keyBadge + '</button>' };
+        });
+        var addBtn = '<button type="button" class="pf-switch-chip pf-switch-add" data-action="switch-add">＋ 추가</button>';
+        /* 폴딩: 친구 2명 이상이면 접힘 상태에선 선택된 친구만, 펼치면 전체(등록순)+추가 */
+        var canFold = friendSubs.length >= 2;
+        var childChips;
+        if (!canFold) {
+          childChips = chipList.map(function (c) { return c.html; }).join('') + addBtn;
+        } else if (!switcherExpanded) {
+          var actives = chipList.filter(function (c) { return c.on; });
+          var shown = actives.length ? actives.map(function (c) { return c.html; }).join('')
+            : '<span class="ps-none">전환할 친구를 골라주세요</span>';
+          childChips = shown + '<button type="button" class="pf-switch-chip pf-switch-fold" data-action="ps-toggle">▾ 친구 ' + friendSubs.length + '명 보기</button>';
+        } else {
+          childChips = chipList.map(function (c) { return c.html; }).join('') + addBtn +
+            '<button type="button" class="pf-switch-chip pf-switch-fold" data-action="ps-toggle">▴ 접기</button>';
+        }
         var friendUnreadLabel = friendUnreadTotal ? ' <span class="count blink" title="친구들에게 온 안 읽은 알림">친구 ' + friendUnreadTotal + '</span>' : '';
-        /* 접기 여부는 렌더 후 실제 높이로 판단(adjustSwitcherClip) — 화면 폭에 따라 2줄 넘칠 때만 */
         switcher = '<div class="profile-switch">' +
             '<span class="ps-label">🔄 누구로 활동할까요? <span class="ps-hint">눌러서 전환</span>' + friendUnreadLabel + '</span>' +
             '<div class="ps-tree">' + ownerRow + '<div class="ps-children" id="ps-children">' + childChips + '</div>' +
-              '<button type="button" class="ps-expand-btn" id="ps-expand" hidden></button>' +
             '</div>' +
           '</div>';
       }
@@ -7212,7 +7213,7 @@
     if (e.target.closest('#convert-mm')) { handleConvertToMatchmaker(); return; }
     if (e.target.closest('#convert-member')) { handleConvertToMember(); return; }
     if (e.target.closest('#delete-mm')) { handleDeleteMatchmaker(); return; }
-    if (e.target.closest('#ps-expand')) { switcherExpanded = !switcherExpanded; adjustSwitcherClip(); return; }
+    if (e.target.closest('[data-action="ps-toggle"]')) { switcherExpanded = !switcherExpanded; paint(currentState); return; }
     if (e.target.closest('#cancel-proxy')) {
       proxyRegisterMode = false;
       formRole = 'self';
