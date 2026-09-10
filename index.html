@@ -857,7 +857,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-209';
+  var APP_VERSION = '2026-09-10-210';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -871,8 +871,8 @@
   var activeTab = 'form';
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
   var adminEditMode = false; /* 관리자 섹션 편집(순서·기본 열림) 모드 */
-  var DEFAULT_SEC_ORDER = ['usage', 'pending', 'delreq', 'deacreq', 'deaclist', 'dellog', 'active', 'adminmsg', 'done', 'cap', 'seen', 'log', 'test'];
-  var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', delreq: '🗑 삭제 요청', deacreq: '🗄 비활성화 요청', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', done: '✅ 요청완료', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록', test: '🧪 테스트 계정' };
+  var DEFAULT_SEC_ORDER = ['usage', 'pending', 'deaclist', 'dellog', 'active', 'adminmsg', 'done', 'cap', 'seen', 'log', 'test'];
+  var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', done: '✅ 요청완료', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록', test: '🧪 테스트 계정' };
   var _adminSecOpen = null, _adminSecOrder = null;
   function adminSecOpenMap() {
     if (_adminSecOpen === null) { try { _adminSecOpen = JSON.parse(localStorage.getItem('adminSecOpen')) || {}; } catch (e) { _adminSecOpen = {}; } }
@@ -3197,12 +3197,18 @@
     if (detailMode && isAdminUnlocked) {
       var canSelfLogin = !!(entry.pinAuth || entry.pinHash);
       if (canSelfLogin) {
+        var seenTxt = entry.lastSeenAt ? new Date(entry.lastSeenAt).toLocaleString('ko-KR') : '기록 없음';
         adminInfoHtml =
           '<div class="pf-admininfo">' +
+            '<div class="pf-ai-row"><span class="pf-ai-label">🕘 최근 접속</span><span class="pf-ai-val">' + escapeHtml(seenTxt) + '</span></div>' +
             '<div class="pf-ai-row"><span class="pf-ai-label">🔔 알람 설정</span><span class="pf-ai-val" id="detail-notif-' + escapeHtml(entry.id) + '">확인 중…</span></div>' +
           '</div>';
       } else {
-        adminInfoHtml = '<div class="pf-admininfo"><div class="pf-ai-row"><span class="pf-ai-val" style="color:var(--muted);">🤝 주선자가 대리 관리하는 계정이에요 (직접 로그인·접속 없음)</span></div></div>';
+        var subSeen = entry.lastSelfLoginAt ? new Date(entry.lastSelfLoginAt).toLocaleString('ko-KR') : (entry.lastSeenAt ? new Date(entry.lastSeenAt).toLocaleString('ko-KR') : '기록 없음');
+        adminInfoHtml = '<div class="pf-admininfo">' +
+          '<div class="pf-ai-row"><span class="pf-ai-label">🕘 최근 접속</span><span class="pf-ai-val">' + escapeHtml(subSeen) + '</span></div>' +
+          '<div class="pf-ai-row"><span class="pf-ai-val" style="color:var(--muted);">🤝 주선자가 대리 관리하는 계정 (직접 로그인 PIN 없음)</span></div>' +
+          '</div>';
       }
       if (entry.deactivated) {
         adminInfoHtml += '<div class="pf-admininfo" style="margin-top:6px;">' +
@@ -4326,7 +4332,7 @@
       var heldChip = e.heldReason ? ' <span class="chip" style="background:var(--accent-soft);color:var(--accent);">📌 보류</span>' : '';
       if (e.isMatchmaker) {
         return foldItem(
-          '<span class="req-sum-who">🤝 ' + escapeHtml(displayName) + '</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">주선자</span>' + heldChip,
+          '<span class="req-sum-who">🤝 ' + escapeHtml(displayName) + '</span> <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🆕 신규</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">주선자</span>' + heldChip,
           '<div class="p-meta">주선자(매니저) 등록 — 명단에 노출되지 않아요. 승인하면 친구들을 대신 소개할 수 있어요.</div>' +
           heldNote +
           '<div class="pending-actions">' +
@@ -4343,7 +4349,7 @@
           ? '<b style="color:var(--accent);">🔓 사진 전체공개</b>'
           : '<span style="color:var(--muted);">🔒 사진 비공개 (요청 승인 시 공개)</span>');
       return foldItem(
-        '<span class="req-sum-who">' + escapeHtml(displayName) + '</span>' + heldChip + '<span class="req-sum-when">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + '</span>',
+        '<span class="req-sum-who">' + escapeHtml(displayName) + '</span> <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🆕 신규</span>' + heldChip + '<span class="req-sum-when">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + '</span>',
         '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + ' · ' + escapeHtml(e.region || '') + '</div>' +
         '<div class="p-meta" style="margin-top:3px;">' + photoStatus + '</div>' +
         heldNote +
@@ -4355,42 +4361,36 @@
         '</div>'
       );
     }).join('');
-    var pendingSection = adminFold('⏳ 승인 대기', pending.length,
-      (pending.length ? pendingItems : '<p class="sub">대기 중인 신청이 없어요.</p>'), pending.length > 0, 'pending');
-    /* 삭제 요청 (회원이 삭제 요청 → 관리자 승인 후 삭제. 삭제 후 튀기 방지) */
+    /* 삭제 요청·비활성화 요청 → "승인 대기"에 함께 합침 (신규 가입 + 삭제 + 보관 전환) */
     var delReqs = (state.entries || []).filter(function (e) { return e.deleteRequested; });
-    var deleteReqSection = delReqs.length
-      ? adminFold('🗑 삭제 요청', delReqs.length,
-          delReqs.map(function (e) {
-            return foldItem(
-              '<span class="req-sum-who">' + escapeHtml(e.nickname) + '</span> <span class="chip" style="background:#fce8e6;color:#c5221f;">삭제 요청</span>',
-              '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(e.region || '') + ' · 요청: ' + fmtDate(e.deleteReqAt) + '</div>' +
-              (e.deleteReason ? '<div class="p-meta" style="color:var(--ink);">사유: "' + escapeHtml(e.deleteReason) + '"</div>' : '') +
-              '<div class="pending-actions">' +
-                '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(e.id) + '">👤 프로필</button>' +
-                '<button type="button" class="card-btn danger" data-action="approve-delete" data-id="' + escapeHtml(e.id) + '">삭제 승인</button>' +
-                '<button type="button" class="card-btn" data-action="cancel-delete" data-id="' + escapeHtml(e.id) + '">요청 취소</button>' +
-              '</div>'
-            );
-          }).join(''), delReqs.length > 0, 'delreq')
-      : '';
-    /* 비활성화(보관) 요청 */
     var deacReqs = (state.entries || []).filter(function (e) { return e.deactivateRequested; });
-    var deacReqSection = deacReqs.length
-      ? adminFold('🗄 비활성화 요청', deacReqs.length,
-          deacReqs.map(function (e) {
-            return foldItem(
-              '<span class="req-sum-who">' + escapeHtml(e.nickname) + '</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">비활성화 요청</span>',
-              '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(e.region || '') + ' · 요청: ' + fmtDate(e.deactivateReqAt) + '</div>' +
-              (e.deactivateReason ? '<div class="p-meta" style="color:var(--ink);">사유: "' + escapeHtml(e.deactivateReason) + '"</div>' : '') +
-              '<div class="pending-actions">' +
-                '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(e.id) + '">👤 프로필</button>' +
-                '<button type="button" class="card-btn approve" data-action="approve-deactivate" data-id="' + escapeHtml(e.id) + '">보관 전환 승인</button>' +
-                '<button type="button" class="card-btn" data-action="cancel-deactivate" data-id="' + escapeHtml(e.id) + '">요청 취소</button>' +
-              '</div>'
-            );
-          }).join(''), deacReqs.length > 0, 'deacreq')
-      : '';
+    var delReqItems = delReqs.map(function (e) {
+      return foldItem(
+        '<span class="req-sum-who">' + escapeHtml(e.nickname) + '</span> <span class="chip" style="background:#fce8e6;color:#c5221f;">🗑 삭제 요청</span>',
+        '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(e.region || '') + ' · 요청: ' + fmtDate(e.deleteReqAt) + '</div>' +
+        (e.deleteReason ? '<div class="p-meta" style="color:var(--ink);">사유: "' + escapeHtml(e.deleteReason) + '"</div>' : '') +
+        '<div class="pending-actions">' +
+          '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(e.id) + '">👤 프로필</button>' +
+          '<button type="button" class="card-btn danger" data-action="approve-delete" data-id="' + escapeHtml(e.id) + '">삭제 승인</button>' +
+          '<button type="button" class="card-btn" data-action="cancel-delete" data-id="' + escapeHtml(e.id) + '">요청 취소</button>' +
+        '</div>'
+      );
+    }).join('');
+    var deacReqItems = deacReqs.map(function (e) {
+      return foldItem(
+        '<span class="req-sum-who">' + escapeHtml(e.nickname) + '</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🗄 비활성화 요청</span>',
+        '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(e.region || '') + ' · 요청: ' + fmtDate(e.deactivateReqAt) + '</div>' +
+        (e.deactivateReason ? '<div class="p-meta" style="color:var(--ink);">사유: "' + escapeHtml(e.deactivateReason) + '"</div>' : '') +
+        '<div class="pending-actions">' +
+          '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(e.id) + '">👤 프로필</button>' +
+          '<button type="button" class="card-btn approve" data-action="approve-deactivate" data-id="' + escapeHtml(e.id) + '">보관 전환 승인</button>' +
+          '<button type="button" class="card-btn" data-action="cancel-deactivate" data-id="' + escapeHtml(e.id) + '">요청 취소</button>' +
+        '</div>'
+      );
+    }).join('');
+    var approvalTotal = pending.length + delReqs.length + deacReqs.length;
+    var pendingSection = adminFold('⏳ 승인 대기', approvalTotal,
+      (approvalTotal ? (pendingItems + delReqItems + deacReqItems) : '<p class="sub">대기 중인 신청이 없어요.</p>'), approvalTotal > 0, 'pending');
     /* 보관(비활성) 계정 목록 — 사유·재활성화·연결 안내 */
     var deacList = (state.entries || []).filter(function (e) { return e.deactivated; });
     var deacListSection = deacList.length
@@ -4748,8 +4748,8 @@
       '</div>';
     var testSection = adminFold('🧪 테스트 계정', null, testBody, false, 'test');
     var secHtml = {
-      usage: usageStatsHtml(state), pending: pendingSection, delreq: deleteReqSection,
-      deacreq: deacReqSection, deaclist: deacListSection, dellog: delLogSection,
+      usage: usageStatsHtml(state), pending: pendingSection,
+      deaclist: deacListSection, dellog: delLogSection,
       active: activeReqSection, adminmsg: adminMsgSection, done: doneSection,
       cap: capSection, seen: seenSection, log: logSection, test: testSection
     };
@@ -4877,11 +4877,10 @@
     var adminTab = '';
     if (isAdminUnlocked) {
       var msgUnread = adminMsgUnread(state);
+      var approvalCount = pendingCount + deleteReqCount + deacReqCount; /* 신규 가입 + 삭제 요청 + 비활성화 요청 (승인 대기 통합) */
       adminTab = '<button type="button" class="tab-btn" data-tab="admin" role="tab" aria-selected="' + (activeTab === 'admin') + '">관리자' +
-        '<span class="count' + (pendingCount >= 1 ? ' blink' : '') + '" title="승인 대기">대기 ' + pendingCount + '</span>' +
+        '<span class="count' + (approvalCount >= 1 ? ' blink' : '') + '" title="승인 대기 (가입·삭제·보관)">대기 ' + approvalCount + '</span>' +
         '<span class="count" title="요청">요청 ' + reqCount + '</span>' +
-        (deleteReqCount >= 1 ? '<span class="count blink" title="삭제 요청">삭제 ' + deleteReqCount + '</span>' : '') +
-        (deacReqCount >= 1 ? '<span class="count blink" title="비활성화 요청">보관 ' + deacReqCount + '</span>' : '') +
         '<span class="count' + (msgUnread >= 1 ? ' blink' : '') + '" title="안 읽은 Q&A">Q&A ' + msgUnread + '</span></button>';
     }
     /* 주선자 프로필 전환 바: 주선자 계정이거나 대리 프로필이 1개 이상일 때 표시 (주선자는 sub 없어도 항상 보임).
