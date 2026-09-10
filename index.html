@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-226';
+  var APP_VERSION = '2026-09-10-227';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4120,9 +4120,9 @@
       var chatRevokeAttr = chat ? (' data-action="revoke-contact-link" data-id="' + escapeHtml(x.id) + '"') : ' disabled';
       var chatRevokeBtn = '<button type="button" class="card-btn danger" ' + chatRevokeAttr + ' style="' + chatRevokeStyle + '">대화 회수</button>';
       return '<div style="padding:9px 0;border-bottom:1px dashed var(--line);">' +
-        '<div style="margin-bottom:6px;">' +
-          '<b style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(x) || '—') + '</b> ' +
-          '<b data-action="card-detail" data-id="' + escapeHtml(x.id) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(x.nickname) + '</b>' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">' +
+          '<span style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(x) || '—') + '</span>' +
+          '<button type="button" data-action="card-detail" data-id="' + escapeHtml(x.id) + '" style="display:inline-flex;align-items:center;gap:4px;border:1px solid var(--gold);background:var(--gold-soft);color:var(--ink);border-radius:999px;padding:4px 12px;font-size:0.92rem;font-weight:700;cursor:pointer;font-family:inherit;">👤 ' + escapeHtml(x.nickname) + ' <span style="font-weight:400;font-size:0.78rem;color:var(--muted);">프로필</span></button>' +
         '</div>' +
         '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px;">' +
           btn(mineOnly, '📤 내 사진만 공개', 'revoke-photo-link') +
@@ -4204,10 +4204,10 @@
       }).join('');
       var newsTotal = mmFriends.reduce(function (a, f) { return a + userUnread(state, f); }, 0);
       var friendsNews = mmFriends.length
-        ? '<div class="mine-section"><h3>🤝 친구 선택<span class="count' + (newsTotal ? ' blink' : '') + '">' + newsTotal + '</span></h3>' +
-            '<p class="sub" style="margin:0 0 8px;">관리할 친구를 눌러 바로 전환하세요. 새 소식이 있으면 강조돼요.</p>' +
+        ? '<div class="mine-section" style="margin-top:26px;"><h3 style="font-size:1.2rem;margin-bottom:6px;">🤝 친구 선택<span class="count' + (newsTotal ? ' blink' : '') + '">' + newsTotal + '</span></h3>' +
+            '<p class="sub" style="margin:0 0 10px;">관리할 친구를 눌러 바로 전환하세요. 새 소식이 있으면 강조돼요.</p>' +
             newsRows + '</div>'
-        : '<div class="mine-section"><p class="sub" style="margin:0;">아직 소개한 친구가 없어요. 위 <b>🔄 누구로 활동할까요 → ＋추가</b>로 친구를 소개할 수 있어요.</p></div>';
+        : '<div class="mine-section" style="margin-top:26px;"><h3 style="font-size:1.2rem;margin-bottom:6px;">🤝 친구 선택</h3><p class="sub" style="margin:0;">아직 소개한 친구가 없어요. 위 <b>🔄 누구로 활동할까요 → ＋추가</b>로 친구를 소개할 수 있어요.</p></div>';
       mmHome =
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
             '<h2 style="margin:0 0 4px;">🤝 주선자 홈</h2>' +
