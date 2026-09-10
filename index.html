@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-228';
+  var APP_VERSION = '2026-09-10-229';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3544,11 +3544,15 @@
           '<div class="field"><label for="f-contact">전화번호 <span class="req">필수</span></label>' +
             '<input type="tel" id="f-contact" name="contact" maxlength="11" inputmode="numeric" data-numeric placeholder="예: 01012345678" required>' +
             '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
+          '<div class="field"><label for="f-referrer">알게 된 경로 <span class="req">필수</span></label>' +
+            '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 홍길동 소개 / 베니 지인" required>' +
+            '<button type="button" class="card-btn" id="pick-referrer" style="width:100%;box-sizing:border-box;margin-top:6px;">👥 회원 목록에서 선택</button>' +
+            '<span class="hint">어떻게 알게 됐는지 적어주세요 (소개자·경로 등). ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
           '<div class="field"><label for="f-pin">개인 PIN <span class="req">필수</span></label>' +
             '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8" placeholder="숫자 4~8자리" required>' +
             '<span class="hint">로그인할 때 필요해요.</span></div>' +
           '<div class="consent-box"><label class="consent-label"><input type="checkbox" id="f-consent"> <span>개인정보 수집 및 이용에 동의합니다.</span></label>' +
-            '<p class="consent-detail">수집 항목: 닉네임, 실명, 연락처 · 목적: 주선자 관리·연락 · 동의 거부 시 등록 불가.</p></div>' +
+            '<p class="consent-detail">수집 항목: 닉네임, 실명, 연락처, 알게 된 경로 · 목적: 주선자 관리·연락 · 동의 거부 시 등록 불가.</p></div>' +
           '<div class="submit-row"><button type="submit" class="submit-btn" id="submit-btn">🤝 주선자 등록</button>' +
             '<button type="button" class="cancel-btn" id="mm-back">뒤로</button>' +
             '<span class="status-msg" id="status-msg"></span></div>' +
@@ -3563,10 +3567,12 @@
     var realName = (form.querySelector('[name="realName"]').value || '').trim();
     var contact = (form.querySelector('[name="contact"]').value || '').trim();
     var pin = (form.querySelector('[name="pin"]').value || '').trim();
+    var referrerText = (form.querySelector('[name="referrerText"]').value || '').trim();
     var missing = [];
     if (!nickname) missing.push('닉네임');
     if (!realName) missing.push('본인 이름');
     if (!contact) missing.push('전화번호');
+    if (!referrerText) missing.push('알게 된 경로');
     if (!pin) missing.push('개인 PIN');
     if (missing.length) return modalNotice('입력 오류', '다음을 채워주세요: ' + missing.join(', '));
     if (pin.length < 4) return modalNotice('입력 오류', 'PIN은 4자리 이상이어야 해요.');
@@ -3585,11 +3591,12 @@
       encryptForAdmin(pubJwk, contact),
       makePinAuth(pin),
       encryptForSelf(pin, contact),
-      encryptForAdmin(pubJwk, realName)
+      encryptForAdmin(pubJwk, realName),
+      encryptForAdmin(pubJwk, referrerText)
     ]).then(function (r) {
       var entry = {
         id: entryId, nickname: nickname, isMatchmaker: true,
-        contactEnc: r[0], pinAuth: r[1], contactSelfEnc: r[2], realNameEnc: r[3],
+        contactEnc: r[0], pinAuth: r[1], contactSelfEnc: r[2], realNameEnc: r[3], referrerEnc: r[4],
         submittedAt: new Date().toISOString()
       };
       return stateRef.update({ pendingEntries: firebase.firestore.FieldValue.arrayUnion(entry) });
