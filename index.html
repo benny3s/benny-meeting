@@ -876,7 +876,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-213';
+  var APP_VERSION = '2026-09-10-214';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3142,7 +3142,8 @@
     if (isNaN(diff) || diff < 0) return '';
     var H = 3600000, label;
     if (diff < 24 * H) label = '오늘';
-    else if (diff < 96 * H) label = '며칠 전';
+    else if (diff < 48 * H) label = '어제';
+    else if (diff < 108 * H) label = '며칠 전';
     else if (diff < 168 * H) label = '이번 주';
     else return '';
     var today = label === '오늘';
@@ -3994,7 +3995,7 @@
     var me = findMyEntry(currentState);
     if (!me) return modalNotice('로그인 필요', '먼저 로그인해주세요.');
     var otherNick = nickForEntry(currentState, otherId);
-    modalConfirm('사진 접근 삭제', otherNick + '님이 내 사진을 못 보게 할까요? 사진은 서로 공개라, 나도 ' + otherNick + '님 사진을 못 보게 돼요.', '삭제', 'danger').then(function (ok) {
+    modalConfirm('사진 공개 회수', otherNick + '님과의 사진 공개를 회수하시겠습니까? 회수하면 서로 사진을 볼 수 없게 돼요.', '회수', 'danger').then(function (ok) {
       if (!ok) return;
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
@@ -4093,17 +4094,21 @@
         var attr = (active && action) ? (' data-action="' + action + '" data-id="' + escapeHtml(x.id) + '"') : (active ? '' : ' disabled');
         return '<button type="button" class="' + cls + '"' + attr + ' style="' + style + '">' + label + (extra || '') + '</button>';
       }
+      var chatStyle = 'flex:none;padding:4px 9px;font-size:0.78rem;' + (chat
+        ? 'background:#ffe3ef;color:#c2185b;border-color:#f6c1d6;'
+        : 'opacity:.38;');
+      var chatAttr = chat ? (' data-action="dm-chat" data-id="' + escapeHtml(x.id) + '"') : ' disabled';
+      var chatBtn = '<button type="button" class="card-btn" ' + chatAttr + ' style="' + chatStyle + '">💬 대화' + (chat && unread ? ' <span class="count blink">' + unread + '</span>' : '') + '</button>';
       return '<div style="padding:9px 0;border-bottom:1px dashed var(--line);">' +
         '<div style="margin-bottom:6px;">' +
           '<b style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(x) || '—') + '</b> ' +
           '<b data-action="card-detail" data-id="' + escapeHtml(x.id) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(x.nickname) + '</b>' +
         '</div>' +
         '<div style="display:flex;gap:5px;flex-wrap:wrap;">' +
-          btn(mineOnly, '📤 내 사진만', null) +
-          btn(theirsOnly, '📥 상대 사진만', 'gallery') +
-          btn(mutual, '📷 서로 사진', 'gallery') +
-          btn(chat, '💬 대화', 'dm-chat', unread ? ' <span class="count blink">' + unread + '</span>' : '') +
-          '<button type="button" class="card-btn danger" data-action="revoke-connection" data-id="' + escapeHtml(x.id) + '" style="flex:none;padding:4px 9px;font-size:0.78rem;">회수</button>' +
+          btn(mineOnly, '📤 내 사진만', 'revoke-photo-link') +
+          btn(theirsOnly, '📥 상대 사진만', 'revoke-photo-link') +
+          btn(mutual, '📷 서로 사진', 'revoke-photo-link') +
+          chatBtn +
         '</div>' +
       '</div>';
     }).filter(Boolean);
@@ -4112,7 +4117,7 @@
       : '<p class="sub" style="margin:0;">아직 연결된 사람이 없어요. 사진·대화 요청이 승인되면 여기 표시돼요.</p>';
     return '<div class="mine-section">' +
         '<h3>🔗 내 연결<span class="count">' + rows.length + '</span></h3>' +
-        '<p class="sub" style="margin:0 0 6px;">사진·대화 권한이 있는 상대예요. 이름=프로필 · 파란 버튼이 현재 상태예요.</p>' +
+        '<p class="sub" style="margin:0 0 6px;">사진·대화 권한이 있는 상대예요. 이름=프로필 · 사진 상태 버튼을 누르면 <b>공개 회수</b>, 💬 대화는 채팅으로 이어져요.</p>' +
         body +
       '</div>';
   }
@@ -5067,9 +5072,11 @@
         '</div>' +
       '</div></div>' +
       liveBanner +
-      '<div class="notice-bar">' +
-        '<span class="notice-icon">&#128227;</span> 요청이 오거나 승인·거절되면 알림으로 알려드려요. <b>&#128276; 알림</b> 버튼을 눌러보세요!' +
-      '</div>' +
+      ((NOTIF_ENABLED && !memberNotifActive())
+        ? '<div class="notice-bar">' +
+            '<span class="notice-icon">&#128227;</span> 요청이 오거나 승인·거절되면 알림으로 알려드려요. <b>&#128276; 알림</b> 버튼을 눌러보세요!' +
+          '</div>'
+        : '') +
       '<div class="page">' +
         '<div class="sticky-head">' +
           '<div class="tabs" role="tablist">' + tabs + '</div>' +
