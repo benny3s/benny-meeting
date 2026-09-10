@@ -857,7 +857,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-205';
+  var APP_VERSION = '2026-09-10-206';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4377,6 +4377,23 @@
             '</div>';
           }).join(''), false)
       : '';
+    /* 삭제 이력 (비식별 tombstone) — 닉네임·사유·성별·나이 등만, PII 없음 */
+    var delLog = (state.deletedLog || []).slice().sort(function (a, b) { return (b.deletedAt || '').localeCompare(a.deletedAt || ''); });
+    var delLogSection = delLog.length
+      ? adminFold('🗑 삭제 이력', delLog.length,
+          '<p class="sub">삭제된 계정의 <b>비식별 기록</b>이에요. 전화번호·실명·사진은 삭제 시 즉시 폐기됐어요. (1년 지나면 자동 정리)</p>' +
+          delLog.map(function (t) {
+            var ageStr = t.birthYear ? (String(t.birthYear).slice(2) + '년생') : '-';
+            return '<div class="pending-item">' +
+              '<div class="p-name"><span style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.8rem;">' + escapeHtml(t.uid || '—') + '</span> ' + escapeHtml(t.nickname || '(이름 없음)') + ' <span class="chip" style="background:#f1f3f4;color:#5f6368;">삭제됨</span></div>' +
+              '<div class="p-meta">' + genderLabel(t.gender) + ' · ' + escapeHtml(ageStr) + (t.joinedAt ? ' · 가입: ' + fmtDate(t.joinedAt) : '') + (t.deletedAt ? ' · 삭제: ' + fmtDate(t.deletedAt) : '') + (t.connectedN ? ' · 연결됐던 회원 ' + t.connectedN + '명' : '') + '</div>' +
+              (t.reason ? '<div class="p-meta" style="color:var(--ink);">사유: "' + escapeHtml(t.reason) + '"</div>' : '') +
+              '<div class="pending-actions">' +
+                '<button type="button" class="card-btn danger" data-action="del-tombstone" data-id="' + escapeHtml(t.id || '') + '" style="flex:none;padding:4px 12px;">이력 삭제</button>' +
+              '</div>' +
+            '</div>';
+          }).join(''), false)
+      : '';
     var allEntries = state.entries;
     var uidOf = function (eid) {
       if (eid && eid.indexOf('guest-') === 0) return '🙋';
@@ -4705,6 +4722,7 @@
         deleteReqSection +
         deacReqSection +
         deacListSection +
+        delLogSection +
         activeReqSection +
         adminMsgSection +
         doneSection +
@@ -5587,6 +5605,22 @@
     (state.entries || []).forEach(function (e) { if (ids[e.id] && !e.deactivated) valid.push(e.id); });
     return valid;
   }
+  /* 관리자: 삭제 이력(tombstone) 개별 삭제 */
+  function handleDeleteTombstone(tombId) {
+    if (!isAdminUnlocked || !tombId) return;
+    modalConfirm('이력 삭제', '이 삭제 이력을 완전히 지울까요? 되돌릴 수 없어요.', '삭제', 'danger').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var dl = (s.deletedLog || []).filter(function (t) { return t.id !== tombId; });
+          tx.update(stateRef, { deletedLog: dl });
+        });
+      }).then(function () { return refreshNow(); })
+        .then(function () { modalNotice('삭제 완료', '삭제 이력을 지웠어요.'); })
+        .catch(function (err) { modalNotice('오류', '삭제 실패: ' + (err.message || err)); });
+    });
+  }
   /* 관리자: 연결된 회원에게 안내 일괄 발송 */
   function handleNotifyConnected(id) {
     if (!isAdminUnlocked) return;
@@ -5612,12 +5646,30 @@
     if (!entry) return;
     var connected = connectedMemberIds(currentState, id);
     function doDelete() {
+      /* 비식별 삭제 이력(tombstone): 닉네임·사유·성별·나이 등 운영 정보만. 전화번호·실명·사진 등 PII는 즉시 폐기 */
+      var tomb = {
+        id: genId(),
+        serial: entry.serial || 0,
+        uid: formatUid(entry) || '',
+        nickname: entry.nickname || '',
+        gender: entry.gender || '',
+        birthYear: entry.birthYear || null,
+        joinedAt: entry.submittedAt || '',
+        reason: entry.deleteReason || '',
+        connectedN: connected.length,
+        deletedAt: new Date().toISOString()
+      };
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
           var s = doc.data();
           var newEntries = (s.entries || []).filter(function (e) { return e.id !== id; });
           var newRequests = (s.dateRequests || []).filter(function (r) { return r.toId !== id && r.fromId !== id; });
-          tx.update(stateRef, { entries: newEntries, dateRequests: newRequests });
+          /* 삭제 이력 누적 — 1년 지난 항목 정리 + 최근 200건까지 */
+          var dl = (s.deletedLog || []).concat([tomb]);
+          var cutoff = Date.now() - 365 * 86400000;
+          dl = dl.filter(function (t) { return !t.deletedAt || Date.parse(t.deletedAt) >= cutoff; });
+          if (dl.length > 200) dl = dl.slice(dl.length - 200);
+          tx.update(stateRef, { entries: newEntries, dateRequests: newRequests, deletedLog: dl });
         });
       }).then(function () {
         photosRef.doc(id).delete().catch(function () {});
@@ -5625,7 +5677,7 @@
         appendLog('admin', '관리자', '삭제 요청 승인 · ' + entry.nickname);
         return refreshNow();
       }).then(function () {
-        modalNotice('삭제 완료', entry.nickname + '님을 삭제했어요.');
+        modalNotice('삭제 완료', entry.nickname + '님을 삭제했어요. (전화번호·실명·사진은 폐기, 비식별 이력만 보관)');
       }).catch(function (err) { modalNotice('오류', '삭제 실패: ' + (err.message || err)); });
     }
     modalConfirm('삭제 승인', escapeHtml(entry.nickname) + '님을 정말 삭제할까요? 되돌릴 수 없어요.' + (connected.length ? ' (연결된 회원 ' + connected.length + '명)' : ''), '삭제', 'danger').then(function (ok) {
@@ -6982,6 +7034,7 @@
       else if (action === 'cancel-deactivate') handleCancelDeactivateReq(id);
       else if (action === 'reactivate') handleReactivate(id);
       else if (action === 'notify-connected') handleNotifyConnected(id);
+      else if (action === 'del-tombstone') handleDeleteTombstone(id);
       else if (action === 'approve-request') handleApproveRequest(id);
       else if (action === 'hold-request') handleHoldRequest(id);
       else if (action === 'reject-request') handleRejectRequest(id);
