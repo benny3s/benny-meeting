@@ -857,7 +857,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-206';
+  var APP_VERSION = '2026-09-10-207';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -5677,7 +5677,7 @@
         appendLog('admin', '관리자', '삭제 요청 승인 · ' + entry.nickname);
         return refreshNow();
       }).then(function () {
-        modalNotice('삭제 완료', entry.nickname + '님을 삭제했어요. (전화번호·실명·사진은 폐기, 비식별 이력만 보관)');
+        modalNotice('삭제 완료', entry.nickname + '님을 삭제했어요.');
       }).catch(function (err) { modalNotice('오류', '삭제 실패: ' + (err.message || err)); });
     }
     modalConfirm('삭제 승인', escapeHtml(entry.nickname) + '님을 정말 삭제할까요? 되돌릴 수 없어요.' + (connected.length ? ' (연결된 회원 ' + connected.length + '명)' : ''), '삭제', 'danger').then(function (ok) {
