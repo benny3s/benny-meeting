@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="light">
 <title>베니브릿지</title>
+<meta name="description" content="지인 소개로 만나는 좋은 인연. 관리자 주변 사람들 중심으로 믿을 수 있는 소개팅을 이어주는 작은 공간이에요.">
+<!-- 카카오톡·오픈채팅 공유 카드 (Open Graph) -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="베니브릿지">
+<meta property="og:title" content="베니브릿지 — 지인 소개로 만나는 좋은 인연 💐">
+<meta property="og:description" content="관리자 주변 사람들 중심으로, 믿을 수 있는 소개를 이어주는 작은 공간이에요. 프로필을 등록하고 마음에 드는 분께 다가가 보세요.">
+<meta property="og:image" content="https://benny3s.github.io/benny-meeting/notif-icon.png">
+<meta property="og:url" content="https://benny3s.github.io/benny-meeting/">
+<meta name="twitter:card" content="summary">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap">
 <style id="page-style">
   :root {
@@ -96,6 +105,15 @@
     text-align: center; border: 1px solid var(--gold);
   }
   .notice-icon { font-size: 1rem; }
+  /* 이번 주 현황 배너 (활발함 사회적 증거) */
+  .live-banner {
+    max-width: 880px; margin: 8px auto 0; padding: 8px 16px; border-radius: 999px;
+    background: linear-gradient(90deg, var(--gold-soft), #e8f0fe);
+    color: var(--ink); font-size: 0.9rem; font-weight: 700; text-align: center;
+    border: 1px solid var(--gold); letter-spacing: -0.2px;
+  }
+  .live-banner b { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .live-dot { opacity: 0.4; margin: 0 2px; font-weight: 400; }
   .admin-link {
     background: none; border: 1px solid rgba(251,243,238,0.3); color: var(--paper);
     opacity: 0.8; font-size: 0.78rem; padding: 5px 12px; border-radius: 999px; cursor: pointer;
@@ -857,7 +875,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-210';
+  var APP_VERSION = '2026-09-10-211';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4855,6 +4873,18 @@
     }).length;
     var deleteReqCount = (state.entries || []).filter(function (e) { return e.deleteRequested; }).length;
     var deacReqCount = (state.entries || []).filter(function (e) { return e.deactivateRequested; }).length;
+    /* 이번 주 현황 배너 (로그인 전에도 노출) — 진짜 집계만: 새 멤버(최근 7일)·누적 인연(승인된 대화 연결)·함께하는 멤버 */
+    var liveMembers = (state.entries || []).filter(function (e) { return !e.isMatchmaker && !e.testAccount && !e.deactivated; });
+    var weekAgo = Date.now() - 7 * 86400000;
+    var newThisWeek = liveMembers.filter(function (e) { return e.submittedAt && new Date(e.submittedAt).getTime() >= weekAgo; }).length;
+    var connCount = (state.dateRequests || []).filter(function (r) { return (r.type || 'contact') === 'contact' && r.approved; }).length;
+    var liveBits = [];
+    if (newThisWeek > 0) liveBits.push('이번 주 새 멤버 <b>' + newThisWeek + '</b>명');
+    if (connCount > 0) liveBits.push('누적 인연 <b>' + connCount + '</b>쌍');
+    if (!liveBits.length && liveMembers.length > 0) liveBits.push('함께하는 멤버 <b>' + liveMembers.length + '</b>명');
+    var liveBanner = liveBits.length
+      ? '<div class="live-banner">✨ ' + liveBits.join(' <span class="live-dot">·</span> ') + '</div>'
+      : '';
     var tabs =
       '<button type="button" class="tab-btn" data-tab="form" role="tab" aria-selected="' + (activeTab === 'form') + '">신청서 작성</button>' +
       '<button type="button" class="tab-btn" data-tab="list" role="tab" aria-selected="' + (activeTab === 'list') + '">명단 보기<span class="count">' + entries.length + '</span></button>';
@@ -4973,6 +5003,7 @@
                 : '<button type="button" class="admin-link" id="user-login">' + ICON_LOCK + ' 로그인</button>')) +
         '</div>' +
       '</div></div>' +
+      liveBanner +
       '<div class="notice-bar">' +
         '<span class="notice-icon">&#128227;</span> 요청이 오거나 승인·거절되면 알림으로 바로 알려드려요. 위 <b>&#128276; 알림</b> 버튼을 눌러 켜보세요! (설정·테스트·방법 안내가 한 곳에 있어요)' +
       '</div>' +
