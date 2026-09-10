@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-229';
+  var APP_VERSION = '2026-09-10-230';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3632,6 +3632,10 @@
           '<div class="field"><label for="f-contact">전화번호 <span class="opt">(비우면 유지)</span></label>' +
             '<input type="tel" id="f-contact" name="contact" maxlength="11" inputmode="numeric" data-numeric class="keep-ph" placeholder="(비우면 기존 값 유지)">' +
             '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
+          '<div class="field"><label for="f-referrer">알게 된 경로 <span class="opt">(비우면 유지)</span></label>' +
+            '<input type="text" id="f-referrer" name="referrerText" maxlength="60" class="keep-ph" placeholder="(비우면 기존 값 유지)">' +
+            '<button type="button" class="card-btn" id="pick-referrer" style="width:100%;box-sizing:border-box;margin-top:6px;">👥 회원 목록에서 선택</button>' +
+            '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
           '<div class="submit-row"><button type="submit" class="submit-btn" id="submit-btn">💾 수정 저장하기</button>' +
             '<button type="button" class="cancel-btn" id="cancel-edit-bottom">수정 취소</button>' +
             '<span class="status-msg" id="status-msg"></span></div>' +
@@ -3646,6 +3650,7 @@
     var nickname = (form.querySelector('[name="nickname"]').value || '').trim();
     var realName = (form.querySelector('[name="realName"]').value || '').trim();
     var contact = (form.querySelector('[name="contact"]').value || '').trim();
+    var referrerText = (form.querySelector('[name="referrerText"]').value || '').trim();
     if (!nickname) return modalNotice('입력 오류', '닉네임을 입력해주세요.');
     if (contact && !/^01[0-9]{8,9}$/.test(contact)) return modalNotice('입력 오류', '전화번호는 01012345678 형식으로 입력해주세요.');
     var nickLower = nickname.toLowerCase();
@@ -3663,7 +3668,8 @@
     Promise.all([
       realName ? encryptForAdmin(pubJwk, realName) : Promise.resolve(null),
       contact ? encryptForAdmin(pubJwk, contact) : Promise.resolve(null),
-      (contact && selfPin) ? encryptForSelf(selfPin, contact) : Promise.resolve(null)
+      (contact && selfPin) ? encryptForSelf(selfPin, contact) : Promise.resolve(null),
+      referrerText ? encryptForAdmin(pubJwk, referrerText) : Promise.resolve(null)
     ]).then(function (r) {
       return db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
@@ -3676,6 +3682,7 @@
               if (r[0]) u.realNameEnc = r[0];
               if (r[1]) u.contactEnc = r[1];
               if (r[2]) u.contactSelfEnc = r[2];
+              if (r[3]) u.referrerEnc = r[3];
               return u;
             });
           };
