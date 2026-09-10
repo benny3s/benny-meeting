@@ -878,7 +878,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-222';
+  var APP_VERSION = '2026-09-10-223';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3495,7 +3495,7 @@
   }
   /* 주선자: 로그인 또는 새 등록 선택 패널 (미로그인 시) */
   function renderMatchmakerAuth(state) {
-    var roleBox = '<div class="form-card" style="background:var(--gold-soft);border-color:var(--gold);">' +
+    var roleBox = '<div style="background:var(--gold-soft);border:1px solid var(--gold);border-radius:12px;padding:12px 14px;margin:2px 0 14px;">' +
         '<div style="font-weight:700;margin-bottom:6px;">🤝 주선자 역할 <span style="color:var(--muted);font-weight:400;font-size:0.85rem;">(내가 소개팅 안 해도 OK)</span></div>' +
         '<ul style="padding-left:18px;margin:0;list-style:none;font-size:0.88rem;line-height:1.75;">' +
           '<li><b>① 친구 등록</b>, 어울릴만한 사람 물색</li>' +
@@ -3507,13 +3507,13 @@
       '</div>';
     return roleToggleHtml() +
       '<div class="form-card">' +
-        '<div class="form-lede"><h2>🤝 주선자</h2><p>여러 친구를 대신 등록하고 요청·승인을 대신 관리하는 계정이에요. 주선자 본인은 명단에 노출되지 않아요.</p></div>' +
+        '<div class="form-lede"><h2>🤝 주선자</h2></div>' +
+        roleBox +
         '<div style="display:flex;flex-direction:column;gap:10px;padding:2px 2px 8px;">' +
-          '<button type="button" class="submit-btn" id="mm-new-btn">＋ 새 주선자로 등록</button>' +
+          '<button type="button" class="submit-btn" id="mm-new-btn">＋ 주선자(대리자) 등록</button>' +
           '<button type="button" class="card-btn" id="mm-login" style="padding:12px;">이미 주선자예요 · 로그인</button>' +
         '</div>' +
-      '</div>' +
-      roleBox;
+      '</div>';
   }
   /* 주선자: 새 계정 등록 폼 (닉네임+연락처+PIN만) */
   function renderMatchmakerNew(state) {
@@ -3521,7 +3521,7 @@
       ? '<div class="readonly-note">관리자 초기 설정이 아직 안 됐어요. 운영자라면 위의 "관리자" 버튼을 눌러 PIN을 먼저 설정해주세요.</div>' : '';
     return roleToggleHtml() + setupNote +
       '<div class="form-card">' +
-        '<div class="form-lede"><h2>🤝 새 주선자 등록</h2><p>친구들을 대신 소개할 주선자 계정을 만들어요. 관리자 승인 후 이용할 수 있어요.</p></div>' +
+        '<div class="form-lede"><h2>🤝 주선자(대리자) 등록</h2><p>친구들을 대신 소개할 주선자 계정을 만들어요. 관리자 승인 후 이용할 수 있어요.</p></div>' +
         '<form id="entry-form" autocomplete="off">' +
           '<div class="field"><label for="f-nickname">주선자 닉네임 <span class="req">필수</span></label>' +
             '<input type="text" id="f-nickname" name="nickname" maxlength="20" placeholder="예: 베니" required>' +
