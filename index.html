@@ -600,6 +600,7 @@
   .req-fold .req-foot-btns { display: flex; gap: 8px; flex-wrap: wrap; }
   /* 요청 나이별 색 구분: 오늘=하늘색 / 5일 넘게 대기=회색 (테마 안전 tint) */
   /* 요청 나이별 색: 오늘=하늘 / 1~2일=기본 / 3~4일=연회색 / 5일+=진회색 */
+  .req-fold.req-need { border-color: var(--accent); background: var(--gold-soft); }
   .req-fold.req-today { background: rgba(26,115,232,0.12); border-color: rgba(26,115,232,0.5); }
   .req-fold.req-old { background: rgba(120,120,120,0.08); border-color: rgba(120,120,120,0.30); }
   .req-fold.req-stale { background: rgba(90,90,90,0.22); border-color: rgba(90,90,90,0.55); }
@@ -875,7 +876,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-212';
+  var APP_VERSION = '2026-09-10-213';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1254,6 +1255,7 @@
           '<div class="pf-chips">' +
             '<span class="chip chip--gender-' + escapeHtml(entry.gender) + '">' + genderLabel(entry.gender) + '</span>' +
             (ageStr ? '<span class="chip">' + escapeHtml(ageStr) + '</span>' : '') +
+            recentActivityChip(entry) +
           '</div>' +
           '<ul class="pf-meta"><li>' + ICON_PIN + '<span>' + escapeHtml(entry.region || '-') + '</span></li></ul>' +
           (introBit ? '<div class="pf-extra"><b>소개</b> ' + introBit + '</div>' : '') +
@@ -3126,22 +3128,28 @@
     pickReferrer().then(function (v) { if (v) setReferrerField(v); });
   }
 
-  /* 최근 접속 코스 표시(정확한 시간 숨김): 오늘/어제/며칠 전/이번주, 7일 넘으면 미표시.
-     명단 카드에 붙여 "활발함"을 보여줌 (프라이버시: 정확 시각 대신 코스 라벨만) */
+  /* 최근 접속 코스 표시(정확한 시간 숨김): 오늘/며칠 전/이번 주, 7일 넘으면 미표시.
+     주선자가 관리하는 프로필(친구·본인)은 직접 로그인이 없으므로 주선자 로그인 기준으로 표시. */
   function recentActivityChip(entry) {
-    if (!entry || !entry.lastSeenAt) return '';
-    var diff = Date.now() - new Date(entry.lastSeenAt).getTime();
+    if (!entry) return '';
+    var seenAt = entry.lastSeenAt;
+    if (entry.managedBy) {
+      var mgr = ((currentState && currentState.entries) || []).find(function (x) { return x.id === entry.managedBy; });
+      seenAt = (mgr && mgr.lastSeenAt) ? mgr.lastSeenAt : entry.lastSeenAt;
+    }
+    if (!seenAt) return '';
+    var diff = Date.now() - new Date(seenAt).getTime();
     if (isNaN(diff) || diff < 0) return '';
-    var H = 3600000, label, today = false;
-    if (diff < 24 * H) { label = '오늘'; today = true; }
-    else if (diff < 48 * H) label = '어제';
+    var H = 3600000, label;
+    if (diff < 24 * H) label = '오늘';
     else if (diff < 96 * H) label = '며칠 전';
-    else if (diff < 168 * H) label = '이번주';
+    else if (diff < 168 * H) label = '이번 주';
     else return '';
+    var today = label === '오늘';
     var style = today
       ? 'background:#e6f4ea;color:#137333;border-color:#b7e0c4;'
       : 'background:#eef1f4;color:#5f6368;';
-    return '<span class="chip" style="' + style + '">' + (today ? '🟢 ' : '') + escapeHtml(label) + ' 접속</span>';
+    return '<span class="chip" style="' + style + '">' + escapeHtml(label) + ' 접속</span>';
   }
 
   /* ---- rendering ---- */
@@ -3929,16 +3937,19 @@
     }
     /* 주의가 필요한 항목 강조: 받은 대기/보류(응답 필요), 보낸 보류/거절(다시 요청 가능) */
     var needAction = (incoming && (st === 'pending' || st === 'held')) || (!incoming && (st === 'held' || st === 'rejected'));
+    var body =
+      '<div class="mine-actions"><button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(otherId) + '">👤 프로필</button></div>' +
+      (note ? '<div class="mine-note">"' + escapeHtml(note) + '"</div>' : '') +
+      replyMsg + actions + chatBtn + revealMine;
     return (
-      '<div class="mine-item"' + (needAction ? ' style="border:2px solid var(--accent);background:var(--gold-soft);"' : '') + '>' +
-        '<div class="mine-head">' + typeBadge + '<b data-action="card-detail" data-id="' + escapeHtml(otherId) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(otherLabel) + '</b>' + statusChip(st) +
-          '<span class="mine-date">' + fmtDate(r.submittedAt) + '</span></div>' +
-        (note ? '<div class="mine-note">"' + escapeHtml(note) + '"</div>' : '') +
-        replyMsg +
-        actions +
-        chatBtn +
-        revealMine +
-      '</div>'
+      '<details class="req-fold' + (needAction ? ' req-need' : '') + '"' + (needAction ? ' open' : '') + '>' +
+        '<summary>' + typeBadge +
+          '<span class="req-sum-who">' + escapeHtml(otherLabel) + '</span>' +
+          statusChip(st) +
+          '<span class="req-sum-when">' + fmtDate(r.submittedAt) + '</span>' +
+        '</summary>' +
+        '<div class="req-fold-body">' + body + '</div>' +
+      '</details>'
     );
   }
 
@@ -4033,46 +4044,76 @@
       }).catch(function (err) { modalNotice('오류', '해제 실패: ' + (err.message || err)); });
     });
   }
-  /* 메시지함 요약: 내가 사진을 볼 수 있는 사람 / 대화할 수 있는 사람 (이름 클릭=프로필, 회수 가능) */
+  /* 연결 회수: 나와 상대 사이 사진·대화 권한을 한 번에 해제 */
+  function handleRevokeConnection(otherId) {
+    var me = findMyEntry(currentState);
+    if (!me) return modalNotice('로그인 필요', '먼저 로그인해주세요.');
+    var nick = nickForEntry(currentState, otherId);
+    modalConfirm('연결 회수', nick + '님과의 사진·대화 연결을 모두 해제할까요? 서로 사진·채팅을 할 수 없게 돼요. (다시 요청·수락하면 재연결)', '회수', 'danger').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).map(function (r) {
+            var between = (r.fromId === me.id && r.toId === otherId) || (r.fromId === otherId && r.toId === me.id);
+            if (!between) return r;
+            var c = JSON.parse(JSON.stringify(r));
+            if (c.approved) c.approved = false;
+            if (c.userApproved) c.userApproved = false;
+            if (c.fromRevealed) c.fromRevealed = false;
+            return c;
+          });
+          tx.update(stateRef, { dateRequests: reqs });
+        });
+      }).then(function () {
+        appendLog('request', me.nickname, '연결 회수 → ' + nick);
+        return refreshNow();
+      }).then(function () {
+        modalNotice('회수 완료', nick + '님과의 연결을 해제했어요.');
+      }).catch(function (err) { modalNotice('오류', '회수 실패: ' + (err.message || err)); });
+    });
+  }
+  /* 메시지함 연결 리스트: 사진/대화 권한이 있는 상대를 한 줄씩, 상태를 버튼 4개로 표시.
+     📤 내 사진만(상대가 내 사진만 봄) · 📥 상대 사진만(내가 상대 사진만 봄) · 📷 서로 사진 · 💬 대화 */
   function connectionsSummaryHtml(state, me) {
     if (!me) return '';
     var others = (state.entries || []).filter(function (x) { return x.id !== me.id && !x.isMatchmaker; });
-    var photoList = others.filter(function (x) { return canViewPhotoOf(state, me.id, x.id) && photoCountOf(x) > 0; });
-    var talkList = others.filter(function (x) { return canViewContactOf(state, me.id, x.id); });
-    function nameLink(x) {
-      return '<b data-action="card-detail" data-id="' + escapeHtml(x.id) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(x.nickname) + '</b>';
-    }
-    function scrollWrap(inner, n) {
-      return '<div style="' + (n > 5 ? 'max-height:230px;overflow-y:auto;-webkit-overflow-scrolling:touch;' : '') + '">' + inner + '</div>';
-    }
-    var photoRows = photoList.length
-      ? scrollWrap(photoList.map(function (x) {
-          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line);">' +
-            '<span><b style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(x) || '—') + '</b> ' + nameLink(x) + '</span>' +
-            '<span style="display:flex;gap:6px;flex:none;">' +
-              '<button type="button" class="card-btn approve" data-action="gallery" data-id="' + escapeHtml(x.id) + '" style="padding:4px 10px;">📷 보기</button>' +
-              '<button type="button" class="card-btn danger" data-action="revoke-photo-link" data-id="' + escapeHtml(x.id) + '" style="padding:4px 10px;">회수</button>' +
-            '</span></div>';
-        }).join(''), photoList.length)
-      : '<p class="sub" style="margin:0;">아직 없어요.</p>';
-    var talkRows = talkList.length
-      ? scrollWrap(talkList.map(function (x) {
-          var unread = dmUnreadFrom(state, me.id, x.id);
-          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line);">' +
-            '<span><b style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(x) || '—') + '</b> ' + nameLink(x) + '</span>' +
-            '<span style="display:flex;gap:6px;flex:none;">' +
-              '<button type="button" class="card-btn primary" data-action="dm-chat" data-id="' + escapeHtml(x.id) + '" style="padding:4px 10px;">💬 채팅' + (unread ? ' <span class="count blink">' + unread + '</span>' : '') + '</button>' +
-              '<button type="button" class="card-btn danger" data-action="revoke-contact-link" data-id="' + escapeHtml(x.id) + '" style="padding:4px 10px;">회수</button>' +
-            '</span></div>';
-        }).join(''), talkList.length)
-      : '<p class="sub" style="margin:0;">아직 없어요.</p>';
+    var rows = others.map(function (x) {
+      var iSee = canViewPhotoOf(state, me.id, x.id);    /* 상대 사진을 내가 봄 */
+      var theySee = canViewPhotoOf(state, x.id, me.id); /* 내 사진을 상대가 봄 */
+      var chat = canViewContactOf(state, me.id, x.id);
+      if (!iSee && !theySee && !chat) return null;
+      var mutual = iSee && theySee;
+      var mineOnly = theySee && !iSee;
+      var theirsOnly = iSee && !theySee;
+      var unread = dmUnreadFrom(state, me.id, x.id);
+      function btn(active, label, action, extra) {
+        var cls = 'card-btn' + (active ? ' approve' : '');
+        var style = 'flex:none;padding:4px 9px;font-size:0.78rem;' + (active ? '' : 'opacity:.38;');
+        var attr = (active && action) ? (' data-action="' + action + '" data-id="' + escapeHtml(x.id) + '"') : (active ? '' : ' disabled');
+        return '<button type="button" class="' + cls + '"' + attr + ' style="' + style + '">' + label + (extra || '') + '</button>';
+      }
+      return '<div style="padding:9px 0;border-bottom:1px dashed var(--line);">' +
+        '<div style="margin-bottom:6px;">' +
+          '<b style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(x) || '—') + '</b> ' +
+          '<b data-action="card-detail" data-id="' + escapeHtml(x.id) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(x.nickname) + '</b>' +
+        '</div>' +
+        '<div style="display:flex;gap:5px;flex-wrap:wrap;">' +
+          btn(mineOnly, '📤 내 사진만', null) +
+          btn(theirsOnly, '📥 상대 사진만', 'gallery') +
+          btn(mutual, '📷 서로 사진', 'gallery') +
+          btn(chat, '💬 대화', 'dm-chat', unread ? ' <span class="count blink">' + unread + '</span>' : '') +
+          '<button type="button" class="card-btn danger" data-action="revoke-connection" data-id="' + escapeHtml(x.id) + '" style="flex:none;padding:4px 9px;font-size:0.78rem;">회수</button>' +
+        '</div>' +
+      '</div>';
+    }).filter(Boolean);
+    var body = rows.length
+      ? (rows.length > 5 ? '<div style="max-height:320px;overflow-y:auto;-webkit-overflow-scrolling:touch;">' + rows.join('') + '</div>' : rows.join(''))
+      : '<p class="sub" style="margin:0;">아직 연결된 사람이 없어요. 사진·대화 요청이 승인되면 여기 표시돼요.</p>';
     return '<div class="mine-section">' +
-        '<h3>🔗 내 연결 요약</h3>' +
-        '<p class="sub" style="margin:0 0 6px;">이름을 누르면 프로필이 열려요.</p>' +
-        '<div style="font-weight:700;font-size:0.92rem;margin:6px 0 2px;">📷 내가 사진 볼 수 있는 사람 <span class="count">' + photoList.length + '</span></div>' +
-        photoRows +
-        '<div style="font-weight:700;font-size:0.92rem;margin:12px 0 2px;">💬 대화할 수 있는 사람 <span class="count">' + talkList.length + '</span></div>' +
-        talkRows +
+        '<h3>🔗 내 연결<span class="count">' + rows.length + '</span></h3>' +
+        '<p class="sub" style="margin:0 0 6px;">사진·대화 권한이 있는 상대예요. 이름=프로필 · 파란 버튼이 현재 상태예요.</p>' +
+        body +
       '</div>';
   }
   function renderMine(state) {
@@ -4165,7 +4206,11 @@
       var items = reqs.filter(function (r) {
         if ((r.type || 'contact') !== g.type) return false;
         if ((r.hiddenBy || []).indexOf(me.id) >= 0) return false;
-        return g.incoming ? r.toId === me.id : r.fromId === me.id;
+        var mine = g.incoming ? r.toId === me.id : r.fromId === me.id;
+        if (!mine) return false;
+        var st0 = reqStatus(r);
+        if (st0 === 'approved' || st0 === 'user_approved') return false; /* 승인된 건 아래 "내 연결"로 이동 */
+        return true;
       }).sort(function (a, b) { return (b.submittedAt || '').localeCompare(a.submittedAt || ''); });
       /* 응답이 필요한 항목: 받은=대기/보류, 보낸=보류/거절 → 이런 게 있으면 기본 펼침 */
       var needCnt = items.filter(function (r) {
@@ -4214,9 +4259,8 @@
           '</div>' +
           '<div class="my-uid">고유번호 ' + escapeHtml(formatUid(me) || '—') + '</div>' +
           '<p class="sub">내 소개팅 프로필로 받고 보낸 요청이에요.</p>' +
-          connectionsSummaryHtml(state, me) +
           sections +
-          photoViewersSectionHtml(state, me) +
+          connectionsSummaryHtml(state, me) +
         '</div>'
       );
     }
@@ -4267,9 +4311,8 @@
         (me.deactivateRequested ? '<div class="mine-note" style="margin-top:10px;background:var(--gold-soft);border-color:var(--gold);">🗄 비활성화(보관) 요청이 접수되어 <b>관리자 확인 중</b>이에요. <button type="button" class="card-btn" data-action="cancel-deactivate" data-id="' + escapeHtml(me.id) + '" style="flex:none;padding:4px 12px;margin-left:8px;">요청 취소</button></div>' : '') +
         (me.deactivated ? '<div class="mine-note" style="margin-top:10px;background:var(--gold-soft);border-color:var(--gold);">🗄 <b>보관 상태</b>예요 (명단에 노출되지 않아요). 복구는 상단 <b>💬 Q&amp;A</b>로 문의하거나 카카오톡으로 요청해 주세요.</div>' : '') +
         (isSubProfile ? '' : joinRequestSectionHtml(state, false)) + /* 나에게 온 주선자 요청 있으면 표시 */
-        connectionsSummaryHtml(state, me) +
         sections +
-        photoViewersSectionHtml(state, me) +
+        connectionsSummaryHtml(state, me) +
         (isSubProfile ? '' : msgSection) +
         ((!isSubProfile && !isMatchmakerEntry(myAuthEntry(state)) && me.id === currentUser.id)
           ? '<div class="mine-section" style="margin-top:14px;"><button type="button" class="card-btn" id="convert-mm" style="flex:none;">🤝 주선자 계정으로 전환</button>' +
@@ -5025,7 +5068,7 @@
       '</div></div>' +
       liveBanner +
       '<div class="notice-bar">' +
-        '<span class="notice-icon">&#128227;</span> 요청이 오거나 승인·거절되면 알림으로 바로 알려드려요. 위 <b>&#128276; 알림</b> 버튼을 눌러 켜보세요! (설정·테스트·방법 안내가 한 곳에 있어요)' +
+        '<span class="notice-icon">&#128227;</span> 요청이 오거나 승인·거절되면 알림으로 알려드려요. <b>&#128276; 알림</b> 버튼을 눌러보세요!' +
       '</div>' +
       '<div class="page">' +
         '<div class="sticky-head">' +
@@ -7222,6 +7265,7 @@
       else if (action === 'revoke-photo-viewer') handleRevokePhotoViewer(id);
       else if (action === 'revoke-photo-link') handleRevokePhotoViewer(id);
       else if (action === 'revoke-contact-link') handleRevokeContactLink(id);
+      else if (action === 'revoke-connection') handleRevokeConnection(id);
       else if (action === 'revoke-approve') handleRevokeApprove(id);
       else if (action === 'perm-photo') { if (isAdminUnlocked) openPermPopup(id, 'photo'); }
       else if (action === 'perm-contact') { if (isAdminUnlocked) openPermPopup(id, 'contact'); }
