@@ -857,7 +857,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-207';
+  var APP_VERSION = '2026-09-10-208';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -870,6 +870,29 @@
   var listView = 'card'; /* 'card' | 'compact' */
   var activeTab = 'form';
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
+  var adminEditMode = false; /* 관리자 섹션 편집(순서·기본 열림) 모드 */
+  var DEFAULT_SEC_ORDER = ['usage', 'pending', 'delreq', 'deacreq', 'deaclist', 'dellog', 'active', 'adminmsg', 'done', 'cap', 'seen', 'log', 'test'];
+  var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', delreq: '🗑 삭제 요청', deacreq: '🗄 비활성화 요청', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', done: '✅ 요청완료', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록', test: '🧪 테스트 계정' };
+  var _adminSecOpen = null, _adminSecOrder = null;
+  function adminSecOpenMap() {
+    if (_adminSecOpen === null) { try { _adminSecOpen = JSON.parse(localStorage.getItem('adminSecOpen')) || {}; } catch (e) { _adminSecOpen = {}; } }
+    return _adminSecOpen;
+  }
+  function saveAdminSecOpen() { try { localStorage.setItem('adminSecOpen', JSON.stringify(_adminSecOpen || {})); } catch (e) {} }
+  /* 섹션 열림 상태: 저장된 값 우선, 없으면 상황별 기본(def) */
+  function secOpenAttr(key, def) {
+    var m = adminSecOpenMap();
+    var v = (key in m) ? m[key] : def;
+    return v ? ' open' : '';
+  }
+  function adminSecOrder() {
+    if (_adminSecOrder === null) { try { _adminSecOrder = JSON.parse(localStorage.getItem('adminSecOrder')) || []; } catch (e) { _adminSecOrder = []; } }
+    /* 저장된 순서(알려진 키만) + 빠진 기본 키를 뒤에 보충 → 새 섹션도 자동 노출 */
+    var known = _adminSecOrder.filter(function (k) { return DEFAULT_SEC_ORDER.indexOf(k) >= 0; });
+    DEFAULT_SEC_ORDER.forEach(function (k) { if (known.indexOf(k) < 0) known.push(k); });
+    return known;
+  }
+  function saveAdminSecOrder(arr) { _adminSecOrder = arr.slice(); try { localStorage.setItem('adminSecOrder', JSON.stringify(_adminSecOrder)); } catch (e) {} }
   function testAccountsShown() { try { return localStorage.getItem('showTestAccounts') === '1'; } catch (e) { return false; } }
   /* 테스트 계정끼리는 서로 보이게 (관리자 표시 스위치와 별개) → 테스트 계정으로 로그인 시 명단에서 다른 테스트 계정도 보여 요청 가능 */
   function meIsTest() { var me = currentUser && findMyEntry(currentState); return !!(me && me.testAccount); }
@@ -4266,7 +4289,7 @@
         '<thead><tr><th style="text-align:left;">날짜</th><th>누적 회원</th><th>가입</th><th>📷사진</th><th>💌대화</th></tr></thead>' +
         '<tbody>' + trendRows + '</tbody>' +
       '</table></div>';
-    return '<details class="admin-fold"><summary>📊 사용량 현황</summary>' +
+    return '<details class="admin-fold" data-sec="usage"' + secOpenAttr('usage', false) + '><summary>📊 사용량 현황</summary>' +
       '<div class="admin-fold-body">' + summary +
       '<p class="stats-sub" style="margin:10px 0 4px;">일자별 추이 (최신순 · 누적 회원=그 날까지 가입한 현재 회원, 가입=신규 프로필, 신청=보낸 날 기준)</p>' + trend +
       '<p class="stats-sub" style="margin-top:6px;">※ 탈퇴한 회원은 집계에 없어 누적은 현재 회원 기준이에요. 승인/탈퇴 시점은 별도로 기록되지 않아요.</p>' +
@@ -4277,10 +4300,12 @@
     if (!isAdminUnlocked) {
       return '<div class="admin-panel"><h2>관리자 모드</h2><p class="sub">위쪽 "관리자" 버튼으로 PIN을 입력하면 승인 대기 명단, 실명, 연락처, 알게 된 경로, 대화 신청함을 볼 수 있어요.</p></div>';
     }
-    /* 관리자 섹션 통일 폴딩: 제목 + 개수 배지 + 본문. count가 null이면 배지 생략 */
-    function adminFold(title, count, body, open) {
+    /* 관리자 섹션 통일 폴딩: 제목 + 개수 배지 + 본문. count가 null이면 배지 생략.
+       key가 있으면 저장된 열림 상태(secOpenAttr)를 반영하고 data-sec로 토글을 기억 */
+    function adminFold(title, count, body, open, key) {
       var cnt = (count === null || count === undefined) ? '' : '<span class="pending-count">' + count + '</span>';
-      return '<details class="admin-fold"' + (open ? ' open' : '') + '>' +
+      var attrs = key ? (' data-sec="' + key + '"' + secOpenAttr(key, open)) : (open ? ' open' : '');
+      return '<details class="admin-fold"' + attrs + '>' +
         '<summary>' + title + cnt + '</summary>' +
         '<div class="admin-fold-body">' + body + '</div>' +
       '</details>';
@@ -4327,7 +4352,7 @@
       );
     }).join('');
     var pendingSection = adminFold('⏳ 승인 대기', pending.length,
-      (pending.length ? pendingItems : '<p class="sub">대기 중인 신청이 없어요.</p>'), pending.length > 0);
+      (pending.length ? pendingItems : '<p class="sub">대기 중인 신청이 없어요.</p>'), pending.length > 0, 'pending');
     /* 삭제 요청 (회원이 삭제 요청 → 관리자 승인 후 삭제. 삭제 후 튀기 방지) */
     var delReqs = (state.entries || []).filter(function (e) { return e.deleteRequested; });
     var deleteReqSection = delReqs.length
@@ -4342,7 +4367,7 @@
                 '<button type="button" class="card-btn" data-action="cancel-delete" data-id="' + escapeHtml(e.id) + '">요청 취소</button>' +
               '</div>' +
             '</div>';
-          }).join(''), delReqs.length > 0)
+          }).join(''), delReqs.length > 0, 'delreq')
       : '';
     /* 비활성화(보관) 요청 */
     var deacReqs = (state.entries || []).filter(function (e) { return e.deactivateRequested; });
@@ -4358,7 +4383,7 @@
                 '<button type="button" class="card-btn" data-action="cancel-deactivate" data-id="' + escapeHtml(e.id) + '">요청 취소</button>' +
               '</div>' +
             '</div>';
-          }).join(''), deacReqs.length > 0)
+          }).join(''), deacReqs.length > 0, 'deacreq')
       : '';
     /* 보관(비활성) 계정 목록 — 사유·재활성화·연결 안내 */
     var deacList = (state.entries || []).filter(function (e) { return e.deactivated; });
@@ -4375,14 +4400,13 @@
                 '<button type="button" class="card-btn" data-action="notify-connected" data-id="' + escapeHtml(e.id) + '">📢 연결 회원 안내</button>' +
               '</div>' +
             '</div>';
-          }).join(''), false)
+          }).join(''), false, 'deaclist')
       : '';
     /* 삭제 이력 (비식별 tombstone) — 닉네임·사유·성별·나이 등만, PII 없음 */
     var delLog = (state.deletedLog || []).slice().sort(function (a, b) { return (b.deletedAt || '').localeCompare(a.deletedAt || ''); });
-    var delLogSection = delLog.length
-      ? adminFold('🗑 삭제 이력', delLog.length,
+    var delLogSection = adminFold('🗑 삭제 이력', delLog.length,
           '<p class="sub">삭제된 계정의 <b>비식별 기록</b>이에요. 전화번호·실명·사진은 삭제 시 즉시 폐기됐어요. (1년 지나면 자동 정리)</p>' +
-          delLog.map(function (t) {
+          (delLog.length ? delLog.map(function (t) {
             var ageStr = t.birthYear ? (String(t.birthYear).slice(2) + '년생') : '-';
             return '<div class="pending-item">' +
               '<div class="p-name"><span style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.8rem;">' + escapeHtml(t.uid || '—') + '</span> ' + escapeHtml(t.nickname || '(이름 없음)') + ' <span class="chip" style="background:#f1f3f4;color:#5f6368;">삭제됨</span></div>' +
@@ -4392,8 +4416,7 @@
                 '<button type="button" class="card-btn danger" data-action="del-tombstone" data-id="' + escapeHtml(t.id || '') + '" style="flex:none;padding:4px 12px;">이력 삭제</button>' +
               '</div>' +
             '</div>';
-          }).join(''), false)
-      : '';
+          }).join('') : '<p class="sub" style="margin:0;">아직 삭제된 계정이 없어요.</p>'), false, 'dellog');
     var allEntries = state.entries;
     var uidOf = function (eid) {
       if (eid && eid.indexOf('guest-') === 0) return '🙋';
@@ -4478,7 +4501,7 @@
     var activeItems = activeReqs.map(adminReqRow).join('');
     var doneItems = doneReqs.map(adminReqRow).join('');
     var doneSection = doneReqs.length
-      ? adminFold('✅ 요청완료', doneReqs.length, doneItems, false)
+      ? adminFold('✅ 요청완료', doneReqs.length, doneItems, false, 'done')
       : '';
 
     /* 회원 명단 (트리): 로그인 계정(주선자/일반)이 최상위, 그 아래 관리 프로필(본인/친구) */
@@ -4574,7 +4597,7 @@
         ? '<div class="admin-table-wrap"><table class="seen-table"><thead><tr>' +
             seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 사진') + seenTh('contact', '💬 채팅') + '<th style="white-space:nowrap;">🙈 필터</th>' +
           '</tr></thead><tbody>' + seenRows + '</tbody></table></div>'
-        : '<p class="sub">등록된 사람이 없어요.</p>'), false);
+        : '<p class="sub">등록된 사람이 없어요.</p>'), false, 'seen');
 
     /* 서버 용량 */
     var capSection = capacityHtml(state);
@@ -4627,7 +4650,7 @@
     }
     var logFilterActive = !!(adminLogFilterActor || adminLogFilterTime || adminLogFilterNick);
     var logSection =
-      '<details class="admin-fold" id="activity-log-section"' + (logFilterActive ? ' open' : '') + '>' +
+      '<details class="admin-fold" id="activity-log-section" data-sec="log"' + secOpenAttr('log', logFilterActive) + '>' +
       '<summary>📜 활동 기록<span class="pending-count">' + logData.length + '</span></summary>' +
       '<div class="admin-fold-body">' +
       '<p class="sub">헤더로 정렬, 아래 칸으로 검색해요. 최근 ' + LOG_LIMIT + '건까지 보관. (관리자만)</p>' +
@@ -4690,11 +4713,11 @@
     var adminMsgUnreadTotal = (state.messages || []).filter(function (m) { return m.from === 'user' && !m.hiddenByAdmin && !m.readByAdmin; }).length;
     var adminMsgSection = adminFold('💬 관리자 메시지', msgEntryIds.length,
       '<p class="sub">회원별로 한 줄씩 보여요. 눌러서 대화를 펼치고 답장할 수 있어요. (✕ 개별 삭제 / 전체 삭제)</p>' +
-      (msgEntryIds.length ? adminMsgItems : '<p class="sub">아직 메시지가 없어요.</p>'), adminMsgUnreadTotal > 0);
+      (msgEntryIds.length ? adminMsgItems : '<p class="sub">아직 메시지가 없어요.</p>'), adminMsgUnreadTotal > 0, 'adminmsg');
 
     var activeReqSection = adminFold('📬 요청함', activeReqs.length,
       '<p class="sub">아직 처리하지 않은 사진 요청·대화 신청이에요.</p>' +
-      (activeReqs.length ? activeItems : '<p class="sub">처리할 요청이 없어요.</p>'), activeReqs.length > 0);
+      (activeReqs.length ? activeItems : '<p class="sub">처리할 요청이 없어요.</p>'), activeReqs.length > 0, 'active');
     var testBody =
       '<p class="sub">체크한 계정은 테스트 계정이 돼요. 일반 회원 명단에서는 숨겨지고, 아래 "테스트 계정 표시"를 켜야 관리자 명단에 보여요.</p>' +
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">' +
@@ -4710,26 +4733,50 @@
           '</label>';
         }).join('') || '<p class="sub" style="padding:12px 14px;margin:0;">등록된 계정이 없어요.</p>') +
       '</div>';
-    var testSection = adminFold('🧪 테스트 계정', null, testBody, false);
+    var testSection = adminFold('🧪 테스트 계정', null, testBody, false, 'test');
+    var secHtml = {
+      usage: usageStatsHtml(state), pending: pendingSection, delreq: deleteReqSection,
+      deacreq: deacReqSection, deaclist: deacListSection, dellog: delLogSection,
+      active: activeReqSection, adminmsg: adminMsgSection, done: doneSection,
+      cap: capSection, seen: seenSection, log: logSection, test: testSection
+    };
+    var order = adminSecOrder();
+    var headerBtns =
+      '<div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
+        '<button type="button" class="card-btn' + (adminEditMode ? ' approve' : '') + '" id="admin-edit-toggle" style="flex:none;">' + (adminEditMode ? '✅ 편집 완료' : '✏️ 섹션 편집') + '</button>' +
+        '<button type="button" class="card-btn' + (adminNotifActive() ? ' approve' : '') + '" id="admin-notif-toggle" style="flex:none;">' + (adminNotifBroken() ? '🔔 관리자 알림 재설정 필요' : (adminNotifActive() ? '🔔 관리자 알림 켜짐' : '🔔 관리자 알림 켜기')) + '</button>' +
+        '<button type="button" class="card-btn" id="admin-change-pw" style="flex:none;">🔑 비밀번호 변경</button>' +
+      '</div>';
+    if (adminEditMode) {
+      var openMap = adminSecOpenMap();
+      var editList = order.map(function (k, i) {
+        var isOpen = (k in openMap) ? openMap[k] : false;
+        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 8px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;background:var(--paper);">' +
+          '<span style="display:flex;gap:4px;flex:none;">' +
+            '<button type="button" class="card-btn" data-action="sec-move" data-key="' + k + '" data-dir="up"' + (i === 0 ? ' disabled style="opacity:.35;flex:none;padding:4px 9px;"' : ' style="flex:none;padding:4px 9px;"') + '>▲</button>' +
+            '<button type="button" class="card-btn" data-action="sec-move" data-key="' + k + '" data-dir="down"' + (i === order.length - 1 ? ' disabled style="opacity:.35;flex:none;padding:4px 9px;"' : ' style="flex:none;padding:4px 9px;"') + '>▼</button>' +
+          '</span>' +
+          '<b style="flex:1;font-size:0.92rem;">' + SEC_NAMES[k] + '</b>' +
+          '<label style="display:flex;align-items:center;gap:5px;font-size:0.8rem;color:var(--muted);white-space:nowrap;flex:none;"><input type="checkbox" data-secopen="' + k + '"' + (isOpen ? ' checked' : '') + ' style="width:16px;height:16px;accent-color:var(--accent);"> 새로고침 시 열림</label>' +
+        '</div>';
+      }).join('');
+      return (
+        '<div class="admin-panel">' +
+          headerBtns +
+          '<h2 style="margin:0 0 4px;">✏️ 섹션 편집</h2>' +
+          '<p class="sub">▲▼로 순서를 바꾸고, 체크로 새로고침 시 펼쳐둘 섹션을 정해요. (이 기기에만 저장돼요)</p>' +
+          editList +
+          '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">' +
+            '<button type="button" class="card-btn" data-action="sec-reset" style="flex:none;">↩︎ 기본값으로</button>' +
+            '<button type="button" class="card-btn approve" id="admin-edit-done" style="flex:none;">✅ 편집 완료</button>' +
+          '</div>' +
+        '</div>'
+      );
+    }
     return (
       '<div class="admin-panel">' +
-        '<div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
-          '<button type="button" class="card-btn' + (adminNotifActive() ? ' approve' : '') + '" id="admin-notif-toggle" style="flex:none;">' + (adminNotifBroken() ? '🔔 관리자 알림 재설정 필요' : (adminNotifActive() ? '🔔 관리자 알림 켜짐' : '🔔 관리자 알림 켜기')) + '</button>' +
-          '<button type="button" class="card-btn" id="admin-change-pw" style="flex:none;">🔑 비밀번호 변경</button>' +
-        '</div>' +
-        usageStatsHtml(state) +
-        pendingSection +
-        deleteReqSection +
-        deacReqSection +
-        deacListSection +
-        delLogSection +
-        activeReqSection +
-        adminMsgSection +
-        doneSection +
-        capSection +
-        seenSection +
-        logSection +
-        testSection +
+        headerBtns +
+        order.map(function (k) { return secHtml[k] || ''; }).join('') +
       '</div>'
     );
   }
@@ -4767,7 +4814,7 @@
     if (pct > 85) warn = '<p class="sub" style="color:#c5221f;margin-top:10px;">⚠️ 메인 문서가 거의 찼어요. 회원 텍스트를 버킷으로 나눌 때가 됐어요.</p>';
     else if (pct > 60) warn = '<p class="sub" style="color:#b06000;margin-top:10px;">메인 문서 사용량이 절반을 넘었어요.</p>';
     return (
-      '<details class="admin-fold"><summary>💾 서버 용량 (메인 문서)</summary><div class="admin-fold-body">' +
+      '<details class="admin-fold" data-sec="cap"' + secOpenAttr('cap', false) + '><summary>💾 서버 용량 (메인 문서)</summary><div class="admin-fold-body">' +
       '<p class="sub">사진은 회원별 문서로 분리 저장돼요. 이 표는 1MB 한계가 걸리는 메인 문서(회원 텍스트·썸네일·요청·로그)만 표시해요.</p>' +
       '<div class="cap-bar"><div class="cap-fill" style="width:' + pct.toFixed(1) + '%;background:' + barColor + ';"></div></div>' +
       '<div class="cap-total">' + fmtBytes(total) + ' / 1 MB 사용 중 <b>(' + pct.toFixed(1) + '%)</b> · 남은 용량 ' + fmtBytes(roomLeft) + '</div>' +
@@ -6898,6 +6945,14 @@
       if (willOpen) markAdminUserRead(meid);
       /* return 하지 않음 → details 기본 토글 진행 */
     }
+    /* 관리자 섹션 폴딩 열림 상태 기억 (리페인트·새로고침 후 유지) */
+    var secSummary = e.target.closest('.admin-fold > summary');
+    if (secSummary) {
+      var secDetails = secSummary.parentElement;
+      var sk = secDetails.getAttribute('data-sec');
+      if (sk) { adminSecOpenMap()[sk] = !secDetails.open; saveAdminSecOpen(); }
+      /* return 하지 않음 → details 기본 토글 진행 */
+    }
     var filterBtn = e.target.closest('[data-filter]');
     if (filterBtn) {
       var f = filterBtn.getAttribute('data-filter');
@@ -6983,6 +7038,29 @@
     }
     if (e.target.closest('#admin-change-pw')) {
       handleChangeAdminPw();
+      return;
+    }
+    if (e.target.closest('#admin-edit-toggle') || e.target.closest('#admin-edit-done')) {
+      adminEditMode = !adminEditMode; paint(currentState); return;
+    }
+    var secMoveBtn = e.target.closest('[data-action="sec-move"]');
+    if (secMoveBtn) {
+      var mk = secMoveBtn.getAttribute('data-key');
+      var dir = secMoveBtn.getAttribute('data-dir');
+      var ord = adminSecOrder(); var idx = ord.indexOf(mk);
+      if (idx >= 0) {
+        var ni = dir === 'up' ? idx - 1 : idx + 1;
+        if (ni >= 0 && ni < ord.length) { ord.splice(idx, 1); ord.splice(ni, 0, mk); saveAdminSecOrder(ord); paint(currentState); }
+      }
+      return;
+    }
+    if (e.target.closest('[data-action="sec-reset"]')) {
+      modalConfirm('기본값으로', '섹션 순서와 열림 설정을 기본값으로 되돌릴까요?', '되돌리기', 'primary').then(function (ok) {
+        if (!ok) return;
+        _adminSecOrder = []; _adminSecOpen = {};
+        try { localStorage.removeItem('adminSecOrder'); localStorage.removeItem('adminSecOpen'); } catch (e2) {}
+        paint(currentState);
+      });
       return;
     }
     if (e.target.closest('#change-my-pin') || e.target.closest('#header-change-pin')) {
@@ -7156,6 +7234,8 @@
     if (testCb) { handleSetTest(testCb.getAttribute('data-testtoggle'), testCb.checked); return; }
     var permCb = e.target.closest && e.target.closest('[data-permtoggle]');
     if (permCb) { setPermission(permCb.getAttribute('data-kind'), permCb.getAttribute('data-viewer'), permCb.getAttribute('data-target'), permCb.checked, permCb); return; }
+    var secOpenCb = e.target.closest && e.target.closest('[data-secopen]');
+    if (secOpenCb) { adminSecOpenMap()[secOpenCb.getAttribute('data-secopen')] = secOpenCb.checked; saveAdminSecOpen(); return; }
     if (e.target.id === 'f-blur' && !e.target.checked) {
       var blurCb = e.target;
       modalConfirm('전체 공개 확인', '사진을 전체 공개할까요? 모든 회원이 요청 없이 바로 볼 수 있어요.', '전체 공개', 'danger').then(function (ok) {
