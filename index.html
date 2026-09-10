@@ -875,7 +875,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-211';
+  var APP_VERSION = '2026-09-10-212';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3126,6 +3126,24 @@
     pickReferrer().then(function (v) { if (v) setReferrerField(v); });
   }
 
+  /* 최근 접속 코스 표시(정확한 시간 숨김): 오늘/어제/며칠 전/이번주, 7일 넘으면 미표시.
+     명단 카드에 붙여 "활발함"을 보여줌 (프라이버시: 정확 시각 대신 코스 라벨만) */
+  function recentActivityChip(entry) {
+    if (!entry || !entry.lastSeenAt) return '';
+    var diff = Date.now() - new Date(entry.lastSeenAt).getTime();
+    if (isNaN(diff) || diff < 0) return '';
+    var H = 3600000, label, today = false;
+    if (diff < 24 * H) { label = '오늘'; today = true; }
+    else if (diff < 48 * H) label = '어제';
+    else if (diff < 96 * H) label = '며칠 전';
+    else if (diff < 168 * H) label = '이번주';
+    else return '';
+    var style = today
+      ? 'background:#e6f4ea;color:#137333;border-color:#b7e0c4;'
+      : 'background:#eef1f4;color:#5f6368;';
+    return '<span class="chip" style="' + style + '">' + (today ? '🟢 ' : '') + escapeHtml(label) + ' 접속</span>';
+  }
+
   /* ---- rendering ---- */
   /* ---- 사진: 목록은 썸네일, 원본은 photos/{id} 문서에서 필요할 때 로드 ---- */
   var FULL_MAX = 800, FULL_Q = 0.72;   /* 원본(고화질) */
@@ -3263,6 +3281,7 @@
             '<span class="chip chip--gender-' + escapeHtml(entry.gender) + '">' + genderLabel(entry.gender) + '</span>' +
             '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
             (entry.height ? '<span class="chip">' + escapeHtml(entry.height) + 'cm</span>' : '') +
+            recentActivityChip(entry) +
             (isAdminUnlocked && entry.deactivated ? '<span class="chip" style="background:var(--gold-soft);color:var(--gold);">🗄 보관</span>' : (entry.testAccount && isAdminUnlocked ? '<span class="chip" style="background:#e8eaed;color:#5f6368;">🧪 테스트</span>' : '')) +
             (isAdminUnlocked && isProxyEntry(entry) && !entry.ownerSelf ? '<span class="chip" data-action="card-detail" data-id="' + escapeHtml(entry.managedBy || '') + '" style="background:var(--gold-soft);color:var(--gold);border-color:var(--gold);cursor:pointer;text-decoration:underline dotted;" title="주선자 정보 보기">🤝 ' + escapeHtml(managerNickOf(state, entry)) + '님이 소개</span>' : '') +
           '</div>' +
@@ -3378,6 +3397,7 @@
             '<span class="chip chip--gender-' + escapeHtml(entry.gender) + '">' + genderLabel(entry.gender) + '</span>' +
             '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
             (entry.height ? '<span class="chip">' + escapeHtml(entry.height) + 'cm</span>' : '') +
+            recentActivityChip(entry) +
             (isAdminUnlocked && entry.deactivated ? '<span class="chip" style="background:var(--gold-soft);color:var(--gold);">🗄 보관</span>' : (entry.testAccount && isAdminUnlocked ? '<span class="chip" style="background:#e8eaed;color:#5f6368;">🧪 테스트</span>' : '')) +
             (isAdminUnlocked && isProxyEntry(entry) && !entry.ownerSelf ? '<span class="chip" style="background:var(--gold-soft);color:var(--gold);border-color:var(--gold);">🤝 소개</span>' : '') +
           '</div>' +
