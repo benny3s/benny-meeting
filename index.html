@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-227';
+  var APP_VERSION = '2026-09-10-228';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4189,7 +4189,7 @@
         var bd = isMale ? '#8fc0ee' : '#f2a9c7';
         var hot = un > 0 || incPend > 0;
         var bits = [];
-        if (un) bits.push('<span class="count blink">새 소식 ' + un + '</span>');
+        if (un) bits.push('<span style="color:var(--accent);font-weight:800;" class="blink-soft">🔔 새 소식 ' + un + '</span>');
         if (incPend) bits.push('<span style="color:var(--accent);font-weight:800;" class="blink-soft">응답 필요 ' + incPend + '</span>');
         var status = bits.length ? bits.join(' <span style="opacity:.4;">·</span> ') : '<span class="sub" style="font-size:0.82rem;">새 소식 없음</span>';
         return '<button type="button" data-action="switch-profile" data-id="' + escapeHtml(f.id) + '" ' +
@@ -4204,7 +4204,7 @@
       }).join('');
       var newsTotal = mmFriends.reduce(function (a, f) { return a + userUnread(state, f); }, 0);
       var friendsNews = mmFriends.length
-        ? '<div class="mine-section" style="margin-top:26px;"><h3 style="font-size:1.2rem;margin-bottom:6px;">🤝 친구 선택<span class="count' + (newsTotal ? ' blink' : '') + '">' + newsTotal + '</span></h3>' +
+        ? '<div class="mine-section" style="margin-top:26px;"><h3 style="font-size:1.2rem;margin-bottom:6px;">🤝 친구 선택</h3>' +
             '<p class="sub" style="margin:0 0 10px;">관리할 친구를 눌러 바로 전환하세요. 새 소식이 있으면 강조돼요.</p>' +
             newsRows + '</div>'
         : '<div class="mine-section" style="margin-top:26px;"><h3 style="font-size:1.2rem;margin-bottom:6px;">🤝 친구 선택</h3><p class="sub" style="margin:0;">아직 소개한 친구가 없어요. 위 <b>🔄 누구로 활동할까요 → ＋추가</b>로 친구를 소개할 수 있어요.</p></div>';
@@ -5044,7 +5044,8 @@
           var keyBadge = pinActive ? ' <span style="opacity:.9;">🔑</span>' : '';
           /* 이 친구에게 온 안 읽은 알림(요청·승인·관리자 메시지) — 주선자가 전환 안 해도 보이게 배지 */
           var un = userUnread(state, s); friendUnreadTotal += un;
-          var unBadge = un ? ' <span class="count blink" style="padding:0 6px;margin-left:2px;">' + un + '</span>' : '';
+          /* 개수 배지는 아래 "친구 선택" 카드에서 보여줌 — 칩엔 작은 점만(가독성) */
+          var unBadge = un ? ' <span style="color:var(--accent);" class="blink-soft">●</span>' : '';
           var tip = pinActive ? ('임시 PIN ' + subPinUntilText(s)) : '임시 PIN 없음(전환해서 발급 가능)';
           if (un) tip += ' · 안 읽은 알림 ' + un + '건';
           return { on: on, html: '<button type="button" class="pf-switch-chip' + (on ? ' active' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(s.id) + '" title="' + escapeHtml(tip) + '">🤝 ' + escapeHtml(s.nickname) + unBadge + keyBadge + '</button>' };
