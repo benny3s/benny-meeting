@@ -878,7 +878,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-218';
+  var APP_VERSION = '2026-09-10-219';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4089,25 +4089,31 @@
         : 'opacity:.38;');
       var chatAttr = chat ? (' data-action="dm-chat" data-id="' + escapeHtml(x.id) + '"') : ' disabled';
       var chatBtn = '<button type="button" class="card-btn" ' + chatAttr + ' style="' + chatStyle + '">💬 대화' + (chat && unread ? ' <span class="count blink">' + unread + '</span>' : '') + '</button>';
+      var chatRevokeStyle = 'flex:none;padding:4px 9px;font-size:0.78rem;' + (chat ? '' : 'opacity:.38;');
+      var chatRevokeAttr = chat ? (' data-action="revoke-contact-link" data-id="' + escapeHtml(x.id) + '"') : ' disabled';
+      var chatRevokeBtn = '<button type="button" class="card-btn danger" ' + chatRevokeAttr + ' style="' + chatRevokeStyle + '">대화 회수</button>';
       return '<div style="padding:9px 0;border-bottom:1px dashed var(--line);">' +
         '<div style="margin-bottom:6px;">' +
           '<b style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(x) || '—') + '</b> ' +
           '<b data-action="card-detail" data-id="' + escapeHtml(x.id) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(x.nickname) + '</b>' +
         '</div>' +
+        '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px;">' +
+          btn(mineOnly, '📤 내 사진만 공개', 'revoke-photo-link') +
+          btn(theirsOnly, '📥 상대 사진만 공개', 'revoke-photo-link') +
+        '</div>' +
         '<div style="display:flex;gap:5px;flex-wrap:wrap;">' +
-          btn(mineOnly, '📤 내 사진만', 'revoke-photo-link') +
-          btn(theirsOnly, '📥 상대 사진만', 'revoke-photo-link') +
-          btn(mutual, '📷 서로 사진', 'revoke-photo-link') +
+          btn(mutual, '📷 서로 사진 공개', 'revoke-photo-link') +
           chatBtn +
+          chatRevokeBtn +
         '</div>' +
       '</div>';
     }).filter(Boolean);
     var body = rows.length
-      ? (rows.length > 5 ? '<div style="max-height:320px;overflow-y:auto;-webkit-overflow-scrolling:touch;">' + rows.join('') + '</div>' : rows.join(''))
+      ? (rows.length > 5 ? '<div style="max-height:340px;overflow-y:auto;-webkit-overflow-scrolling:touch;">' + rows.join('') + '</div>' : rows.join(''))
       : '<p class="sub" style="margin:0;">아직 연결된 사람이 없어요. 사진·대화 요청이 승인되면 여기 표시돼요.</p>';
     return '<div class="mine-section">' +
         '<h3>🔗 내 연결<span class="count">' + rows.length + '</span></h3>' +
-        '<p class="sub" style="margin:0 0 6px;">사진·대화 권한이 있는 상대예요. 이름=프로필 · 사진 상태 버튼을 누르면 <b>공개 회수</b>, 💬 대화는 채팅으로 이어져요.</p>' +
+        '<p class="sub" style="margin:0 0 6px;">사진·대화 권한이 있는 상대예요. 이름=프로필 · 파란 버튼이 현재 상태(누르면 회수) · 💬 대화는 채팅으로 이어져요.</p>' +
         body +
       '</div>';
   }
