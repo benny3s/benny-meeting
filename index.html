@@ -177,8 +177,12 @@
     0%, 100% { background: var(--accent); transform: scale(1); }
     50% { background: var(--gold); transform: scale(1.12); }
   }
+  /* 일반 깜빡임(개수 배지 등) — tab-btn 밖에서도 동작 */
+  .count.blink { animation: count-blink 1.1s ease-in-out infinite; }
+  @keyframes soft-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+  .blink-soft { animation: soft-blink 1.05s ease-in-out infinite; }
   @media (prefers-reduced-motion: reduce) {
-    .tab-btn .count.blink { animation: none; }
+    .tab-btn .count.blink, .count.blink, .blink-soft { animation: none; }
   }
 
   /* ---------- Form ---------- */
@@ -878,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-225';
+  var APP_VERSION = '2026-09-10-226';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4180,27 +4184,36 @@
       var newsRows = mmFriends.map(function (f) {
         var un = userUnread(state, f);
         var incPend = (state.dateRequests || []).filter(function (r) { return r.toId === f.id && (r.hiddenBy || []).indexOf(f.id) < 0 && reqStatus(r) === 'pending'; }).length;
-        var badge = un ? '<span class="count blink" style="margin-left:2px;">' + un + '</span>' : '<span class="sub" style="font-size:0.8rem;">새 소식 없음</span>';
-        var detail = incPend ? '<span class="sub" style="font-size:0.8rem;color:var(--accent);"> · 응답 필요 ' + incPend + '건</span>' : '';
-        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);">' +
-          '<span>🤝 <b data-action="card-detail" data-id="' + escapeHtml(f.id) + '" style="cursor:pointer;text-decoration:underline dotted;">' + escapeHtml(f.nickname) + '</b> ' + badge + detail + '</span>' +
-          '<button type="button" class="card-btn' + (un ? ' primary' : '') + '" data-action="switch-profile" data-id="' + escapeHtml(f.id) + '" style="flex:none;padding:4px 12px;">' + (un ? '📬 보기' : '열기') + '</button>' +
-        '</div>';
+        var isMale = f.gender === 'male';
+        var bg = isMale ? '#e8f2fd' : '#fdeaf1';   /* 남=하늘 · 여=핑크 */
+        var bd = isMale ? '#8fc0ee' : '#f2a9c7';
+        var hot = un > 0 || incPend > 0;
+        var bits = [];
+        if (un) bits.push('<span class="count blink">새 소식 ' + un + '</span>');
+        if (incPend) bits.push('<span style="color:var(--accent);font-weight:800;" class="blink-soft">응답 필요 ' + incPend + '</span>');
+        var status = bits.length ? bits.join(' <span style="opacity:.4;">·</span> ') : '<span class="sub" style="font-size:0.82rem;">새 소식 없음</span>';
+        return '<button type="button" data-action="switch-profile" data-id="' + escapeHtml(f.id) + '" ' +
+          'style="display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;box-sizing:border-box;text-align:left;cursor:pointer;font-family:inherit;' +
+          'border:2px solid ' + bd + ';background:' + bg + ';border-radius:14px;padding:12px 14px;margin-bottom:8px;' + (hot ? 'box-shadow:0 0 0 3px ' + bd + '55;' : '') + '">' +
+          '<span style="display:flex;flex-direction:column;gap:3px;min-width:0;">' +
+            '<span style="font-weight:800;font-size:1.02rem;">' + (isMale ? '💙' : '💗') + ' ' + escapeHtml(f.nickname) + ' <span style="font-weight:400;font-size:0.78rem;color:var(--muted);">' + genderLabel(f.gender) + '</span></span>' +
+            '<span style="font-size:0.85rem;">' + status + '</span>' +
+          '</span>' +
+          '<span class="card-btn' + (hot ? ' primary' : '') + '" style="flex:none;pointer-events:none;' + (hot ? '' : 'background:#fff;') + '">' + (hot ? '📬 보기' : '열기') + '</span>' +
+        '</button>';
       }).join('');
       var newsTotal = mmFriends.reduce(function (a, f) { return a + userUnread(state, f); }, 0);
       var friendsNews = mmFriends.length
-        ? '<div class="mine-section"><h3>🔔 친구들 소식<span class="count' + (newsTotal ? ' blink' : '') + '">' + newsTotal + '</span></h3>' +
-            '<p class="sub" style="margin:0 0 4px;">친구에게 온 요청·승인·메시지예요. <b>보기</b>를 누르면 그 친구로 전환돼 응답할 수 있어요.</p>' +
+        ? '<div class="mine-section"><h3>🤝 친구 선택<span class="count' + (newsTotal ? ' blink' : '') + '">' + newsTotal + '</span></h3>' +
+            '<p class="sub" style="margin:0 0 8px;">관리할 친구를 눌러 바로 전환하세요. 새 소식이 있으면 강조돼요.</p>' +
             newsRows + '</div>'
-        : '';
+        : '<div class="mine-section"><p class="sub" style="margin:0;">아직 소개한 친구가 없어요. 위 <b>🔄 누구로 활동할까요 → ＋추가</b>로 친구를 소개할 수 있어요.</p></div>';
       mmHome =
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
             '<h2 style="margin:0 0 4px;">🤝 주선자 홈</h2>' +
             '<button type="button" class="card-btn" id="convert-member" style="flex:none;">🙋 일반 계정으로 전환</button>' +
           '</div>' +
           '<div class="my-uid">' + escapeHtml(currentUser.nickname) + ' · 주선자</div>' +
-          '<p class="sub">친구 전환·임시 PIN은 위 <b>🔄 누구로 활동할까요</b>에서 친구를 고르면 돼요.</p>' +
-          '<button type="button" class="submit-btn" id="start-proxy" style="width:100%;box-sizing:border-box;margin:4px 0 12px;">🤝 새 친구 소개하기</button>' +
           pendNote +
           friendsNews +
           joinSection +
