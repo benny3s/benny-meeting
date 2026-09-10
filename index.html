@@ -878,7 +878,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-221';
+  var APP_VERSION = '2026-09-10-222';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -894,16 +894,15 @@
   var adminEditMode = false; /* 관리자 섹션 편집(순서·기본 열림) 모드 */
   var DEFAULT_SEC_ORDER = ['usage', 'pending', 'deaclist', 'dellog', 'active', 'adminmsg', 'done', 'cap', 'seen', 'log', 'test'];
   var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', done: '✅ 요청완료', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록', test: '🧪 테스트 계정' };
-  var _adminSecOpen = null, _adminSecOrder = null;
-  function adminSecOpenMap() {
-    if (_adminSecOpen === null) { try { _adminSecOpen = JSON.parse(localStorage.getItem('adminSecOpen')) || {}; } catch (e) { _adminSecOpen = {}; } }
-    return _adminSecOpen;
-  }
-  function saveAdminSecOpen() { try { localStorage.setItem('adminSecOpen', JSON.stringify(_adminSecOpen || {})); } catch (e) {} }
-  /* 섹션 열림 상태: 저장된 값 우선, 없으면 상황별 기본(def) */
+  /* 섹션 열림 상태는 "세션 메모리에만" 저장 → 리페인트(버튼 클릭 등) 동안엔 유지되지만,
+     새로고침하면 초기화되어 모두 접힌 상태로 시작 (이전에 열었던 걸 기억하지 않음) */
+  var _adminSecOpen = {}, _adminSecOrder = null;
+  function adminSecOpenMap() { return _adminSecOpen; }
+  function saveAdminSecOpen() { /* 세션 메모리만 사용 — 영구 저장 안 함 */ }
+  /* 섹션 열림 상태: 이번 세션에 사용자가 편 것만 열림 (기본은 접힘). def는 필터 등 특수 상황용 */
   function secOpenAttr(key, def) {
     var m = adminSecOpenMap();
-    var v = (key in m) ? m[key] : def;
+    var v = (key in m) ? m[key] : !!def;
     return v ? ' open' : '';
   }
   function adminSecOrder() {
@@ -3496,14 +3495,25 @@
   }
   /* 주선자: 로그인 또는 새 등록 선택 패널 (미로그인 시) */
   function renderMatchmakerAuth(state) {
+    var roleBox = '<div class="form-card" style="background:var(--gold-soft);border-color:var(--gold);">' +
+        '<div style="font-weight:700;margin-bottom:6px;">🤝 주선자 역할 <span style="color:var(--muted);font-weight:400;font-size:0.85rem;">(내가 소개팅 안 해도 OK)</span></div>' +
+        '<ul style="padding-left:18px;margin:0;list-style:none;font-size:0.88rem;line-height:1.75;">' +
+          '<li><b>① 친구 등록</b>, 어울릴만한 사람 물색</li>' +
+          '<li><b>② 사진/대화 요청 가능</b> <span style="color:var(--muted);">(실제 인앱 대화는 친구 본인만)</span></li>' +
+          '<li><b>③ 2가지 방법 제공</b><br>' +
+            '&nbsp;&nbsp;<b>&#128273; 1일 PIN</b> 발급 시 1일 로그인 가능<br>' +
+            '&nbsp;&nbsp;<b>&#129706; 일반(독립) 계정</b>으로 승격 가능</li>' +
+        '</ul>' +
+      '</div>';
     return roleToggleHtml() +
       '<div class="form-card">' +
         '<div class="form-lede"><h2>🤝 주선자</h2><p>여러 친구를 대신 등록하고 요청·승인을 대신 관리하는 계정이에요. 주선자 본인은 명단에 노출되지 않아요.</p></div>' +
         '<div style="display:flex;flex-direction:column;gap:10px;padding:2px 2px 8px;">' +
-          '<button type="button" class="submit-btn" id="mm-login">이미 주선자예요 · 로그인</button>' +
-          '<button type="button" class="card-btn" id="mm-new-btn" style="padding:12px;">＋ 새 주선자로 등록</button>' +
+          '<button type="button" class="submit-btn" id="mm-new-btn">＋ 새 주선자로 등록</button>' +
+          '<button type="button" class="card-btn" id="mm-login" style="padding:12px;">이미 주선자예요 · 로그인</button>' +
         '</div>' +
-      '</div>';
+      '</div>' +
+      roleBox;
   }
   /* 주선자: 새 계정 등록 폼 (닉네임+연락처+PIN만) */
   function renderMatchmakerNew(state) {
@@ -4473,7 +4483,7 @@
     }).join('');
     var approvalTotal = pending.length + delReqs.length + deacReqs.length;
     var pendingSection = adminFold('⏳ 승인 대기', approvalTotal,
-      (approvalTotal ? (pendingItems + delReqItems + deacReqItems) : '<p class="sub">대기 중인 신청이 없어요.</p>'), approvalTotal > 0, 'pending');
+      (approvalTotal ? (pendingItems + delReqItems + deacReqItems) : '<p class="sub">대기 중인 신청이 없어요.</p>'), false, 'pending');
     /* 보관(비활성) 계정 목록 — 사유·재활성화·연결 안내 */
     var deacList = (state.entries || []).filter(function (e) { return e.deactivated; });
     var deacListSection = deacList.length
@@ -4512,7 +4522,7 @@
                 '<button type="button" class="card-btn danger" data-action="del-tombstone" data-id="' + escapeHtml(t.id || '') + '" style="flex:none;padding:4px 12px;">이력 삭제</button>' +
               '</div>'
             );
-          }).join('') : '<p class="sub" style="margin:0;">아직 삭제된 계정이 없어요.</p>'), delLog.length > 0, 'dellog');
+          }).join('') : '<p class="sub" style="margin:0;">아직 삭제된 계정이 없어요.</p>'), false, 'dellog');
     var allEntries = state.entries;
     var uidOf = function (eid) {
       if (eid && eid.indexOf('guest-') === 0) return '🙋';
@@ -4813,11 +4823,11 @@
     var adminMsgUnreadTotal = (state.messages || []).filter(function (m) { return m.from === 'user' && !m.hiddenByAdmin && !m.readByAdmin; }).length;
     var adminMsgSection = adminFold('💬 관리자 메시지', msgEntryIds.length,
       '<p class="sub">회원별로 한 줄씩 보여요. 눌러서 대화를 펼치고 답장할 수 있어요. (✕ 개별 삭제 / 전체 삭제)</p>' +
-      (msgEntryIds.length ? adminMsgItems : '<p class="sub">아직 메시지가 없어요.</p>'), adminMsgUnreadTotal > 0, 'adminmsg');
+      (msgEntryIds.length ? adminMsgItems : '<p class="sub">아직 메시지가 없어요.</p>'), false, 'adminmsg');
 
     var activeReqSection = adminFold('📬 요청함', activeReqs.length,
       '<p class="sub">아직 처리하지 않은 사진 요청·대화 신청이에요.</p>' +
-      (activeReqs.length ? activeItems : '<p class="sub">처리할 요청이 없어요.</p>'), activeReqs.length > 0, 'active');
+      (activeReqs.length ? activeItems : '<p class="sub">처리할 요청이 없어요.</p>'), false, 'active');
     var testBody =
       '<p class="sub">체크한 계정은 테스트 계정이 돼요. 일반 회원 명단에서는 숨겨지고, 아래 "테스트 계정 표시"를 켜야 관리자 명단에 보여요.</p>' +
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">' +
@@ -4848,23 +4858,20 @@
         '<button type="button" class="card-btn" id="admin-change-pw" style="flex:none;">🔑 비밀번호 변경</button>' +
       '</div>';
     if (adminEditMode) {
-      var openMap = adminSecOpenMap();
       var editList = order.map(function (k, i) {
-        var isOpen = (k in openMap) ? openMap[k] : false;
         return '<div style="display:flex;align-items:center;gap:8px;padding:8px 8px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;background:var(--paper);">' +
           '<span style="display:flex;gap:4px;flex:none;">' +
             '<button type="button" class="card-btn" data-action="sec-move" data-key="' + k + '" data-dir="up"' + (i === 0 ? ' disabled style="opacity:.35;flex:none;padding:4px 9px;"' : ' style="flex:none;padding:4px 9px;"') + '>▲</button>' +
             '<button type="button" class="card-btn" data-action="sec-move" data-key="' + k + '" data-dir="down"' + (i === order.length - 1 ? ' disabled style="opacity:.35;flex:none;padding:4px 9px;"' : ' style="flex:none;padding:4px 9px;"') + '>▼</button>' +
           '</span>' +
           '<b style="flex:1;font-size:0.92rem;">' + SEC_NAMES[k] + '</b>' +
-          '<label style="display:flex;align-items:center;gap:5px;font-size:0.8rem;color:var(--muted);white-space:nowrap;flex:none;"><input type="checkbox" data-secopen="' + k + '"' + (isOpen ? ' checked' : '') + ' style="width:16px;height:16px;accent-color:var(--accent);"> 새로고침 시 열림</label>' +
         '</div>';
       }).join('');
       return (
         '<div class="admin-panel">' +
           headerBtns +
           '<h2 style="margin:0 0 4px;">✏️ 섹션 편집</h2>' +
-          '<p class="sub">▲▼로 순서를 바꾸고, 체크로 새로고침 시 펼쳐둘 섹션을 정해요. (이 기기에만 저장돼요)</p>' +
+          '<p class="sub">▲▼로 순서를 바꿔요. 모든 섹션은 열 때마다 접힌 상태로 시작해요. (순서는 이 기기에 저장)</p>' +
           editList +
           '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">' +
             '<button type="button" class="card-btn" data-action="sec-reset" style="flex:none;">↩︎ 기본값으로</button>' +
