@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-232';
+  var APP_VERSION = '2026-09-10-233';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -917,18 +917,15 @@
     return known;
   }
   function saveAdminSecOrder(arr) { _adminSecOrder = arr.slice(); try { localStorage.setItem('adminSecOrder', JSON.stringify(_adminSecOrder)); } catch (e) {} }
-  /* 관리자 명단 보기 모드: '' (일반만) | 'test' (🧪 테스트 포함) | 'archived' (🗄 보관 포함) — 하나만 선택 */
-  function adminListView() { try { return localStorage.getItem('adminListView') || ''; } catch (e) { return ''; } }
-  function testAccountsShown() { return adminListView() === 'test'; } /* 하위호환 */
-  /* 테스트 계정끼리는 서로 보이게 (관리자 표시 스위치와 별개) → 테스트 계정으로 로그인 시 명단에서 다른 테스트 계정도 보여 요청 가능 */
+  function testAccountsShown() { return false; } /* 하위호환(더 이상 관리자 표시 토글 없음) */
+  /* 테스트 계정끼리는 서로 보이게 → 테스트 계정으로 로그인 시 명단에서 다른 테스트 계정도 보여 요청 가능 */
   function meIsTest() { var me = currentUser && findMyEntry(currentState); return !!(me && me.testAccount && !me.deactivated); }
-  function showTestInList() { return (isAdminUnlocked && adminListView() === 'test') || meIsTest(); }
-  function showArchivedInList() { return isAdminUnlocked && adminListView() === 'archived'; }
-  /* 명단 노출 판정: 보관 계정은 '보관 보기'일 때만, 테스트는 '테스트 보기/테스트 로그인'일 때만, 나머지 일반 */
-  function listMemberVisible(e, showTest, showArchived) {
+  function showTestInList() { return meIsTest(); }
+  /* 명단 노출 판정: 보관 계정은 항상 숨김 · 테스트는 테스트 로그인끼리만 · 나머지 일반 */
+  function listMemberVisible(e) {
     if (e.isMatchmaker) return false;
-    if (e.deactivated) return showArchived;
-    if (e.testAccount) return showTest;
+    if (e.deactivated) return false;
+    if (e.testAccount) return meIsTest();
     return true;
   }
   var isAdminUnlocked = false;
@@ -2384,8 +2381,9 @@
     /* 주선자 계정 중 "본인(ownerSelf) 프로필"이 있는 계정 → 본인 로그인 탭에도 노출 */
     var mmWithSelf = {};
     (state.entries || []).forEach(function (e) { if (e.managedBy && e.ownerSelf) mmWithSelf[e.managedBy] = true; });
-    /* 후보 풀: 대리 프로필은 유효한 임시 PIN 있을 때만 포함 */
+    /* 후보 풀: 보관 계정은 로그인 불가로 제외 · 대리 프로필은 유효한 임시 PIN 있을 때만 포함 */
     var pool = sortedEntries.concat(state.pendingEntries || []).filter(function (e) {
+      if (e.deactivated) return false; /* 🗄 보관 계정은 로그인 불가 */
       if (e.managedBy && (!e.pinAuth || subPinExpired(e))) return false;
       return true;
     }).map(function (e) {
@@ -2425,7 +2423,7 @@
       function pooled() {
         return pool.filter(function (o) {
           if (mode === 'mm') return o.isMM; /* 주선자: Lv2/Lv3, 테스트 무관 */
-          return (!o.isPureMM || o.hasOwnSelf) && (!o.testAccount || showTest); /* 본인: 순수 주선자(본인 없는)만 제외, 본인 있으면 포함 */
+          return (!o.isPureMM || o.hasOwnSelf); /* 본인: 순수 주선자(본인 없는)만 제외 · 테스트 계정도 로그인 가능하도록 포함 */
         });
       }
       function syncToggle() {
@@ -3334,9 +3332,7 @@
   }
 
   function renderList(state) {
-    var showTest = showTestInList();
-    var showArchived = showArchivedInList();
-    var entries = (state.entries || []).filter(function (e) { return listMemberVisible(e, showTest, showArchived); });
+    var entries = (state.entries || []).filter(function (e) { return listMemberVisible(e); });
     var maleCount = entries.filter(function (e) { return e.gender === 'male'; }).length;
     var femaleCount = entries.filter(function (e) { return e.gender === 'female'; }).length;
     var me = findMyEntry(state);
@@ -4880,18 +4876,10 @@
     var activeReqSection = adminFold('📬 요청함', activeReqs.length,
       '<p class="sub">아직 처리하지 않은 사진 요청·대화 신청이에요.</p>' +
       (activeReqs.length ? activeItems : '<p class="sub">처리할 요청이 없어요.</p>'), false, 'active');
-    var _alv = adminListView();
     var testBody =
-      '<p class="sub">체크한 계정은 테스트 계정이 돼요. 명단 보기에서는 기본으로 숨겨지고, 아래에서 <b>테스트</b> 또는 <b>보관</b>을 선택하면 그 계정만 명단에 보여요. (테스트/보관은 따로 관리돼요)</p>' +
-      '<div style="margin-bottom:10px;">' +
-        '<b style="font-size:0.9rem;display:block;margin-bottom:6px;">명단 보기에 포함</b>' +
-        '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
-          '<button type="button" class="card-btn' + (_alv === '' ? ' approve' : '') + '" data-action="list-view" data-lv="" style="flex:none;">일반만</button>' +
-          '<button type="button" class="card-btn' + (_alv === 'test' ? ' approve' : '') + '" data-action="list-view" data-lv="test" style="flex:none;">🧪 테스트 포함</button>' +
-          '<button type="button" class="card-btn' + (_alv === 'archived' ? ' approve' : '') + '" data-action="list-view" data-lv="archived" style="flex:none;">🗄 보관 포함</button>' +
-        '</div>' +
-      '</div>' +
-      '<p class="sub" style="margin:10px 0 6px;font-weight:700;color:var(--ink);">계정별 상태</p>' +
+      '<p class="sub" style="margin:0 0 6px;font-weight:700;color:var(--ink);">계정별 상태</p>' +
+      '<p class="sub" style="margin:0 0 4px;"><b>🧪 테스트</b> — 명단에서 일반 유저에겐 안 보이고, 테스트 계정끼리만 보여요. 로그인 가능.</p>' +
+      '<p class="sub" style="margin:0 0 8px;"><b>🗄 비활성화</b> — 명단에서 숨겨지고 <b>로그인도 안 돼요</b>. 해제하면 일반 계정으로 돌아와요.</p>' +
       '<p class="sub" style="margin:0 0 8px;">계정마다 <b>일반 / 🧪 테스트 / 🗄 비활성화</b> 상태를 직접 지정할 수 있어요.</p>' +
       '<div class="test-acct-list" style="border:1px solid var(--line);border-radius:12px;max-height:360px;overflow-y:auto;">' +
         (allEntries.filter(function (e) { return !e.isMatchmaker; }).sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); }).map(function (e) {
@@ -5005,9 +4993,7 @@
   }
 
   function renderApp(state) {
-    var showTestList = showTestInList();
-    var showArchivedList = showArchivedInList();
-    var entries = (state.entries || []).filter(function (e) { return listMemberVisible(e, showTestList, showArchivedList); });
+    var entries = (state.entries || []).filter(function (e) { return listMemberVisible(e); });
     var pendingCount = (state.pendingEntries || []).length;
     var reqCount = (state.dateRequests || []).filter(function (r) {
       var st = reqStatus(r); return st !== 'approved' && st !== 'rejected';
@@ -6048,27 +6034,39 @@
       modalNotice('취소됨', '비활성화 요청을 취소했어요.');
     }).catch(function (err) { modalNotice('오류', '취소 실패: ' + (err.message || err)); });
   }
-  /* 관리자: 보관(비활성) 계정을 다시 활성화 */
+  /* 관리자: 보관(비활성) 계정을 다시 활성화 → 일반 계정으로.
+     대리(주선자 친구)였거나 자체 로그인 PIN이 없던 계정은 독립 일반 계정으로 전환하고 PIN을 1234로 초기화. */
   function handleReactivate(id) {
     if (!isAdminUnlocked) return;
     var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
     if (!entry) return;
-    modalConfirm('다시 활성화', escapeHtml(entry.nickname) + '님을 다시 명단에 노출할까요?', '활성화', 'approve').then(function (ok) {
+    var wasManaged = !!(entry.managedBy && !entry.ownerSelf); /* 주선자 밑 친구였음 → 독립 전환 */
+    var noOwnLogin = !entry.pinAuth && !entry.pinHash;         /* 자체 로그인 수단 없음 */
+    var needReset = wasManaged || noOwnLogin;
+    var msg = escapeHtml(entry.nickname) + '님을 다시 명단에 노출(일반 계정)할까요?' + (needReset ? ' 로그인 PIN은 <b>1234</b>로 초기화돼요. (로그인 후 변경 안내)' : '');
+    modalConfirm('다시 활성화', msg, '활성화', 'approve').then(function (ok) {
       if (!ok) return;
-      db.runTransaction(function (tx) {
-        return tx.get(stateRef).then(function (doc) {
-          var s = doc.data();
-          var entries = (s.entries || []).map(function (e) {
-            if (e.id !== id) return e;
-            var c = JSON.parse(JSON.stringify(e)); delete c.testAccount; delete c.deactivated; return c;
+      (needReset ? makePinAuth('1234') : Promise.resolve(null)).then(function (auth) {
+        return db.runTransaction(function (tx) {
+          return tx.get(stateRef).then(function (doc) {
+            var s = doc.data();
+            var entries = (s.entries || []).map(function (e) {
+              if (e.id !== id) return e;
+              var c = JSON.parse(JSON.stringify(e));
+              delete c.deactivated; delete c.testAccount; delete c.deactivatedReason; delete c.deactivatedAt;
+              if (wasManaged) { delete c.managedBy; delete c.ownerSelf; }
+              if (auth) { c.pinAuth = auth; delete c.pinHash; delete c.pinExpiresAt; }
+              return c;
+            });
+            tx.update(stateRef, { entries: entries });
           });
-          tx.update(stateRef, { entries: entries });
         });
       }).then(function () {
-        appendLog('admin', '관리자', '다시 활성화 · ' + entry.nickname);
+        appendLog('admin', '관리자', '다시 활성화' + (needReset ? '(일반 전환·PIN 1234)' : '') + ' · ' + entry.nickname);
         return refreshNow();
-      }).then(function () { modalNotice('활성화 완료', entry.nickname + '님을 다시 명단에 노출했어요.'); })
-        .catch(function (err) { modalNotice('오류', '활성화 실패: ' + (err.message || err)); });
+      }).then(function () {
+        modalNotice('활성화 완료', entry.nickname + '님을 다시 명단에 노출했어요.' + (needReset ? ' 로그인 PIN은 1234예요 — 본인에게 알려주고 변경하도록 안내해 주세요.' : ''));
+      }).catch(function (err) { modalNotice('오류', '활성화 실패: ' + (err.message || err)); });
     });
   }
 
@@ -6544,6 +6542,8 @@
     if (!entry) return;
     var cur = entry.deactivated ? 'archived' : (entry.testAccount ? 'test' : 'normal');
     if (cur === status) return;
+    /* 보관 → 일반: 재활성화(대리 친구 독립 전환·PIN 1234 리셋 포함) 로직 재사용 */
+    if (cur === 'archived' && status === 'normal') { handleReactivate(id); return; }
     var labels = { normal: '일반', test: '테스트', archived: '비활성화(보관)' };
     function apply() {
       db.runTransaction(function (tx) {
@@ -7281,13 +7281,6 @@
     }
     if (e.target.closest('#admin-notif-toggle')) {
       handleAdminNotifToggle();
-      return;
-    }
-    var lvBtn = e.target.closest('[data-action="list-view"]');
-    if (lvBtn) {
-      var lv = lvBtn.getAttribute('data-lv') || '';
-      try { if (lv) localStorage.setItem('adminListView', lv); else localStorage.removeItem('adminListView'); } catch (e2) {}
-      paint(currentState);
       return;
     }
     if (e.target.closest('#admin-change-pw')) {
