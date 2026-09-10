@@ -878,7 +878,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-217';
+  var APP_VERSION = '2026-09-10-218';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3993,23 +3993,20 @@
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
           var s = doc.data();
-          var reqs = (s.dateRequests || []).map(function (r) {
-            if ((r.type || 'contact') !== 'photo') return r;
+          /* 회수 = 두 사람 사이 사진 요청 자체를 제거 → 요청 목록으로 되돌아가지 않고 완전히 사라짐 */
+          var reqs = (s.dateRequests || []).filter(function (r) {
+            if ((r.type || 'contact') !== 'photo') return true;
             var between = (r.fromId === me.id && r.toId === otherId) || (r.fromId === otherId && r.toId === me.id);
-            if (!between) return r;
-            var c = JSON.parse(JSON.stringify(r));
-            if (c.approved) c.approved = false;
-            if (c.fromId === me.id && c.fromRevealed) c.fromRevealed = false;
-            return c;
+            return !between;
           });
           tx.update(stateRef, { dateRequests: reqs });
         });
       }).then(function () {
-        appendLog('request', me.nickname, '사진 접근 삭제 → ' + otherNick);
+        appendLog('request', me.nickname, '사진 공개 회수 → ' + otherNick);
         return refreshNow();
       }).then(function () {
-        modalNotice('삭제 완료', otherNick + '님은 더 이상 내 사진을 볼 수 없어요.');
-      }).catch(function (err) { modalNotice('오류', '삭제 실패: ' + (err.message || err)); });
+        modalNotice('회수 완료', otherNick + '님과의 사진 공개를 회수했어요.');
+      }).catch(function (err) { modalNotice('오류', '회수 실패: ' + (err.message || err)); });
     });
   }
   /* 대화 연결 회수: 나와 상대 사이 승인된 대화(번호) 요청을 해제 → 서로 채팅 불가 */
@@ -4022,11 +4019,11 @@
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
           var s = doc.data();
-          var reqs = (s.dateRequests || []).map(function (r) {
-            if ((r.type || 'contact') !== 'contact' || !r.approved) return r;
+          /* 회수 = 두 사람 사이 대화 요청 자체를 제거 → 요청 목록으로 되돌아가지 않음 */
+          var reqs = (s.dateRequests || []).filter(function (r) {
+            if ((r.type || 'contact') !== 'contact') return true;
             var between = (r.fromId === me.id && r.toId === otherId) || (r.fromId === otherId && r.toId === me.id);
-            if (!between) return r;
-            var c = JSON.parse(JSON.stringify(r)); c.approved = false; c.userApproved = false; return c;
+            return !between;
           });
           tx.update(stateRef, { dateRequests: reqs });
         });
