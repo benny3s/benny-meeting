@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-231';
+  var APP_VERSION = '2026-09-10-232';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -897,7 +897,7 @@
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
   var adminEditMode = false; /* 관리자 섹션 편집(순서·기본 열림) 모드 */
   var DEFAULT_SEC_ORDER = ['usage', 'pending', 'deaclist', 'dellog', 'active', 'adminmsg', 'done', 'cap', 'seen', 'log', 'test'];
-  var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', done: '✅ 요청완료', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록', test: '🧪 테스트 계정' };
+  var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', done: '✅ 요청완료', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록', test: '🧪 테스트·계정 상태' };
   /* 섹션 열림 상태는 "세션 메모리에만" 저장 → 리페인트(버튼 클릭 등) 동안엔 유지되지만,
      새로고침하면 초기화되어 모두 접힌 상태로 시작 (이전에 열었던 걸 기억하지 않음) */
   var _adminSecOpen = {}, _adminSecOrder = null;
@@ -4891,16 +4891,23 @@
           '<button type="button" class="card-btn' + (_alv === 'archived' ? ' approve' : '') + '" data-action="list-view" data-lv="archived" style="flex:none;">🗄 보관 포함</button>' +
         '</div>' +
       '</div>' +
-      '<div class="test-acct-list" style="border:1px solid var(--line);border-radius:12px;max-height:340px;overflow-y:auto;">' +
+      '<p class="sub" style="margin:10px 0 6px;font-weight:700;color:var(--ink);">계정별 상태</p>' +
+      '<p class="sub" style="margin:0 0 8px;">계정마다 <b>일반 / 🧪 테스트 / 🗄 비활성화</b> 상태를 직접 지정할 수 있어요.</p>' +
+      '<div class="test-acct-list" style="border:1px solid var(--line);border-radius:12px;max-height:360px;overflow-y:auto;">' +
         (allEntries.filter(function (e) { return !e.isMatchmaker; }).sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); }).map(function (e) {
           var kind = e.ownerSelf ? '🙋 주선자 본인' : (e.managedBy ? '🤝 주선자 친구' : '일반 회원');
-          return '<label style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);cursor:pointer;">' +
-            '<input type="checkbox" data-testtoggle="' + escapeHtml(e.id) + '"' + (e.testAccount ? ' checked' : '') + ' style="width:17px;height:17px;accent-color:var(--accent);flex:none;">' +
-            '<span style="font-variant-numeric:tabular-nums;"><b>' + escapeHtml(formatUid(e) || '—') + '</b> ' + escapeHtml(e.nickname) + ' <span style="color:var(--muted);font-size:0.78rem;">' + kind + '</span>' + (e.testAccount ? ' <span class="chip" style="background:#e8eaed;color:#5f6368;">🧪</span>' : '') + '</span>' +
-          '</label>';
+          var status = e.deactivated ? 'archived' : (e.testAccount ? 'test' : 'normal');
+          function sBtn(v, label) {
+            var on = status === v;
+            return '<button type="button" class="card-btn' + (on ? ' approve' : '') + '" data-action="set-status" data-id="' + escapeHtml(e.id) + '" data-status="' + v + '" style="flex:none;padding:3px 9px;font-size:0.76rem;' + (on ? '' : 'opacity:.7;') + '">' + label + '</button>';
+          }
+          return '<div style="padding:9px 14px;border-bottom:1px solid var(--line);">' +
+            '<div style="font-variant-numeric:tabular-nums;margin-bottom:5px;"><b>' + escapeHtml(formatUid(e) || '—') + '</b> ' + escapeHtml(e.nickname) + ' <span style="color:var(--muted);font-size:0.78rem;">' + kind + '</span></div>' +
+            '<div style="display:flex;gap:5px;flex-wrap:wrap;">' + sBtn('normal', '일반') + sBtn('test', '🧪 테스트') + sBtn('archived', '🗄 비활성화') + '</div>' +
+          '</div>';
         }).join('') || '<p class="sub" style="padding:12px 14px;margin:0;">등록된 계정이 없어요.</p>') +
       '</div>';
-    var testSection = adminFold('🧪 테스트 계정', null, testBody, false, 'test');
+    var testSection = adminFold('🧪 테스트·계정 상태', null, testBody, false, 'test');
     var secHtml = {
       usage: usageStatsHtml(state), pending: pendingSection,
       deaclist: deacListSection, dellog: delLogSection,
@@ -6530,6 +6537,38 @@
       appendLog('admin', '관리자', (makeTest ? '테스트 계정 지정 · ' : '테스트 계정 해제 · ') + entry.nickname);
     }).catch(function () {});
   }
+  /* 관리자: 계정 상태 직접 지정 (일반 / 테스트 / 비활성화) */
+  function handleSetAccountStatus(id, status) {
+    if (!isAdminUnlocked) return;
+    var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
+    if (!entry) return;
+    var cur = entry.deactivated ? 'archived' : (entry.testAccount ? 'test' : 'normal');
+    if (cur === status) return;
+    var labels = { normal: '일반', test: '테스트', archived: '비활성화(보관)' };
+    function apply() {
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var entries = (s.entries || []).map(function (e) {
+            if (e.id !== id) return e;
+            var c = JSON.parse(JSON.stringify(e));
+            delete c.testAccount; delete c.deactivated; delete c.deactivatedReason; delete c.deactivatedAt;
+            delete c.deactivateRequested; delete c.deactivateReqAt; delete c.deactivateReason;
+            if (status === 'test') c.testAccount = true;
+            else if (status === 'archived') { c.deactivated = true; c.deactivatedReason = entry.deactivatedReason || entry.deactivateReason || ''; c.deactivatedAt = new Date().toISOString(); }
+            return c;
+          });
+          tx.update(stateRef, { entries: entries });
+        });
+      }).then(function () {
+        appendLog('admin', '관리자', '계정 상태 → ' + labels[status] + ' · ' + entry.nickname);
+        return refreshNow();
+      }).catch(function (err) { modalNotice('오류', '변경 실패: ' + (err.message || err)); });
+    }
+    if (status === 'archived') {
+      modalConfirm('비활성화(보관)', escapeHtml(entry.nickname) + '님을 보관 상태로 전환할까요? 명단에서 숨겨져요. (연결 회원 안내는 보관 계정 목록에서 보낼 수 있어요)', '보관 전환', 'primary').then(function (ok) { if (ok) apply(); });
+    } else { apply(); }
+  }
   /* ---- user (recipient) decisions on incoming requests ---- */
   /* 받은 요청 승인 취소 → 다시 대기 상태로, 상대 접근 차단 */
   function handleRevokeApprove(id) {
@@ -7325,6 +7364,7 @@
       else if (action === 'deactivate') handleDeactivate(id);
       else if (action === 'approve-deactivate') handleApproveDeactivate(id);
       else if (action === 'cancel-deactivate') handleCancelDeactivateReq(id);
+      else if (action === 'set-status') handleSetAccountStatus(id, actionBtn.getAttribute('data-status'));
       else if (action === 'reactivate') handleReactivate(id);
       else if (action === 'notify-connected') handleNotifyConnected(id);
       else if (action === 'del-tombstone') handleDeleteTombstone(id);
