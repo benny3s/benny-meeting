@@ -551,7 +551,7 @@
   }
 
   /* ---------- Admin panel ---------- */
-  .admin-panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 28px; }
+  .admin-panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; }
   .admin-panel h2 { font-size: 1.2rem; margin-bottom: 6px; display: flex; align-items: center; }
   .admin-panel .sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 20px; }
   .request-item {
@@ -581,8 +581,10 @@
   .req-fold .req-foot .when { color: var(--muted); font-size: 0.8rem; }
   .req-fold .req-foot-btns { display: flex; gap: 8px; flex-wrap: wrap; }
   /* 요청 나이별 색 구분: 오늘=하늘색 / 5일 넘게 대기=회색 (테마 안전 tint) */
+  /* 요청 나이별 색: 오늘=하늘 / 1~2일=기본 / 3~4일=연회색 / 5일+=진회색 */
   .req-fold.req-today { background: rgba(26,115,232,0.12); border-color: rgba(26,115,232,0.5); }
-  .req-fold.req-stale { background: rgba(120,120,120,0.14); border-color: rgba(120,120,120,0.45); }
+  .req-fold.req-old { background: rgba(120,120,120,0.08); border-color: rgba(120,120,120,0.30); }
+  .req-fold.req-stale { background: rgba(90,90,90,0.22); border-color: rgba(90,90,90,0.55); }
   /* 사용량 현황 표 */
   .stats-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; margin: 6px 0 4px; }
   .stats-table th, .stats-table td { border: 1px solid var(--line); padding: 6px 8px; text-align: center; }
@@ -605,7 +607,7 @@
   .admin-fold { margin-bottom: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
   .admin-fold[open] { border-color: var(--gold); }
   .admin-fold > summary {
-    cursor: pointer; list-style: none; padding: 13px 15px;
+    cursor: pointer; list-style: none; padding: 12px 11px;
     display: flex; align-items: center; gap: 4px;
     font-weight: 700; font-size: 1.05rem; color: var(--ink);
   }
@@ -617,7 +619,7 @@
   }
   .admin-fold[open] > summary::after { transform: translateY(1px) rotate(180deg); }
   .admin-fold > summary .pending-count { margin-left: 6px; }
-  .admin-fold-body { padding: 0 15px 15px; }
+  .admin-fold-body { padding: 0 11px 14px; }
   .admin-fold-body > .sub:first-child { margin-top: 0; }
 
   /* Pending section in admin */
@@ -855,7 +857,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-204';
+  var APP_VERSION = '2026-09-10-205';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4434,12 +4436,12 @@
       } else {
         actionBtns = decideBtns;
       }
-      /* 오늘 요청=하늘색 · 5일 넘게 대기중=회색 */
+      /* 요청 나이(KST 하루 기준): 오늘=하늘 · 1~2일=기본 · 3~4일=연회색 · 5일+=진회색. 요청함·요청완료 공통 */
       var todayK = kstDay(new Date().toISOString());
       var subK = r.submittedAt ? kstDay(r.submittedAt) : '';
-      var ageDays = r.submittedAt ? Math.floor((Date.now() - new Date(r.submittedAt).getTime()) / 86400000) : 0;
-      var isDoneR = (st === 'approved' || st === 'rejected');
-      var foldCls = 'req-fold' + (subK === todayK ? ' req-today' : (!isDoneR && ageDays > 5 ? ' req-stale' : ''));
+      var dayDiff = subK ? Math.round((Date.parse(todayK) - Date.parse(subK)) / 86400000) : 0;
+      var ageCls = dayDiff <= 0 ? ' req-today' : (dayDiff <= 2 ? '' : (dayDiff <= 4 ? ' req-old' : ' req-stale'));
+      var foldCls = 'req-fold' + ageCls;
       return (
         '<details class="' + foldCls + '">' +
           summary +
@@ -4541,7 +4543,7 @@
       }).join('') || '<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:14px;">해당 유형의 회원이 없어요.</td></tr>';
     }
     var typeFilterBtns = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 10px;">' +
-      [['all', '전체'], ['general', '일반 회원'], ['mm', '주선자'], ['managed', '소개·본인']].map(function (f) {
+      [['all', '전체'], ['general', '일반 회원'], ['mm', '주선자']].map(function (f) {
         var on = adminSeenType === f[0];
         return '<button type="button" class="filter-btn" data-action="seen-type" data-type="' + f[0] + '" aria-pressed="' + on + '">' + f[1] + '</button>';
       }).join('') + '</div>';
