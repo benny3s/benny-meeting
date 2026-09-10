@@ -878,7 +878,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-215';
+  var APP_VERSION = '2026-09-10-216';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -5014,10 +5014,10 @@
         if (!canFold) {
           childChips = chipList.map(function (c) { return c.html; }).join('') + addBtn;
         } else if (!switcherExpanded) {
+          /* 접힘: 선택된 친구(없으면 첫 번째 친구) 한 명 + 오른쪽 "더보기" */
           var actives = chipList.filter(function (c) { return c.on; });
-          var shown = actives.length ? actives.map(function (c) { return c.html; }).join('')
-            : '<span class="ps-none">전환할 친구를 골라주세요</span>';
-          childChips = shown + '<button type="button" class="pf-switch-chip pf-switch-fold" data-action="ps-toggle">▾ 친구 ' + friendSubs.length + '명 보기</button>';
+          var head = actives.length ? actives[0].html : chipList[0].html;
+          childChips = head + '<button type="button" class="pf-switch-chip pf-switch-fold" data-action="ps-toggle">더보기 ▾</button>';
         } else {
           childChips = chipList.map(function (c) { return c.html; }).join('') + addBtn +
             '<button type="button" class="pf-switch-chip pf-switch-fold" data-action="ps-toggle">▴ 접기</button>';
@@ -7021,6 +7021,12 @@
   }
 
   /* ---- global event delegation ---- */
+  /* 전환창이 펼쳐진 상태에서 바깥을 터치하면 자동으로 접기 (클릭 처리 후 다음 틱에 리페인트) */
+  document.addEventListener('click', function (e) {
+    if (!switcherExpanded) return;
+    if (e.target.closest && e.target.closest('.profile-switch')) return; /* 전환창 내부 클릭은 제외 */
+    setTimeout(function () { if (switcherExpanded) { switcherExpanded = false; paint(currentState); } }, 0);
+  });
   document.body.addEventListener('click', function (e) {
     var roleBtn = e.target.closest('[data-role]');
     if (roleBtn) {
