@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-247';
+  var APP_VERSION = '2026-09-11-248';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3909,11 +3909,10 @@
                   '<button type="button" class="card-btn" id="pick-referrer" style="width:100%;box-sizing:border-box;margin-top:6px;">👥 회원 목록에서 선택</button>' +
                   '<span class="hint">어떻게 알게 됐는지 적어주세요 (소개자·경로 등). 회원 목록에서 골라 채울 수도 있어요. ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>') +
             '<div class="field"><label>사진 ' + (isEdit ? '<span class="opt">(최대 3장)</span>' : '<span class="req">필수</span> <span class="opt">1~3장</span>') + '</label>' +
-              '<span class="hint">모든 사진은 <b class="ex">흐리게(비공개)</b> 처리돼요 — 📷 사진 요청을 승인한 사람에게만 원본이 보여요.</span>' +
+              '<span class="hint"><b class="ex">얼굴이 보이는 사진</b>을 1장 이상 등록해 주세요. 사진은 흐리게 표시되고, 📷 사진 요청을 승인한 사람에게만 원본이 보여요.</span>' +
               '<div class="photo-upload-area" id="photo-upload-area"></div>' +
               '<div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap;">' +
                 '<label class="photo-pick">사진 추가<input type="file" id="f-photo" multiple></label>' +
-                '<span class="hint" style="margin:0">🔒 사진은 항상 흐리게 처리됩니다.</span>' +
               '</div></div>' +
             '<div class="section-label">추가 정보</div>' +
             ((proxy || ownerMMForm)
@@ -4576,10 +4575,8 @@
         );
       }
       var photoStatus = !e.photoCount
-        ? '<span style="color:var(--muted);">사진 없음</span>'
-        : (e.blurPhoto === false
-          ? '<b style="color:var(--accent);">🔓 사진 전체공개</b>'
-          : '<span style="color:var(--muted);">🔒 사진 비공개 (요청 승인 시 공개)</span>');
+        ? '<span style="color:var(--accent);">⚠️ 사진 없음</span>'
+        : '<span style="color:var(--muted);">📷 사진 ' + e.photoCount + '장</span>';
       return foldItem(
         '<span class="req-sum-who">' + escapeHtml(displayName) + '</span> <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🆕 신규</span>' + heldChip + '<span class="req-sum-when">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + '</span>',
         '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + ' · ' + escapeHtml(e.region || '') + '</div>' +
