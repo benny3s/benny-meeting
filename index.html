@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-250';
+  var APP_VERSION = '2026-09-11-251';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3947,13 +3947,13 @@
             exampleTip +
             '<div class="field"><label for="f-intro">자기소개 <span class="req">필수</span> <span class="opt">최소 20자</span></label>' +
               '<span class="hint">정보가 자세할수록 매칭 성공률이 올라가요!</span>' +
-              '<textarea id="f-intro" name="intro" rows="5" maxlength="500" placeholder="예: MBTI ENFP · 비흡연 · 취미는 요리·등산 ..."></textarea>' +
+              '<textarea id="f-intro" name="intro" rows="5" maxlength="300" placeholder="예: MBTI ENFP · 비흡연 · 취미는 요리·등산 ..."></textarea>' +
               '<div class="char-count" data-cc="f-intro">0 / 500</div></div>' +
             '<div class="field"><label for="f-idealtype">원하는 이성 조건 <span class="req">필수</span> <span class="opt">최소 10자</span></label>' +
-              '<textarea id="f-idealtype" name="idealType" rows="5" maxlength="300" placeholder="예: 키 170+ · 90~97년생 · 비흡연 · 자기관리 잘하는 분 ..."></textarea>' +
+              '<textarea id="f-idealtype" name="idealType" rows="5" maxlength="200" placeholder="예: 키 170+ · 90~97년생 · 비흡연 · 자기관리 잘하는 분 ..."></textarea>' +
               '<div class="char-count" data-cc="f-idealtype">0 / 300</div></div>' +
             '<div class="field"><label for="f-dealbreaker">피하고 싶은 조건 <span class="req">필수</span> <span class="opt">최소 10자</span></label>' +
-              '<textarea id="f-dealbreaker" name="dealbreaker" rows="3" maxlength="300" placeholder="예: 흡연자 · 종교 강요 · 연락 안 되는 사람 ..."></textarea>' +
+              '<textarea id="f-dealbreaker" name="dealbreaker" rows="3" maxlength="150" placeholder="예: 흡연자 · 종교 강요 · 연락 안 되는 사람 ..."></textarea>' +
               '<div class="char-count" data-cc="f-dealbreaker">0 / 300</div></div>' +
           '</div>' +
           '<hr class="perforation">' +
