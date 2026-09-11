@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-239';
+  var APP_VERSION = '2026-09-11-240';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -943,6 +943,7 @@
   var photoDataUrls = [];
   var formPhotosReady = true; /* 수정 시 원본 사진 로드 완료 여부 */
   var editingEntryId = null;
+  var _resubmitMsgPending = null; /* 보류 보완 재제출 시 팝업에서 받은 관리자 메시지(제출 완료까지 임시 보관) */
   var proxyRegisterMode = false; /* 친구 대신 소개(대리 등록) 폼 모드 */
   var actingAs = null;           /* 주선자가 지금 활동 중인 프로필 id (null = 내 프로필/주선자 홈). 새로고침 시 초기화 */
   var actingResolved = false;    /* 이번 세션에서 기본 활동 프로필(본인/첫 친구)을 이미 정했는지 */
@@ -2841,12 +2842,20 @@
     });
   }
   function msgLineHtml(m, canDelete) {
-    var who = m.from === 'admin' ? '관리자' : '회원';
-    var col = m.from === 'admin' ? 'var(--accent)' : 'var(--ink)';
+    var isAdmin = m.from === 'admin';
     var del = canDelete ? '<button type="button" data-action="msg-del" data-id="' + escapeHtml(m.id) + '" title="삭제" style="border:none;background:none;color:var(--muted);cursor:pointer;float:right;font-size:0.95rem;">&#10005;</button>' : '';
+    if (isAdmin) {
+      /* 관리자 메시지는 눈에 띄게 강조 박스로 */
+      return '<div style="border:1px solid var(--gold);background:var(--gold-soft);border-radius:12px;padding:10px 13px;margin:8px 0;">' +
+        del +
+        '<span style="font-weight:800;color:var(--accent);">👑 관리자</span> ' +
+        '<span style="color:var(--muted);font-size:0.72rem;">' + fmtDate(m.at) + '</span>' +
+        '<div style="margin-top:4px;white-space:pre-wrap;word-break:break-word;font-weight:600;color:var(--ink);">' + escapeHtml(m.text) + '</div>' +
+      '</div>';
+    }
     return '<div style="padding:7px 0;border-bottom:1px dashed var(--line);">' +
       del +
-      '<span style="font-weight:700;color:' + col + ';">' + who + '</span> ' +
+      '<span style="font-weight:700;color:var(--ink);">회원</span> ' +
       '<span style="color:var(--muted);font-size:0.72rem;">' + fmtDate(m.at) + '</span>' +
       '<div style="margin-top:2px;white-space:pre-wrap;word-break:break-word;">' + escapeHtml(m.text) + '</div>' +
     '</div>';
@@ -3769,12 +3778,6 @@
     var editNote = isEdit
       ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">프로필 수정 모드입니다. 실명·연락처·알게 된 경로·PIN은 비워두면 기존 값이 유지돼요. <button type="button" class="card-btn" id="cancel-edit" style="margin-left:8px;padding:4px 12px;">수정 취소</button></div>'
       : '';
-    /* 보류(보완 요청)된 신청을 수정·재제출하는 경우: 관리자에게 전할 메시지 필수 */
-    var editingHeldPending = isEdit && (state.pendingEntries || []).some(function (e) { return e.id === editingEntryId && e.heldReason; });
-    var resubmitField = editingHeldPending
-      ? '<div class="field" style="background:var(--gold-soft);border:1px solid var(--gold);border-radius:10px;padding:10px 12px;margin-bottom:12px;"><label for="f-resubmit-msg">✍️ 관리자에게 전할 메시지 <span class="req">필수</span></label>' +
-          '<textarea class="modal-input" id="f-resubmit-msg" name="resubmitMsg" rows="2" maxlength="200" placeholder="무엇을 보완했는지 알려주세요 (예: 사진을 밝은 것으로 교체했어요)"></textarea></div>'
-      : '';
     var proxyNote = proxy
       ? (formRole === 'matchmaker'
         ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">🤝 <b>친구 대신 소개</b> — 소개할 친구의 정보를 입력하세요. 친구는 앱에 가입하지 않아도 되고, 요청·승인은 주선자(' + escapeHtml((currentUser && currentUser.nickname) || '나') + ')님이 대신 처리해요.</div>'
@@ -3801,7 +3804,6 @@
         '</div>' +
         kakaoNote +
         '<form id="entry-form" novalidate>' +
-          resubmitField +
           '<div class="field-group">' +
             '<div class="row-2">' +
               '<div class="field"><label for="f-nickname">공개 이름 (닉네임) <span class="req">필수</span></label>' +
@@ -3898,7 +3900,7 @@
                 '<p class="consent-detail" style="margin:0;">&#128276; <b>알림을 켜면</b> 사진 요청·대화 신청과 승인 소식을 기기로 바로 받아볼 수 있어요. 신청 후 상단의 <b>&#128276; 알림</b> 버튼을 눌러주세요! (방법은 <b>&#128718; 가이드</b>)</p>' +
               '</div>')) +
           '<div class="submit-row">' +
-            '<button type="submit" class="submit-btn" id="submit-btn">' + (isEdit ? '수정 저장하기' : (proxy ? '🤝 친구 소개 제출하기' : '도장 찍고 제출하기')) + '</button>' +
+            '<button type="submit" class="submit-btn" id="submit-btn">' + (isEdit ? '💾 수정 저장·제출' : (proxy ? '🤝 친구 소개 제출하기' : '도장 찍고 제출하기')) + '</button>' +
             (isEdit ? '<button type="button" class="cancel-btn" id="cancel-edit-bottom">수정 취소</button>' : '') +
             '<span class="status-msg" id="status-msg"></span>' +
           '</div>' +
@@ -5453,6 +5455,18 @@
       modalNotice('안내', '관리자가 아직 PIN을 설정하지 않았어요. 관리자에게 문의해주세요.');
       return;
     }
+    /* 보류(보완 요청)된 신청을 수정·제출할 때 → 먼저 팝업으로 "관리자에게 전할 메시지"(필수)를 받고 재진입 */
+    var _wasHeld = !!(editingEntryId && (state.pendingEntries || []).some(function (e) { return e.id === editingEntryId && e.heldReason; }));
+    if (_wasHeld && _resubmitMsgPending == null) {
+      modalMessage('보완 내용 전달', '무엇을 보완했는지 관리자에게 전할 메시지를 남겨주세요. (필수)', '제출', 'primary', '예: 사진을 밝은 것으로 교체했어요 / 자기소개를 보완했어요', true).then(function (m) {
+        if (m === null || m === undefined) return; /* 취소 → 제출 중단 */
+        m = (m || '').trim();
+        if (!m) return modalNotice('안내', '관리자에게 전할 메시지를 입력해주세요.');
+        _resubmitMsgPending = m;
+        handleFormSubmit(); /* 메시지 확보 후 재진입 → 실제 제출 진행 */
+      });
+      return;
+    }
     var form = document.getElementById('entry-form');
     var nickname = (form.querySelector('[name="nickname"]').value || '').trim();
     var realName = (form.querySelector('[name="realName"]').value || '').trim();
@@ -5482,11 +5496,9 @@
     var origEntry = isEdit ? (state.entries || []).concat(state.pendingEntries || []).find(function (e) { return e.id === editingEntryId; }) : null;
     var origIsPending = !!(isEdit && origEntry && (state.pendingEntries || []).some(function (e) { return e.id === editingEntryId; }));
     var wasHeld = !!(origEntry && origEntry.heldReason);
-    var resubmitEl = form.querySelector('[name="resubmitMsg"]');
-    var resubmitMsg = resubmitEl ? (resubmitEl.value || '').trim() : '';
+    var resubmitMsg = _resubmitMsgPending || ''; /* 팝업에서 받은 보완 메시지 */
 
     var missing = [];
-    if (wasHeld && !resubmitMsg) missing.push('관리자에게 전할 메시지');
     if (!nickname) missing.push('닉네임');
     if (!gender) missing.push('성별');
     if (!birthYear) missing.push('생년');
@@ -5664,6 +5676,7 @@
         else appendLog('edit', nickname, '프로필 수정');
         notifyAdmin(origIsPending ? '신청서 재제출' : '프로필 수정', nickname + '님이 ' + (origIsPending ? '신청서를 수정해 다시 제출했어요 (승인 대기).' : '프로필을 수정했어요.'));
         if (wasHeld && resubmitMsg) { try { sendMessageTo(entryId, 'user', '[재신청] ' + resubmitMsg); } catch (e) {} } /* 보완 내용 → 관리자에게 메시지로 전달 */
+        _resubmitMsgPending = null; /* 사용 후 초기화 */
         modalNotice('완료', origIsPending ? '수정해서 다시 제출했어요. 관리자 승인을 기다려 주세요.' : '프로필이 수정되었어요.');
         activeTab = currentUser ? 'mine' : 'list'; /* 회원이 메시지함에서 수정 → 저장 후 메시지함 복귀 */
         paint(currentState);
