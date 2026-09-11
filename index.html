@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-241';
+  var APP_VERSION = '2026-09-11-242';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4280,7 +4280,7 @@
           pendNote +
           friendsNews +
           joinSection +
-          '<details class="mine-section"' + (mmThread.some(function (m) { return m.from === 'admin' && (m.at || '') > (myAuthEntry(state) && myAuthEntry(state).mineSeenAt || ''); }) ? ' open' : '') + '>' +
+          '<details class="mine-section"' + (mmThread.length ? ' open' : '') + '>' +
             '<summary style="cursor:pointer;font-weight:700;list-style:revert;">💬 관리자 메시지<span class="count">' + mmThread.length + '</span></summary>' +
             '<div style="margin-top:8px;">' +
               (mmThread.length ? mmThread.map(function (m) { return msgLineHtml(m, 'user'); }).join('') : '<p class="sub" style="margin:0;">아직 없어요.</p>') +
@@ -4328,7 +4328,7 @@
         ? '<div style="max-height:300px;overflow-y:auto;-webkit-overflow-scrolling:touch;">' + inner + '</div>'
         : inner;
       /* 기본 펼침: 응답 필요 항목이 있거나, 1~5개로 적을 때. 그 외(0개 또는 6개+ 조용함)는 접힘 */
-      var openByDefault = needCnt > 0 || (items.length > 0 && items.length <= 5);
+      var openByDefault = items.length > 0; /* 요청이 있으면 기본 펼침 */
       var needBadge = needCnt ? '<span class="count blink" style="margin-left:4px;">응답 ' + needCnt + '</span>' : '';
       return (
         '<details class="mine-section"' + (openByDefault ? ' open' : '') + '>' +
@@ -4343,7 +4343,7 @@
       ? thread.map(function (m) { return msgLineHtml(m, 'user'); }).join('')
       : '<p class="sub" style="margin:0;">아직 관리자와 주고받은 메시지가 없어요.</p>';
     var msgSection =
-      '<details class="mine-section"' + (hasUnreadAdmin ? ' open' : '') + '>' +
+      '<details class="mine-section"' + (thread.length ? ' open' : '') + '>' +
         '<summary style="cursor:pointer;font-weight:700;list-style:revert;">💬 관리자 메시지<span class="count' + (hasUnreadAdmin ? ' blink' : '') + '">' + thread.length + '</span></summary>' +
         '<div style="margin-top:8px;">' +
           msgBody +
@@ -5040,6 +5040,50 @@
     );
   }
 
+  /* 관리자: 주선자 목록 + 각 주선자가 소개한 친구 (명단 보기 옆 "주선자" 탭) */
+  function renderMatchmakers(state) {
+    if (!isAdminUnlocked) return '<div class="admin-panel"><h2>주선자</h2><p class="sub">관리자 전용이에요.</p></div>';
+    var entries = state.entries || [];
+    var mms = entries.filter(function (e) { return e.isMatchmaker; }).sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
+    var pendMM = (state.pendingEntries || []).filter(function (e) { return e.isMatchmaker; });
+    var pendNote = pendMM.length
+      ? '<p class="sub" style="margin:0 0 10px;color:var(--accent);">⏳ 승인 대기 주선자: ' + pendMM.map(function (e) { return escapeHtml(e.nickname); }).join(', ') + '</p>'
+      : '';
+    var cards = mms.map(function (mm) {
+      var friends = entries.filter(function (e) { return e.managedBy === mm.id; });
+      var own = friends.filter(function (f) { return f.ownerSelf; });
+      var subs = friends.filter(function (f) { return !f.ownerSelf; });
+      var friendRows = subs.length
+        ? subs.map(function (f) {
+            var stat = f.deactivated ? ' <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🗄 보관</span>' : (f.testAccount ? ' <span class="chip" style="background:#e8eaed;color:#5f6368;">🧪 테스트</span>' : '');
+            var pinOn = f.pinAuth && !subPinExpired(f);
+            return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px dashed var(--line);">' +
+              '<span><b style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(f) || '—') + '</b> ' +
+                '<b data-action="card-detail" data-id="' + escapeHtml(f.id) + '" style="cursor:pointer;text-decoration:underline dotted;">🤝 ' + escapeHtml(f.nickname) + '</b>' + stat + (pinOn ? ' <span title="임시 PIN 활성">🔑</span>' : '') + '</span>' +
+              '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(f.id) + '" style="flex:none;padding:4px 10px;">프로필</button>' +
+            '</div>';
+          }).join('')
+        : '<p class="sub" style="margin:0;">아직 소개한 친구가 없어요.</p>';
+      return '<details class="admin-fold" open>' +
+          '<summary>🤝 ' + escapeHtml(mm.nickname) + '<span class="pending-count">친구 ' + subs.length + '</span></summary>' +
+          '<div class="admin-fold-body">' +
+            '<div class="p-meta">고유번호 ' + escapeHtml(formatUid(mm) || '—') + (own.length ? ' · 🙋 본인 소개팅 프로필 있음' : ' · 본인 프로필 없음') + '</div>' +
+            '<div class="pending-actions" style="margin:6px 0 4px;">' +
+              '<button type="button" class="card-btn" data-action="detail" data-id="' + escapeHtml(mm.id) + '">👤 주선자 상세(실명·연락처)</button>' +
+              (own.length ? '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(own[0].id) + '">🙋 본인 프로필</button>' : '') +
+            '</div>' +
+            friendRows +
+          '</div>' +
+        '</details>';
+    }).join('');
+    return '<div class="admin-panel">' +
+        '<h2>🤝 주선자 관리<span class="pending-count">' + mms.length + '</span></h2>' +
+        '<p class="sub">주선자별로 소개한 친구를 확인해요. 이름을 누르면 프로필이 열려요. (계정 상태 변경은 관리자 탭에서)</p>' +
+        pendNote +
+        (mms.length ? cards : '<p class="sub">등록된 주선자가 없어요.</p>') +
+      '</div>';
+  }
+
   function renderApp(state) {
     var entries = (state.entries || []).filter(function (e) { return listMemberVisible(e); });
     var pendingCount = (state.pendingEntries || []).length;
@@ -5068,6 +5112,10 @@
     var tabs =
       '<button type="button" class="tab-btn" data-tab="form" role="tab" aria-selected="' + (activeTab === 'form') + '">신청서 작성</button>' +
       '<button type="button" class="tab-btn" data-tab="list" role="tab" aria-selected="' + (activeTab === 'list') + '">명단 보기<span class="count">' + entries.length + '</span></button>';
+    if (isAdminUnlocked) {
+      var mmCntTab = (state.entries || []).filter(function (e) { return e.isMatchmaker; }).length;
+      tabs += '<button type="button" class="tab-btn" data-tab="mmlist" role="tab" aria-selected="' + (activeTab === 'mmlist') + '">주선자<span class="count">' + mmCntTab + '</span></button>';
+    }
     if (currentUser) {
       var myEntry = findMyEntry(state);
       var unread = userUnread(state, myEntry);
@@ -5160,6 +5208,7 @@
     var canChangePin = !!(currentUser && authE && !authE.managedBy);
     var panel;
     if (activeTab === 'list') panel = renderList(state);
+    else if (activeTab === 'mmlist' && isAdminUnlocked) panel = renderMatchmakers(state);
     else if (activeTab === 'mine' && currentUser) panel = renderMine(state);
     else if (activeTab === 'admin' && isAdminUnlocked) panel = renderAdmin(state);
     else panel = renderForm(state);
@@ -6244,13 +6293,15 @@
     });
   }
 
-  /* 승인 시 함께 보낼 기본 안내 메시지 (관리자가 수정 가능) */
+  /* 승인 시 함께 보낼 기본 안내 메시지 (관리자가 수정 가능) — 일반 회원 / 주선자 구분 */
   var APPROVE_MSG_DEFAULT = '축하해요! 프로필이 승인됐어요 🎉 이제 명단에서 마음에 드는 분께 📷 사진 요청·💌 대화 신청을 보낼 수 있어요. 상단 🔔 알림을 켜두면 소식을 바로 받아볼 수 있어요. 좋은 인연 되시길 바라요!';
+  var APPROVE_MSG_MM = '주선자 등록이 승인됐어요 🤝 이제 "신청서 작성"에서 친구를 대신 소개하고, 친구에게 온 사진·대화 요청과 승인을 대신 관리할 수 있어요. 친구에게 1일 임시 PIN을 발급하거나 독립 계정으로 전환해 줄 수도 있어요. 잘 부탁드려요!';
   function handleApprove(id) {
     var pend = ((currentState && currentState.pendingEntries) || []).find(function (e) { return e.id === id; });
     if (!pend) return;
     var nick = pend.nickname || '';
-    modalMessage('신청 승인', nick + '님을 승인하고, 함께 보낼 안내 메시지를 남겨주세요. (비우면 메시지 없이 승인돼요)', '승인', 'approve', '', false, APPROVE_MSG_DEFAULT).then(function (welcome) {
+    var dft = pend.isMatchmaker ? APPROVE_MSG_MM : APPROVE_MSG_DEFAULT;
+    modalMessage('신청 승인', nick + '님(' + (pend.isMatchmaker ? '주선자' : '일반 회원') + ')을 승인하고, 함께 보낼 안내 메시지를 남겨주세요. (비우면 메시지 없이 승인돼요)', '승인', 'approve', '', false, dft).then(function (welcome) {
       if (welcome === null || welcome === undefined) return; /* 취소 */
       welcome = (welcome || '').trim();
       db.runTransaction(function (tx) {
