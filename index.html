@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-254';
+  var APP_VERSION = '2026-09-11-255';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -898,6 +898,7 @@
   var listView = 'card'; /* 'card' | 'compact' */
   var activeTab = 'form';
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
+  var _mmFoldOpen = {};  /* 주선자 탭: 카드별 접힘 상태 (리페인트 후 유지용, 기본 열림) */
   var adminEditMode = false; /* 관리자 섹션 편집(순서·기본 열림) 모드 */
   var DEFAULT_SEC_ORDER = ['usage', 'pending', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'done', 'cap', 'seen', 'log', 'test'];
   var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', done: '✅ 요청완료', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록', test: '🧪 테스트·계정 상태' };
@@ -5216,7 +5217,7 @@
         return '<button type="button" class="pf-switch-chip" data-action="card-detail" data-id="' + escapeHtml(f.id) + '">🤝 ' + escapeHtml(f.nickname) + statChip(f) + (pinOn ? ' 🔑' : '') + '</button>';
       }).join('');
       if (!own.length && !subs.length) childHtml = '<span class="ps-none">아직 소개한 친구가 없어요.</span>';
-      return '<details class="admin-fold" open>' +
+      return '<details class="admin-fold" data-mm="' + escapeHtml(mm.id) + '"' + (_mmFoldOpen[mm.id] === false ? '' : ' open') + '>' +
           '<summary>🤝 ' + escapeHtml(mm.nickname) + ' ' + recentActivityChip(mm) + '<span class="pending-count">친구 ' + subs.length + '</span></summary>' +
           '<div class="admin-fold-body">' +
             '<div class="ps-tree">' + ownerRow + '<div class="ps-children">' + childHtml + '</div></div>' +
@@ -5422,7 +5423,14 @@
     if (!ds.length) return;
     var anyClosed = false;
     for (var i = 0; i < ds.length; i++) { if (!ds[i].open) { anyClosed = true; break; } }
-    for (var j = 0; j < ds.length; j++) { ds[j].open = anyClosed; }
+    for (var j = 0; j < ds.length; j++) {
+      ds[j].open = anyClosed;
+      var sk = ds[j].getAttribute('data-sec');   /* 관리자 섹션: 상태 유지 */
+      if (sk) adminSecOpenMap()[sk] = anyClosed;
+      var mk = ds[j].getAttribute('data-mm');     /* 주선자 카드: 상태 유지 */
+      if (mk) _mmFoldOpen[mk] = anyClosed;
+    }
+    try { saveAdminSecOpen(); } catch (e) {}
   }
   /* ---- state & paint ---- */
   /* 명단 검색: 화면을 다시 그리지 않고 이미 렌더된 카드만 즉석에서 숨김/표시 (한글 조합 안전) */
@@ -7604,6 +7612,8 @@
       var secDetails = secSummary.parentElement;
       var sk = secDetails.getAttribute('data-sec');
       if (sk) { adminSecOpenMap()[sk] = !secDetails.open; saveAdminSecOpen(); }
+      var mk = secDetails.getAttribute('data-mm'); /* 주선자 카드 접힘 상태 유지 */
+      if (mk) { _mmFoldOpen[mk] = !secDetails.open; }
       /* return 하지 않음 → details 기본 토글 진행 */
     }
     var searchToggle = e.target.closest('[data-action="search-toggle"]');
