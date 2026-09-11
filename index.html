@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-245';
+  var APP_VERSION = '2026-09-11-246';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3222,14 +3222,14 @@
     return 'inactive';
   }
   var accessFilter = 'all'; /* 관리자 접속 필터: all|today|yesterday|fewdays|inactive */
+  var mmScopeFilter = 'all'; /* 주선자 탭 필터: all|self(본인 프로필 등록)|friend(친구 등록) */
   var ACCESS_OPTS = [['all', '전체'], ['today', '오늘 접속'], ['yesterday', '어제 접속'], ['fewdays', '며칠 전'], ['inactive', '1주일+ 미접속']];
   function accessFilterLabel() { var o = ACCESS_OPTS.filter(function (x) { return x[0] === accessFilter; })[0]; return o ? o[1] : '전체'; }
-  function accessFilterBtns() {
+  /* 접속 필터 버튼(인라인): 기본은 "🕘 접속", 선택 시 선택한 라벨만 표시 */
+  function accessFilterBtn() {
     if (!isAdminUnlocked) return '';
     var on = accessFilter !== 'all';
-    return '<div style="margin:2px 0 10px;">' +
-      '<button type="button" class="filter-btn" data-action="access-filter-open" aria-pressed="' + on + '"' + (on ? ' style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;"' : '') + '>🕘 접속: ' + escapeHtml(accessFilterLabel()) + ' ▾</button>' +
-      '</div>';
+    return '<button type="button" class="filter-btn" data-action="access-filter-open" aria-pressed="' + on + '"' + (on ? ' style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;"' : '') + '>🕘 ' + escapeHtml(on ? accessFilterLabel() : '접속') + ' ▾</button>';
   }
   function openAccessFilterPicker() {
     var ov = openModal('<h3>🕘 접속 필터</h3><p class="modal-msg">접속(활동) 기준으로 걸러서 볼 수 있어요.</p>' +
@@ -3474,9 +3474,9 @@
               : listFilter === 'female' ? ' style="background:#FADBE7;color:#B3477A;border-color:#F3C4D6;font-weight:700;"' : '') + '>' +
             (listFilter === 'male' ? '👨 남성' : (listFilter === 'female' ? '👩 여성' : '성별')) + '</button>' +
           permBtns +
+          accessFilterBtn() +
         '</div>' +
       '</div>' +
-      accessFilterBtns() +
       teaserCta +
       guide +
       body
@@ -5096,7 +5096,14 @@
     if (!isAdminUnlocked) return '<div class="admin-panel"><h2>주선자</h2><p class="sub">관리자 전용이에요.</p></div>';
     var entries = state.entries || [];
     var mmsAll = entries.filter(function (e) { return e.isMatchmaker; }).sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
-    var mms = mmsAll.filter(function (mm) { return accessFilter === 'all' || accessBucket(mm) === accessFilter; });
+    function mmHasOwn(mm) { return entries.some(function (e) { return e.managedBy === mm.id && e.ownerSelf; }); }
+    function mmHasFriend(mm) { return entries.some(function (e) { return e.managedBy === mm.id && !e.ownerSelf; }); }
+    var mms = mmsAll.filter(function (mm) {
+      if (accessFilter !== 'all' && accessBucket(mm) !== accessFilter) return false;
+      if (mmScopeFilter === 'self' && !mmHasOwn(mm)) return false;
+      if (mmScopeFilter === 'friend' && !mmHasFriend(mm)) return false;
+      return true;
+    });
     var pendMM = (state.pendingEntries || []).filter(function (e) { return e.isMatchmaker; });
     var pendNote = pendMM.length
       ? '<p class="sub" style="margin:0 0 10px;color:var(--accent);">⏳ 승인 대기 주선자: ' + pendMM.map(function (e) { return escapeHtml(e.nickname); }).join(', ') + '</p>'
@@ -5129,9 +5136,14 @@
         '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;"><button type="button" class="card-btn" data-action="fold-all" style="flex:none;">🔁 전체 펼치기·접기</button></div>' +
         '<h2>🤝 주선자 관리<span class="pending-count">' + mms.length + '</span></h2>' +
         '<p class="sub">주선자별 본인·친구 트리예요. 이름을 누르면 프로필이 열리고, 🧑‍💼 주선자를 누르면 실명·연락처 상세가 열려요. (계정 상태 변경은 관리자 탭에서)</p>' +
-        accessFilterBtns() +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 10px;align-items:center;">' +
+          '<button type="button" class="filter-btn" data-action="mm-scope" data-scope="all" aria-pressed="' + (mmScopeFilter === 'all') + '">전체</button>' +
+          '<button type="button" class="filter-btn" data-action="mm-scope" data-scope="self" aria-pressed="' + (mmScopeFilter === 'self') + '">🙋 본인 등록</button>' +
+          '<button type="button" class="filter-btn" data-action="mm-scope" data-scope="friend" aria-pressed="' + (mmScopeFilter === 'friend') + '">🤝 친구 등록</button>' +
+          accessFilterBtn() +
+        '</div>' +
         pendNote +
-        (mms.length ? cards : '<p class="sub">' + (accessFilter === 'all' ? '등록된 주선자가 없어요.' : '해당 접속 조건의 주선자가 없어요.') + '</p>') +
+        (mms.length ? cards : '<p class="sub">' + (accessFilter === 'all' && mmScopeFilter === 'all' ? '등록된 주선자가 없어요.' : '해당 조건의 주선자가 없어요.') + '</p>') +
       '</div>';
   }
 
@@ -7649,6 +7661,7 @@
       else if (action === 'msg-del') { if (isAdminUnlocked) deleteAdminMessage(id); }
       else if (action === 'mymsg-del') { deleteMyMessage(id); }
       else if (action === 'access-filter-open') { openAccessFilterPicker(); return; }
+      else if (action === 'mm-scope') { mmScopeFilter = actionBtn.getAttribute('data-scope') || 'all'; paint(currentState); return; }
       else if (action === 'fold-all') { toggleFoldAll(); return; }
       else if (action === 'broadcast') { handleBroadcast(); return; }
       else if (action === 'admin-msg-delall') {
