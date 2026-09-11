@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-261';
+  var APP_VERSION = '2026-09-11-262';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -5223,7 +5223,7 @@
       }).join('');
       if (!own.length && !subs.length) childHtml = '<span class="ps-none">아직 소개한 친구가 없어요.</span>';
       return '<details class="admin-fold" data-mm="' + escapeHtml(mm.id) + '"' + (_mmFoldOpen[mm.id] === false ? '' : ' open') + '>' +
-          '<summary>🤝 ' + escapeHtml(mm.nickname) + ' ' + recentActivityChip(mm) + '<span class="pending-count">친구 ' + subs.length + '</span></summary>' +
+          '<summary>🤝 ' + escapeHtml(mm.nickname) + ' ' + recentActivityChip(mm) + '<span class="pending-count">프로필 ' + friends.length + '</span></summary>' +
           '<div class="admin-fold-body">' +
             '<div class="ps-tree">' + ownerRow + '<div class="ps-children">' + childHtml + '</div></div>' +
           '</div>' +
