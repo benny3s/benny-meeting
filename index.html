@@ -611,9 +611,10 @@
   /* 요청 나이별 색 구분: 오늘=하늘색 / 5일 넘게 대기=회색 (테마 안전 tint) */
   /* 요청 나이별 색: 오늘=하늘 / 1~2일=기본 / 3~4일=연회색 / 5일+=진회색 */
   .req-fold.req-need { border-color: var(--accent); background: var(--gold-soft); }
-  .req-fold.req-today { background: rgba(26,115,232,0.12); border-color: rgba(26,115,232,0.5); }
-  .req-fold.req-old { background: rgba(120,120,120,0.08); border-color: rgba(120,120,120,0.30); }
-  .req-fold.req-stale { background: rgba(90,90,90,0.22); border-color: rgba(90,90,90,0.55); }
+  /* 요청 나이별 색상 (회원 접속칩과 다른 팔레트): 오늘=연두 · 1~2일=기본 · 3~4일=연한회색 · 5일+=진한회색 */
+  .req-fold.req-today { background: rgba(52,168,83,0.14); border-color: rgba(52,168,83,0.5); }
+  .req-fold.req-old { background: rgba(120,120,120,0.10); border-color: rgba(120,120,120,0.32); }
+  .req-fold.req-stale { background: rgba(80,80,80,0.24); border-color: rgba(80,80,80,0.58); }
   /* 사용량 현황 표 */
   .stats-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; margin: 6px 0 4px; }
   .stats-table th, .stats-table td { border: 1px solid var(--line); padding: 6px 8px; text-align: center; }
@@ -888,7 +889,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-276';
+  var APP_VERSION = '2026-09-12-277';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -906,8 +907,8 @@
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
   var _mmFoldOpen = {};  /* 주선자 탭: 카드별 접힘 상태 (리페인트 후 유지용, 기본 열림) */
   var adminEditMode = false; /* 관리자 섹션 편집(순서·기본 열림) 모드 */
-  var DEFAULT_SEC_ORDER = ['usage', 'pending', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'done', 'cap', 'seen', 'log', 'test'];
-  var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', done: '✅ 요청완료', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록', test: '🧪 테스트·계정 상태' };
+  var DEFAULT_SEC_ORDER = ['usage', 'pending', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'done', 'cap', 'seen', 'log'];
+  var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', done: '✅ 요청완료', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록' };
   /* 섹션 열림 상태는 "세션 메모리에만" 저장 → 리페인트(버튼 클릭 등) 동안엔 유지되지만,
      새로고침하면 초기화되어 모두 접힌 상태로 시작 (이전에 열었던 걸 기억하지 않음) */
   var _adminSecOpen = {}, _adminSecOrder = null;
@@ -956,6 +957,7 @@
   /* 관리자 표 정렬/필터 상태 */
   var adminSeenSort = { col: 'uid', dir: 'desc' };   /* 최근 접속·권한 표 (기본: 고유번호 내림차순) */
   var adminSeenType = 'all';                          /* 회원 명단 계정 유형 필터: all|general|mm|managed */
+  var seenSearch = '';                                /* 회원 명단 검색어(고유번호·닉네임) */
   var adminLogSort = { col: 'time', dir: 'desc' };   /* 활동 기록 표 (기본: 시간 내림차순) */
   var adminLogFilterActor = '';                       /* 활동 기록 고유번호/닉네임 필터 (검색창, 부분일치) */
   var adminLogFilterTime = '';                        /* 활동 기록 시간 필터 */
@@ -3246,8 +3248,8 @@
     else if (diff < 108 * H) label = '며칠 전';
     else if (diff < 168 * H) label = '이번 주';
     else return '';
-    var today = label === '오늘';
-    var style = today
+    var green = (label === '오늘' || label === '어제'); /* 오늘·어제까지 연두색, 나머지는 회색 */
+    var style = green
       ? 'background:#e6f4ea;color:#137333;border-color:#b7e0c4;'
       : 'background:#eef1f4;color:#5f6368;';
     return '<span class="chip" style="' + style + '">' + escapeHtml(label) + ' 접속</span>';
@@ -3265,28 +3267,33 @@
     if (diff < 168 * H) return 'fewdays';
     return 'inactive';
   }
-  var accessFilter = 'all'; /* 관리자 접속 필터: all|today|yesterday|fewdays|inactive */
+  var accessFilter = 'all';   /* 명단 보기 접속 필터: all|today|yesterday|fewdays|inactive */
+  var accessFilterMM = 'all'; /* 주선자 탭 접속 필터 (명단과 독립) */
   var mmScopeFilter = 'all'; /* 주선자 탭 필터: all|self(본인 프로필 등록)|friend(친구 등록) */
   var ACCESS_OPTS = [['all', '전체'], ['today', '오늘 접속'], ['yesterday', '어제 접속'], ['fewdays', '며칠 전'], ['inactive', '1주일+ 미접속']];
-  function accessFilterLabel() { var o = ACCESS_OPTS.filter(function (x) { return x[0] === accessFilter; })[0]; return o ? o[1] : '전체'; }
-  /* 접속 필터 버튼(인라인): 기본은 "🕘 접속", 선택 시 선택한 라벨만 표시 */
-  function accessFilterBtn() {
+  function accessFilterVal(scope) { return scope === 'mm' ? accessFilterMM : accessFilter; }
+  function setAccessFilterVal(scope, v) { if (scope === 'mm') accessFilterMM = v; else accessFilter = v; }
+  function accessFilterLabel(scope) { var cur = accessFilterVal(scope); var o = ACCESS_OPTS.filter(function (x) { return x[0] === cur; })[0]; return o ? o[1] : '전체'; }
+  /* 접속 필터 버튼(인라인): 기본은 "🕘 접속", 선택 시 선택한 라벨만 표시. scope로 명단/주선자 구분 */
+  function accessFilterBtn(scope) {
     if (!isAdminUnlocked) return '';
-    var on = accessFilter !== 'all';
-    return '<button type="button" class="filter-btn" data-action="access-filter-open" aria-pressed="' + on + '"' + (on ? ' style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;"' : '') + '>🕘 ' + escapeHtml(on ? accessFilterLabel() : '접속') + ' ▾</button>';
+    scope = scope || 'list';
+    var on = accessFilterVal(scope) !== 'all';
+    return '<button type="button" class="filter-btn" data-action="access-filter-open" data-scope="' + scope + '" aria-pressed="' + on + '"' + (on ? ' style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;"' : '') + '>🕘 ' + escapeHtml(on ? accessFilterLabel(scope) : '접속') + ' ▾</button>';
   }
-  function openAccessFilterPicker() {
+  function openAccessFilterPicker(scope) {
+    scope = scope || 'list';
     var ov = openModal('<h3>🕘 접속 필터</h3><p class="modal-msg">접속(활동) 기준으로 걸러서 볼 수 있어요.</p>' +
       '<div style="display:flex;flex-direction:column;gap:8px;">' +
         ACCESS_OPTS.map(function (o) {
-          return '<button type="button" class="card-btn' + (accessFilter === o[0] ? ' approve' : '') + '" data-afpick="' + o[0] + '" style="width:100%;">' + o[1] + '</button>';
+          return '<button type="button" class="card-btn' + (accessFilterVal(scope) === o[0] ? ' approve' : '') + '" data-afpick="' + o[0] + '" style="width:100%;">' + o[1] + '</button>';
         }).join('') +
       '</div><div class="modal-actions"><button type="button" class="card-btn" id="modal-cancel">닫기</button></div>');
     ov.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(ov); });
     ov.addEventListener('click', function (e) {
       if (e.target === ov) { closeModal(ov); return; }
       var b = e.target.closest('[data-afpick]');
-      if (b) { accessFilter = b.getAttribute('data-afpick'); closeModal(ov); paint(currentState); }
+      if (b) { setAccessFilterVal(scope, b.getAttribute('data-afpick')); closeModal(ov); paint(currentState); }
     });
   }
 
@@ -4952,32 +4959,46 @@
       var n = e.acqFilterCount || 0;
       return '<td style="text-align:center;' + (n ? 'font-weight:700;color:var(--accent);' : 'color:var(--muted);') + '">' + n + '</td>';
     }
+    /* 테스트 체크박스 (관리자가 직접 지정/해제). 순수 주선자 계정은 대상 아님 */
+    function testCell(e) {
+      if (isMatchmakerEntry(e)) return '<td style="text-align:center;color:var(--muted);">—</td>';
+      return '<td style="text-align:center;"><input type="checkbox" data-testtoggle="' + escapeHtml(e.id) + '"' + (e.testAccount ? ' checked' : '') + ' style="width:17px;height:17px;accent-color:var(--accent);cursor:pointer;"></td>';
+    }
     /* 계정 유형 분류: 일반(general) / 주선자(mm) / 주선자 관리 프로필(managed=대리·본인) */
     var acctType = function (e) { return e.isMatchmaker ? 'mm' : (e.managedBy ? 'managed' : 'general'); };
+    /* 정렬 비교자 ({e,photoN,contactN}) — 트리/평면 목록 공통 (필터 걸어도 정렬 동작) */
+    function seenCmp(a, b) {
+      var r = 0;
+      if (sc.col === 'uid') r = (a.e.serial || 0) - (b.e.serial || 0);
+      else if (sc.col === 'seen') r = (a.e.lastSeenAt || '').localeCompare(b.e.lastSeenAt || '');
+      else if (sc.col === 'photo') r = a.photoN - b.photoN;
+      else if (sc.col === 'contact') r = a.contactN - b.contactN;
+      if (r === 0) r = (a.e.serial || 0) - (b.e.serial || 0);
+      return r * sdir;
+    }
+    function seenRow(e, indent) {
+      var pc = permCounts(e);
+      var blob = ((formatUid(e) || '') + ' ' + (e.nickname || '')).toLowerCase();
+      return '<tr' + (indent ? ' style="background:rgba(0,0,0,0.02);"' : '') + ' data-seensearch="' + escapeHtml(blob) + '">' +
+        nameCell(e, indent) +
+        (indent ? '<td class="seen-date" style="color:var(--muted);">—</td>' : seenCell(e)) +
+        permCell(e, pc.photoN, 'photo') + permCell(e, pc.contactN, 'contact') + acqCell(e) + testCell(e) + '</tr>';
+    }
     var seenRows;
     if (adminSeenType === 'all') {
       seenRows = tops.map(function (d) {
         var e = d.e;
-        var row = '<tr>' + nameCell(e, false) + seenCell(e) +
-          permCell(e, d.photoN, 'photo') + permCell(e, d.contactN, 'contact') + acqCell(e) + '</tr>';
+        var row = seenRow(e, false);
         var kids = (childrenByMgr[e.id] || []).slice().sort(function (a, b) { return (b.ownerSelf ? 1 : 0) - (a.ownerSelf ? 1 : 0); });
-        row += kids.map(function (c) {
-          var pc = permCounts(c);
-          return '<tr style="background:rgba(0,0,0,0.02);">' + nameCell(c, true) +
-            '<td class="seen-date" style="color:var(--muted);">—</td>' +
-            permCell(c, pc.photoN, 'photo') + permCell(c, pc.contactN, 'contact') + acqCell(c) + '</tr>';
-        }).join('');
+        row += kids.map(function (c) { return seenRow(c, true); }).join('');
         return row;
       }).join('');
     } else {
-      /* 특정 유형만: 트리 없이 평면 목록으로 (고유번호 내림차순) */
+      /* 특정 유형만: 트리 없이 평면 목록 (adminSeenSort 정렬 적용 — 필터 걸어도 헤더 정렬 동작) */
       var flat = allEntries.filter(function (e) { return acctType(e) === adminSeenType; })
-        .sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
-      seenRows = flat.map(function (e) {
-        var pc = permCounts(e);
-        return '<tr>' + nameCell(e, false) + seenCell(e) +
-          permCell(e, pc.photoN, 'photo') + permCell(e, pc.contactN, 'contact') + acqCell(e) + '</tr>';
-      }).join('') || '<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:14px;">해당 유형의 회원이 없어요.</td></tr>';
+        .map(function (e) { var pc = permCounts(e); return { e: e, photoN: pc.photoN, contactN: pc.contactN }; });
+      flat.sort(seenCmp);
+      seenRows = flat.map(function (d) { return seenRow(d.e, false); }).join('') || '<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:14px;">해당 유형의 회원이 없어요.</td></tr>';
     }
     var typeFilterBtns = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 10px;">' +
       [['all', '전체'], ['general', '일반 회원'], ['mm', '주선자']].map(function (f) {
@@ -4987,12 +5008,14 @@
     function seenTh(col, label) {
       return '<th data-action="seen-sort" data-col="' + col + '" style="cursor:pointer;user-select:none;white-space:nowrap;">' + label + sortArrow(adminSeenSort, col) + '</th>';
     }
+    var seenSearchBox = '<input type="text" id="seen-search" value="' + escapeHtml(seenSearch) + '" placeholder="🔍 고유번호 · 닉네임 검색" style="width:100%;box-sizing:border-box;margin:0 0 8px;padding:8px 12px;border:1px solid var(--line);border-radius:999px;font-size:0.92rem;font-family:inherit;">';
     var seenSection = adminFold('👥 회원 명단', tops.length,
-      '<p class="sub">로그인 계정이 상위, 그 아래 <span class="chip" style="background:#fdeef0;color:var(--accent);">🙋 본인</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 친구</span> 가 붙어요. <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🤝 주선자</span> <span class="chip" style="background:#f1f1f1;color:#777;">일반</span>. 헤더로 정렬 · 닉네임 클릭 = 프로필 · <b>접속 시간 클릭 = 그 사람 활동 기록</b> · 📷/📱 = <b>이 사람이 볼 수 있는</b> 사진·번호 수(클릭해서 관리).</p>' +
+      '<p class="sub">닉네임(고유번호) 클릭 = 프로필 · <b>접속 시간 클릭 = 그 사람 활동 기록</b> · 📷/💬 = <b>이 사람이 볼 수 있는</b> 사진·채팅 수(클릭해서 관리) · 맨 오른쪽 <b>테스트</b> 체크로 테스트 계정 지정.</p>' +
       typeFilterBtns +
+      seenSearchBox +
       (tops.length
         ? '<div class="admin-table-wrap"><table class="seen-table"><thead><tr>' +
-            seenTh('uid', '고유번호 · 닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 사진') + seenTh('contact', '💬 채팅') + '<th style="white-space:nowrap;">🙈 필터</th>' +
+            seenTh('uid', '닉네임') + seenTh('seen', '접속') + seenTh('photo', '📷 사진') + seenTh('contact', '💬 채팅') + '<th style="white-space:nowrap;">🙈 필터</th>' + '<th style="white-space:nowrap;">🧪 테스트</th>' +
           '</tr></thead><tbody>' + seenRows + '</tbody></table></div>'
         : '<p class="sub">등록된 사람이 없어요.</p>'), false, 'seen');
 
@@ -5115,31 +5138,11 @@
     var activeReqSection = adminFold('📬 요청함', activeReqs.length,
       '<p class="sub">아직 처리하지 않은 사진 요청·대화 신청이에요.</p>' +
       (activeReqs.length ? activeItems : '<p class="sub">처리할 요청이 없어요.</p>'), false, 'active');
-    var testBody =
-      '<p class="sub" style="margin:0 0 6px;font-weight:700;color:var(--ink);">계정별 상태</p>' +
-      '<p class="sub" style="margin:0 0 4px;"><b>🧪 테스트</b> — 명단에서 일반 유저에겐 안 보이고, 테스트 계정끼리만 보여요. 로그인 가능.</p>' +
-      '<p class="sub" style="margin:0 0 8px;"><b>🗄 비활성화</b> — 명단에서 숨겨지고 <b>로그인도 안 돼요</b>. 해제하면 일반 계정으로 돌아와요.</p>' +
-      '<p class="sub" style="margin:0 0 8px;">계정마다 <b>일반 / 🧪 테스트 / 🗄 비활성화</b> 상태를 직접 지정할 수 있어요.</p>' +
-      '<div class="test-acct-list" style="border:1px solid var(--line);border-radius:12px;max-height:360px;overflow-y:auto;">' +
-        (allEntries.filter(function (e) { return !e.isMatchmaker; }).sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); }).map(function (e) {
-          var kind = e.ownerSelf ? '🙋 주선자 본인' : (e.managedBy ? '🤝 주선자 친구' : '일반 회원');
-          var status = e.deactivated ? 'archived' : (e.testAccount ? 'test' : 'normal');
-          function sBtn(v, label) {
-            var on = status === v;
-            return '<button type="button" class="card-btn' + (on ? ' approve' : '') + '" data-action="set-status" data-id="' + escapeHtml(e.id) + '" data-status="' + v + '" style="flex:none;padding:3px 9px;font-size:0.76rem;' + (on ? '' : 'opacity:.7;') + '">' + label + '</button>';
-          }
-          return '<div style="padding:9px 14px;border-bottom:1px solid var(--line);">' +
-            '<div style="font-variant-numeric:tabular-nums;margin-bottom:5px;"><b>' + escapeHtml(formatUid(e) || '—') + '</b> ' + escapeHtml(e.nickname) + ' <span style="color:var(--muted);font-size:0.78rem;">' + kind + '</span></div>' +
-            '<div style="display:flex;gap:5px;flex-wrap:wrap;">' + sBtn('normal', '일반') + sBtn('test', '🧪 테스트') + sBtn('archived', '🗄 비활성화') + '</div>' +
-          '</div>';
-        }).join('') || '<p class="sub" style="padding:12px 14px;margin:0;">등록된 계정이 없어요.</p>') +
-      '</div>';
-    var testSection = adminFold('🧪 테스트·계정 상태', null, testBody, false, 'test');
     var secHtml = {
       usage: usageStatsHtml(state), pending: pendingSection, editrev: editRevSection,
       deaclist: deacListSection, dellog: delLogSection,
       active: activeReqSection, adminmsg: adminMsgSection, done: doneSection,
-      cap: capSection, seen: seenSection, log: logSection, test: testSection
+      cap: capSection, seen: seenSection, log: logSection
     };
     var order = adminSecOrder();
     var headerBtns =
@@ -5241,7 +5244,7 @@
     function mmHasOwn(mm) { return entries.some(function (e) { return e.managedBy === mm.id && e.ownerSelf; }); }
     function mmHasFriend(mm) { return entries.some(function (e) { return e.managedBy === mm.id && !e.ownerSelf; }); }
     var mms = mmsAll.filter(function (mm) {
-      if (accessFilter !== 'all' && accessBucket(mm) !== accessFilter) return false;
+      if (accessFilterMM !== 'all' && accessBucket(mm) !== accessFilterMM) return false;
       if (mmScopeFilter === 'self' && !mmHasOwn(mm)) return false;
       if (mmScopeFilter === 'friend' && !mmHasFriend(mm)) return false;
       return true;
@@ -5282,7 +5285,7 @@
           '<button type="button" class="filter-btn" data-action="mm-scope" data-scope="all" aria-pressed="' + (mmScopeFilter === 'all') + '">전체</button>' +
           '<button type="button" class="filter-btn" data-action="mm-scope" data-scope="self" aria-pressed="' + (mmScopeFilter === 'self') + '">🙋 본인</button>' +
           '<button type="button" class="filter-btn" data-action="mm-scope" data-scope="friend" aria-pressed="' + (mmScopeFilter === 'friend') + '">🤝 친구</button>' +
-          accessFilterBtn() +
+          accessFilterBtn('mm') +
         '</div>' +
         pendNote +
         (mms.length ? cards : '<p class="sub">' + (accessFilter === 'all' && mmScopeFilter === 'all' ? '등록된 주선자가 없어요.' : '해당 조건의 주선자가 없어요.') + '</p>') +
@@ -5498,10 +5501,21 @@
     var cnt = document.getElementById('search-count');
     if (cnt) cnt.textContent = q ? (nodes.length ? (shown + '명 검색됨' + (shown === 0 ? ' — 일치하는 회원이 없어요.' : '')) : '') : '';
   }
+  /* 회원 명단 검색: 화면 재렌더 없이 행만 즉석 숨김/표시 (한글 조합·포커스 유지) */
+  function applySeenSearch() {
+    var q = (seenSearch || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    var tokens = q ? q.split(' ') : [];
+    var rows = document.querySelectorAll('.seen-table tr[data-seensearch]');
+    for (var i = 0; i < rows.length; i++) {
+      var blob = rows[i].getAttribute('data-seensearch') || '';
+      rows[i].style.display = tokens.every(function (t) { return blob.indexOf(t) >= 0; }) ? '' : 'none';
+    }
+  }
   function paint(state) {
     currentState = state;
     document.getElementById('app').innerHTML = renderApp(state);
     try { applyListSearch(); } catch (e) {} /* 검색어가 있으면 재적용 */
+    try { applySeenSearch(); } catch (e) {} /* 회원 명단 검색 재적용 */
     try {
       var items = document.querySelectorAll('.admin-msg-item');
       for (var i = 0; i < items.length; i++) {
@@ -6635,6 +6649,7 @@
           var entry = state.pendingEntries.splice(idx, 1)[0];
           if (!entry.serial) entry.serial = nextSerial(state);
           delete entry.rejectedReason; delete entry.rejectedAt; delete entry.heldReason; delete entry.heldAt; /* 승인 시 반려/보류 흔적 제거 */
+          if (!entry.lastSeenAt) entry.lastSeenAt = new Date().toISOString(); /* 승인 시점을 최초 접속 기록으로 (이후 실제 접속 시 갱신) */
           var newEntries = (state.entries || []).concat([entry]);
           tx.update(stateRef, { pendingEntries: state.pendingEntries, entries: newEntries });
         });
@@ -7916,7 +7931,7 @@
       else if (action === 'guest-phone') handleGuestPhone(id);
       else if (action === 'msg-del') { if (isAdminUnlocked) deleteAdminMessage(id); }
       else if (action === 'mymsg-del') { deleteMyMessage(id); }
-      else if (action === 'access-filter-open') { openAccessFilterPicker(); return; }
+      else if (action === 'access-filter-open') { openAccessFilterPicker(actionBtn.getAttribute('data-scope') || 'list'); return; }
       else if (action === 'mm-scope') { mmScopeFilter = actionBtn.getAttribute('data-scope') || 'all'; paint(currentState); return; }
       else if (action === 'fold-all') { toggleFoldAll(); return; }
       else if (action === 'broadcast') { handleBroadcast(); return; }
@@ -7930,6 +7945,7 @@
   function stripNonDigits(el) { var v = el.value.replace(/[^0-9]/g, ''); if (el.value !== v) el.value = v; }
   document.body.addEventListener('input', function (e) {
     if (e.target.id === 'list-search') { listSearch = e.target.value; applyListSearch(); return; } /* paint 없이 즉시 필터 → 포커스·한글조합 유지 */
+    if (e.target.id === 'seen-search') { seenSearch = e.target.value; applySeenSearch(); return; } /* 회원 명단 검색: paint 없이 즉시 */
     if (e.target.hasAttribute && e.target.hasAttribute('data-numeric')) stripNonDigits(e.target);
     if (e.target.closest && e.target.closest('#entry-form')) saveDraft();
     if (e.target.id === 'f-intro' || e.target.id === 'f-idealtype' || e.target.id === 'f-dealbreaker') updateCharCounts();
