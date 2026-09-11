@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-249';
+  var APP_VERSION = '2026-09-11-250';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -892,6 +892,7 @@
 
   var ROOT_NAME = '베니';
   var listFilter = 'all';
+  var ageSort = 'none'; /* 명단 나이 정렬: none | asc(오름차순·어린 순부터) | desc(내림차순·나이 많은 순부터) */
   var listView = 'card'; /* 'card' | 'compact' */
   var activeTab = 'form';
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
@@ -3428,8 +3429,20 @@
       if (listFilter === 'contact') return me && e.id !== me.id && canViewContactOf(state, me.id, e.id);
       return true;
     });
-    /* 고유번호(serial) 내림차순 — 최근 가입(높은 번호)이 위로 */
-    var ordered = filtered.slice().sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
+    var ordered;
+    if (ageSort === 'asc' || ageSort === 'desc') {
+      /* 나이 정렬: asc=어린 순(출생연도 큰 순), desc=나이 많은 순(출생연도 작은 순). 출생연도 없는 사람은 항상 맨 아래 */
+      ordered = filtered.slice().sort(function (a, b) {
+        var ay = a.birthYear || 0, by = b.birthYear || 0;
+        if (!ay && !by) return (b.serial || 0) - (a.serial || 0);
+        if (!ay) return 1;
+        if (!by) return -1;
+        return ageSort === 'asc' ? (by - ay) : (ay - by);
+      });
+    } else {
+      /* 고유번호(serial) 내림차순 — 최근 가입(높은 번호)이 위로 */
+      ordered = filtered.slice().sort(function (a, b) { return (b.serial || 0) - (a.serial || 0); });
+    }
     if (!ordered.length && !isPermFilter && listFilter === 'all') {
       return '<div class="empty-state"><div class="big">' + ICON_HEART + '</div><p>아직 등록된 사람이 없어요.<br>첫 번째로 신청해 보세요!</p></div>';
     }
@@ -3462,9 +3475,13 @@
       (listView === 'compact' ? '🖼 사진보기' : '☰ 간단히') + '</button>';
     var acqBtn = me ? '<button type="button" class="view-toggle" id="acq-open" style="margin-left:6px;">🙈 지인 필터' + (acqCounts.filter ? ' <span style="opacity:0.85;">' + acqCounts.filter + '</span>' : '') + '</button>' : '';
     var permBtns = me
-      ? '<button type="button" class="filter-btn" data-filter="photo" aria-pressed="' + (listFilter === 'photo') + '">📷 사진</button>' +
-        '<button type="button" class="filter-btn" data-filter="contact" aria-pressed="' + (listFilter === 'contact') + '">💬 채팅</button>'
+      ? '<button type="button" class="filter-btn" data-filter="photo" aria-pressed="' + (listFilter === 'photo') + '" title="내가 사진을 볼 수 있는 사람">📷</button>' +
+        '<button type="button" class="filter-btn" data-filter="contact" aria-pressed="' + (listFilter === 'contact') + '" title="채팅 연결된 사람">💬</button>'
       : '';
+    var ageOn = (ageSort === 'asc' || ageSort === 'desc');
+    var ageBtn = '<button type="button" class="filter-btn" data-filter="age" aria-pressed="' + ageOn + '" title="눌러서 나이 오름차순 → 내림차순 → 해제"' +
+      (ageOn ? ' style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;"' : '') + '>' +
+      '나이' + (ageSort === 'asc' ? ' ▲' : (ageSort === 'desc' ? ' ▼' : '')) + '</button>';
     return (
       '<div class="list-toolbar">' +
         '<div class="summary"><strong>' + entries.length + '명</strong> <span style="font-size:0.82em;">남' + maleCount + '·여' + femaleCount + '</span>' + viewToggle + acqBtn + '</div>' +
@@ -3474,6 +3491,7 @@
             (listFilter === 'male' ? ' style="background:#D6EAF8;color:#2E6E8E;border-color:#AED6F1;font-weight:700;"'
               : listFilter === 'female' ? ' style="background:#FADBE7;color:#B3477A;border-color:#F3C4D6;font-weight:700;"' : '') + '>' +
             (listFilter === 'male' ? '👨 남성' : (listFilter === 'female' ? '👩 여성' : '성별')) + '</button>' +
+          ageBtn +
           permBtns +
           accessFilterBtn() +
         '</div>' +
@@ -7499,6 +7517,8 @@
       var f = filterBtn.getAttribute('data-filter');
       if (f === 'gender') { /* 성별 버튼: 남 ↔ 여 반복 (전체는 별도 '전체' 버튼으로) */
         listFilter = (listFilter === 'male') ? 'female' : 'male';
+      } else if (f === 'age') { /* 나이 버튼: 오름차순 → 내림차순 → 해제 반복 */
+        ageSort = (ageSort === 'none') ? 'asc' : (ageSort === 'asc' ? 'desc' : 'none');
       } else {
         listFilter = f;
       }
