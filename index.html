@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-236';
+  var APP_VERSION = '2026-09-11-237';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2396,6 +2396,7 @@
     /* 후보 풀: 보관 계정은 로그인 불가로 제외 · 대리 프로필은 유효한 임시 PIN 있을 때만 포함 */
     var pool = sortedEntries.concat(state.pendingEntries || []).filter(function (e) {
       if (e.deactivated) return false; /* 🗄 보관 계정은 로그인 불가 */
+      if (e.rejectedAt && (Date.now() - new Date(e.rejectedAt).getTime()) > 24 * 3600000) return false; /* 반려 후 하루 지나면 로그인 불가 */
       if (e.managedBy && (!e.pinAuth || subPinExpired(e))) return false;
       return true;
     }).map(function (e) {
@@ -4181,20 +4182,33 @@
     var me = findMyEntry(state);
     var myPending = findMyPending(state);
     if (!me && myPending) {
-      var waitBox = myPending.heldReason
-        ? '<div class="mine-status-box">' +
+      var editBtn = '<button type="button" class="submit-btn" data-action="edit" data-id="' + escapeHtml(myPending.id) + '" style="width:100%;box-sizing:border-box;margin-top:12px;">✏️ 신청서 수정해서 다시 제출</button>';
+      var waitBox;
+      if (myPending.rejectedReason) {
+        waitBox = '<div class="mine-status-box">' +
+            '<div class="mine-status-icon">📌</div>' +
+            '<h3>신청 반려 안내</h3>' +
+            '<div class="mine-note reject" style="text-align:left;white-space:pre-wrap;margin:8px 0;">' + escapeHtml(myPending.rejectedReason) + '</div>' +
+            '<p class="sub">관리자가 신청을 <b>반려</b>했어요. 위 사유를 참고해 <b>프로필을 수정한 뒤 다시 제출</b>해 주세요. (하루 안에 수정하지 않으면 신청이 자동 정리돼요)</p>' +
+            editBtn +
+          '</div>';
+      } else if (myPending.heldReason) {
+        waitBox = '<div class="mine-status-box">' +
             '<div class="mine-status-icon">📌</div>' +
             '<h3>신청 보류 안내</h3>' +
             '<div class="mine-note" style="text-align:left;white-space:pre-wrap;margin:8px 0;">' + escapeHtml(myPending.heldReason) + '</div>' +
-            '<p class="sub">관리자가 신청을 <b>보류</b>했어요. 위 내용을 확인해 주세요. (아직 명단에는 올라가지 않았어요)</p>' +
-            '<p class="sub" style="margin-top:8px;">신청일: ' + fmtDate(myPending.submittedAt) + '</p>' +
-          '</div>'
-        : '<div class="mine-status-box">' +
+            '<p class="sub">관리자가 신청을 <b>보류</b>했어요. 위 내용을 확인하고 필요하면 수정해 주세요. (아직 명단에는 올라가지 않았어요)</p>' +
+            editBtn +
+          '</div>';
+      } else {
+        waitBox = '<div class="mine-status-box">' +
             '<div class="mine-status-icon">⏳</div>' +
             '<h3>승인 대기 중이에요</h3>' +
             '<p class="sub">관리자(베니)가 신청서를 확인하고 있어요. 승인되면 명단에 등록되고, 사진 요청·대화 신청을 주고받을 수 있어요.</p>' +
             '<p class="sub" style="margin-top:8px;">신청일: ' + fmtDate(myPending.submittedAt) + '</p>' +
+            editBtn +
           '</div>';
+      }
       return '<div class="admin-panel"><h2>메시지함</h2>' + waitBox + '</div>';
     }
     if (!me) {
@@ -4480,8 +4494,10 @@
       var displayName = e.nickname || e.name || '(이름 없음)';
       var ageStr = e.birthYear ? (String(e.birthYear).slice(2) + '년생') : '-';
       var heldNote = e.heldReason ? '<div class="p-meta" style="color:var(--accent);margin-top:3px;white-space:pre-wrap;">📌 보류 중: ' + escapeHtml(e.heldReason) + '</div>' : '';
+      if (e.rejectedReason) heldNote += '<div class="p-meta" style="color:#c5221f;margin-top:3px;white-space:pre-wrap;">❌ 반려: ' + escapeHtml(e.rejectedReason) + (e.rejectedAt ? ' <span style="color:var(--muted);">(' + fmtDate(e.rejectedAt) + ')</span>' : '') + '</div>';
       var holdBtn = '<button type="button" class="card-btn" data-action="hold-pending" data-id="' + escapeHtml(e.id) + '">' + (e.heldReason ? '보류 사유 수정' : '보류') + '</button>';
-      var heldChip = e.heldReason ? ' <span class="chip" style="background:var(--accent-soft);color:var(--accent);">📌 보류</span>' : '';
+      var heldChip = (e.heldReason ? ' <span class="chip" style="background:var(--accent-soft);color:var(--accent);">📌 보류</span>' : '') +
+        (e.rejectedReason ? ' <span class="chip" style="background:#fce8e6;color:#c5221f;">❌ 반려</span>' : '');
       if (e.isMatchmaker) {
         return foldItem(
           '<span class="req-sum-who">🤝 ' + escapeHtml(displayName) + '</span> <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🆕 신규</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">주선자</span>' + heldChip,
@@ -5184,6 +5200,7 @@
     try { applyLogFilter(); } catch (e) {} /* 활동기록 필터 재적용 */
     try { adjustSwitcherClip(); } catch (e) {} /* 전환창 친구 2줄 초과 시 접기 */
     try { updateCharCounts(); } catch (e) {} /* 자기소개 등 글자수 카운터 */
+    try { purgeExpiredRejections(state); } catch (e) {} /* 반려 후 하루 지난 신청 정리(관리자) */
     maybeRestoreDraft();
   }
 
@@ -5461,7 +5478,8 @@
     /* 주선자(Lv2)가 [본인] 탭(formRole='self')에서 자기 소개팅 프로필을 만드는 경우 → 주선자 아래 관리 프로필로 생성 */
     var ownerByMM = !proxy && !isEdit && !!(currentUser && isMatchmakerEntry(myAuthEntry(state)));
     var managedCreate = proxy || ownerByMM; /* 주선자 아래 관리 프로필 생성(managedBy 설정, 로그인 전환 안 함) */
-    var origEntry = isEdit ? (state.entries || []).find(function (e) { return e.id === editingEntryId; }) : null;
+    var origEntry = isEdit ? (state.entries || []).concat(state.pendingEntries || []).find(function (e) { return e.id === editingEntryId; }) : null;
+    var origIsPending = !!(isEdit && origEntry && (state.pendingEntries || []).some(function (e) { return e.id === editingEntryId; }));
 
     var missing = [];
     if (!nickname) missing.push('닉네임');
@@ -5563,33 +5581,37 @@
           return db.runTransaction(function (tx) {
             return tx.get(stateRef).then(function (doc) {
               var s = doc.data();
-              var newEntries = (s.entries || []).map(function (e) {
-                if (e.id !== editingEntryId) return e;
-                /* 최신 저장본을 복사한 뒤 바뀐 항목만 덮어씀 → 다른(최신) 버전이 추가한 필드도 보존 */
-                var u = JSON.parse(JSON.stringify(e));
-                u.nickname = nickname;
-                u.gender = gender;
-                u.birthYear = birthYear;
-                u.region = region;
-                u.workplace = workplace;
-                u.photoThumb = thumb;
-                u.photoCount = finalPhotos.length;
-                u.blurPhoto = blurPhoto && finalPhotos.length > 0;
-                u.height = height;
-                u.intro = intro;
-                u.idealType = idealType;
-                u.dealbreaker = dealbreaker;
-                u.degreeChoice = degreeChoice;
-                /* 비운 항목은 기존 값 유지, 새로 입력한 항목만 덮어씀 */
-                if (results[0]) u.realNameEnc = results[0];
-                if (results[1]) u.contactEnc = results[1];
-                if (results[2]) u.referrerEnc = results[2];
-                if (results[4]) u.contactSelfEnc = results[4];
-                /* PIN: 새로 입력했으면 신형(pinAuth)으로 교체, 아니면 기존 형식 유지 */
-                if (results[3]) { u.pinAuth = results[3]; delete u.pinHash; }
-                return u;
-              });
-              tx.update(stateRef, { entries: newEntries });
+              var applyEdit = function (list, isPending) {
+                return (list || []).map(function (e) {
+                  if (e.id !== editingEntryId) return e;
+                  /* 최신 저장본을 복사한 뒤 바뀐 항목만 덮어씀 → 다른(최신) 버전이 추가한 필드도 보존 */
+                  var u = JSON.parse(JSON.stringify(e));
+                  u.nickname = nickname;
+                  u.gender = gender;
+                  u.birthYear = birthYear;
+                  u.region = region;
+                  u.workplace = workplace;
+                  u.photoThumb = thumb;
+                  u.photoCount = finalPhotos.length;
+                  u.blurPhoto = blurPhoto && finalPhotos.length > 0;
+                  u.height = height;
+                  u.intro = intro;
+                  u.idealType = idealType;
+                  u.dealbreaker = dealbreaker;
+                  u.degreeChoice = degreeChoice;
+                  /* 비운 항목은 기존 값 유지, 새로 입력한 항목만 덮어씀 */
+                  if (results[0]) u.realNameEnc = results[0];
+                  if (results[1]) u.contactEnc = results[1];
+                  if (results[2]) u.referrerEnc = results[2];
+                  if (results[4]) u.contactSelfEnc = results[4];
+                  /* PIN: 새로 입력했으면 신형(pinAuth)으로 교체, 아니면 기존 형식 유지 */
+                  if (results[3]) { u.pinAuth = results[3]; delete u.pinHash; }
+                  /* 승인 대기(보류/반려) 상태에서 수정·재제출 → 반려/보류 해제하고 다시 대기열로 */
+                  if (isPending) { delete u.rejectedReason; delete u.rejectedAt; delete u.heldReason; delete u.heldAt; u.submittedAt = new Date().toISOString(); }
+                  return u;
+                });
+              };
+              tx.update(stateRef, { entries: applyEdit(s.entries, false), pendingEntries: applyEdit(s.pendingEntries, true) });
             });
           });
         } else {
@@ -5635,8 +5657,8 @@
         editingEntryId = null;
         if (origEntry && origEntry.nickname !== nickname) appendLog('edit', nickname, '닉네임 변경: ' + origEntry.nickname + ' → ' + nickname);
         else appendLog('edit', nickname, '프로필 수정');
-        notifyAdmin('프로필 수정', nickname + '님이 프로필을 수정했어요.');
-        modalNotice('완료', '프로필이 수정되었어요.');
+        notifyAdmin(origIsPending ? '신청서 재제출' : '프로필 수정', nickname + '님이 ' + (origIsPending ? '신청서를 수정해 다시 제출했어요 (승인 대기).' : '프로필을 수정했어요.'));
+        modalNotice('완료', origIsPending ? '수정해서 다시 제출했어요. 관리자 승인을 기다려 주세요.' : '프로필이 수정되었어요.');
         activeTab = currentUser ? 'mine' : 'list'; /* 회원이 메시지함에서 수정 → 저장 후 메시지함 복귀 */
         paint(currentState);
       } else if (managedCreate) {
@@ -5692,7 +5714,7 @@
 
   function handleEdit(id) {
     var state = currentState;
-    var entry = state.entries.find(function (e) { return e.id === id; });
+    var entry = (state.entries || []).concat(state.pendingEntries || []).find(function (e) { return e.id === id; });
     if (!entry) return;
     if (isAdminUnlocked) {
       startEditing(entry);
@@ -6191,6 +6213,7 @@
         if (idx < 0) return;
         var entry = state.pendingEntries.splice(idx, 1)[0];
         if (!entry.serial) entry.serial = nextSerial(state);
+        delete entry.rejectedReason; delete entry.rejectedAt; delete entry.heldReason; delete entry.heldAt; /* 승인 시 반려/보류 흔적 제거 */
         var newEntries = (state.entries || []).concat([entry]);
         tx.update(stateRef, { pendingEntries: state.pendingEntries, entries: newEntries });
       });
@@ -6275,23 +6298,50 @@
 
   function handleReject(id) {
     var pend = ((currentState && currentState.pendingEntries) || []).find(function (e) { return e.id === id; });
-    var nick = pend ? pend.nickname : '';
-    db.runTransaction(function (tx) {
-      return tx.get(stateRef).then(function (doc) {
-        var state = doc.data();
-        var newPending = (state.pendingEntries || []).filter(function (e) { return e.id !== id; });
-        tx.update(stateRef, { pendingEntries: newPending });
-      });
-    }).then(function () {
-      photosRef.doc(id).delete().catch(function () {});
-      delete photoCache[id];
-      appendLog('admin', '관리자', '신청 거절 · ' + nick);
-      return refreshNow();
-    }).catch(function (err) {
-      modalNotice('오류', '거절에 실패했어요: ' + (err.message || err));
+    if (!pend) return;
+    var nick = pend.nickname || '';
+    modalMessage('신청 반려', nick + '님 신청을 반려하고, 신청자에게 전할 사유·보완 안내를 남겨주세요. 신청자는 <b>하루 동안</b> 로그인해 사유를 보고 프로필을 수정·재제출할 수 있어요.', '반려', 'danger', '예: 사진이 흐려요 / 소개가 너무 짧아요. 수정해서 다시 제출해 주세요.', true).then(function (msg) {
+      if (msg === null || msg === undefined) return;
+      msg = (msg || '').trim();
+      if (!msg) return modalNotice('안내', '반려 사유를 입력해주세요.');
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var pendList = (s.pendingEntries || []).map(function (e) {
+            if (e.id !== id) return e;
+            var c = JSON.parse(JSON.stringify(e)); c.rejectedReason = msg; c.rejectedAt = new Date().toISOString(); delete c.heldReason; delete c.heldAt; return c;
+          });
+          tx.update(stateRef, { pendingEntries: pendList });
+        });
+      }).then(function () {
+        appendLog('admin', '관리자', '신청 반려(사유) · ' + nick);
+        return refreshNow();
+      }).then(function () {
+        modalNotice('반려 처리 완료', nick + '님을 반려했어요. 신청자 메시지함에 사유가 표시되고, 하루 동안 수정·재제출할 수 있어요.');
+      }).catch(function (err) { modalNotice('오류', '반려에 실패했어요: ' + (err.message || err)); });
     });
   }
 
+  /* 반려 후 하루 지난 신청은 자동 정리 (관리자 화면에서만 실행) */
+  var _purgingRej = false;
+  function purgeExpiredRejections(state) {
+    if (!isAdminUnlocked || _purgingRej) return;
+    var cutoff = Date.now() - 24 * 3600000;
+    var expired = (state.pendingEntries || []).filter(function (e) { return e.rejectedAt && new Date(e.rejectedAt).getTime() < cutoff; });
+    if (!expired.length) return;
+    _purgingRej = true;
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var keep = (s.pendingEntries || []).filter(function (e) { return !(e.rejectedAt && new Date(e.rejectedAt).getTime() < cutoff); });
+        if (keep.length === (s.pendingEntries || []).length) return;
+        tx.update(stateRef, { pendingEntries: keep });
+      });
+    }).then(function () {
+      expired.forEach(function (e) { photosRef.doc(e.id).delete().catch(function () {}); });
+      _purgingRej = false;
+    }).catch(function () { _purgingRej = false; });
+  }
   function handleApproveRequest(id) {
     var state = currentState;
     var req = (state.dateRequests || []).find(function (r) { return r.id === id; });
