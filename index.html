@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-257';
+  var APP_VERSION = '2026-09-11-258';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3382,7 +3382,11 @@
     var dateBtn = matched
       ? '<button type="button" class="card-btn approve" data-action="dm-chat" data-id="' + escapeHtml(entry.id) + '">💬 채팅하기</button>'
       : '<button type="button" class="card-btn primary" data-action="request-contact" data-id="' + escapeHtml(entry.id) + '">💌 대화 신청</button>';
-    var reqBtns = mineOrManaged ? '' : photoBtn + dateBtn;
+    /* 같은 주선자 소속(형제)끼리는 사진·대화 요청 불가 — 임시 PIN으로 직접 로그인한 경우도 포함 */
+    var sibling = !!(viewer && viewer.managedBy && entry.managedBy && viewer.managedBy === entry.managedBy && viewer.id !== entry.id);
+    var reqBtns = mineOrManaged ? '' : (sibling
+      ? '<span style="color:var(--muted);font-size:0.82rem;align-self:center;">같은 주선자 소속이에요</span>'
+      : photoBtn + dateBtn);
     return (
       '<article class="pf-card" data-id="' + escapeHtml(entry.id) + '" data-search="' + escapeHtml(searchBlob(entry)) + '">' +
         '<div class="pf-num">' + escapeHtml(formatUid(entry) || ('No. ' + String(num).padStart(3, '0'))) + '</div>' +
@@ -6485,6 +6489,9 @@
         return;
       }
       if (fromEntry.id === toId) return modalNotice('안내', '본인에게는 요청할 수 없어요.');
+      if (fromEntry.managedBy && target.managedBy && fromEntry.managedBy === target.managedBy) {
+        return modalNotice('안내', '같은 주선자 소속끼리는 사진·대화 요청을 보낼 수 없어요.');
+      }
       if (isPhoto && canViewPhotoOf(state, fromEntry.id, toId)) {
         return modalNotice('안내', escapeHtml(target.nickname) + '님 사진을 이미 볼 수 있어요. 명단에서 바로 확인하세요.');
       }
