@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-248';
+  var APP_VERSION = '2026-09-11-249';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3310,7 +3310,8 @@
     var photo;
     if (thumb) {
       var countBadge = pCount > 1 ? '<span class="pf-photos-count">' + pCount + '장</span>' : '';
-      photo = '<div class="pf-photos' + (entry.blurPhoto ? ' blurred' : '') + '"' + (entry.blurPhoto ? ' data-action="reveal-photo" data-id="' + escapeHtml(entry.id) + '"' : ' data-action="gallery" data-id="' + escapeHtml(entry.id) + '"') + '>' +
+      /* 사진은 항상 흐리게(비공개) — 저장된 blurPhoto 값과 무관하게 원본은 사진 요청 승인자에게만 (구버전 데이터 보호) */
+      photo = '<div class="pf-photos blurred" data-action="reveal-photo" data-id="' + escapeHtml(entry.id) + '">' +
         '<img src="' + thumb + '" alt="' + escapeHtml(displayName) + ' 사진" loading="lazy">' +
         countBadge + '</div>';
     } else {
@@ -3488,7 +3489,7 @@
     var displayName = entry.nickname || entry.name || '';
     var thumb = cardThumb(entry);
     var photo = thumb
-      ? '<div class="compact-thumb' + (entry.blurPhoto ? ' blurred' : '') + '"><img src="' + thumb + '" alt="" loading="lazy"></div>'
+      ? '<div class="compact-thumb blurred"><img src="' + thumb + '" alt="" loading="lazy"></div>'
       : '<div class="compact-thumb compact-thumb--empty" style="background:' + avatarColor(entry.id) + '">' + escapeHtml(initials(displayName)) + '</div>';
     var ageStr = entry.birthYear ? (String(entry.birthYear).slice(2) + '년생') : '-';
     return (
@@ -4577,9 +4578,23 @@
       var photoStatus = !e.photoCount
         ? '<span style="color:var(--accent);">⚠️ 사진 없음</span>'
         : '<span style="color:var(--muted);">📷 사진 ' + e.photoCount + '장</span>';
+      /* 일반 회원 / 주선자 본인 / 주선자가 추가한 친구 구분 */
+      var mgrNick = e.managedBy ? managerNickOf(state, e) : '';
+      var typeChip, typeNote;
+      if (e.managedBy && !e.ownerSelf) {
+        typeChip = ' <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🤝 주선자 등록</span>';
+        typeNote = '<div class="p-meta" style="margin-top:3px;color:var(--gold);">🤝 ' + escapeHtml(mgrNick || '주선자') + '님이 대신 등록한 회원이에요.</div>';
+      } else if (e.ownerSelf) {
+        typeChip = ' <span class="chip" style="background:var(--gold-soft);color:var(--gold);">🙋 주선자 본인</span>';
+        typeNote = '<div class="p-meta" style="margin-top:3px;color:var(--gold);">🙋 주선자 ' + escapeHtml(mgrNick || '') + '님 본인 프로필이에요.</div>';
+      } else {
+        typeChip = ' <span class="chip" style="background:#e6f4ea;color:#137333;">🙋 일반 회원</span>';
+        typeNote = '';
+      }
       return foldItem(
-        '<span class="req-sum-who">' + escapeHtml(displayName) + '</span> <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🆕 신규</span>' + heldChip + '<span class="req-sum-when">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + '</span>',
+        '<span class="req-sum-who">' + escapeHtml(displayName) + '</span> <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🆕 신규</span>' + typeChip + heldChip + '<span class="req-sum-when">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + '</span>',
         '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + ' · ' + escapeHtml(e.region || '') + '</div>' +
+        typeNote +
         '<div class="p-meta" style="margin-top:3px;">' + photoStatus + '</div>' +
         heldNote +
         '<div class="pending-actions">' +
