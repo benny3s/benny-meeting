@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-237';
+  var APP_VERSION = '2026-09-11-238';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2396,7 +2396,6 @@
     /* 후보 풀: 보관 계정은 로그인 불가로 제외 · 대리 프로필은 유효한 임시 PIN 있을 때만 포함 */
     var pool = sortedEntries.concat(state.pendingEntries || []).filter(function (e) {
       if (e.deactivated) return false; /* 🗄 보관 계정은 로그인 불가 */
-      if (e.rejectedAt && (Date.now() - new Date(e.rejectedAt).getTime()) > 24 * 3600000) return false; /* 반려 후 하루 지나면 로그인 불가 */
       if (e.managedBy && (!e.pinAuth || subPinExpired(e))) return false;
       return true;
     }).map(function (e) {
@@ -3770,6 +3769,12 @@
     var editNote = isEdit
       ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">프로필 수정 모드입니다. 실명·연락처·알게 된 경로·PIN은 비워두면 기존 값이 유지돼요. <button type="button" class="card-btn" id="cancel-edit" style="margin-left:8px;padding:4px 12px;">수정 취소</button></div>'
       : '';
+    /* 보류(보완 요청)된 신청을 수정·재제출하는 경우: 관리자에게 전할 메시지 필수 */
+    var editingHeldPending = isEdit && (state.pendingEntries || []).some(function (e) { return e.id === editingEntryId && e.heldReason; });
+    var resubmitField = editingHeldPending
+      ? '<div class="field" style="background:var(--gold-soft);border:1px solid var(--gold);border-radius:10px;padding:10px 12px;margin-bottom:12px;"><label for="f-resubmit-msg">✍️ 관리자에게 전할 메시지 <span class="req">필수</span></label>' +
+          '<textarea class="modal-input" id="f-resubmit-msg" name="resubmitMsg" rows="2" maxlength="200" placeholder="무엇을 보완했는지 알려주세요 (예: 사진을 밝은 것으로 교체했어요)"></textarea></div>'
+      : '';
     var proxyNote = proxy
       ? (formRole === 'matchmaker'
         ? '<div class="readonly-note" style="background:var(--gold-soft);border-color:var(--gold);">🤝 <b>친구 대신 소개</b> — 소개할 친구의 정보를 입력하세요. 친구는 앱에 가입하지 않아도 되고, 요청·승인은 주선자(' + escapeHtml((currentUser && currentUser.nickname) || '나') + ')님이 대신 처리해요.</div>'
@@ -3796,6 +3801,7 @@
         '</div>' +
         kakaoNote +
         '<form id="entry-form" novalidate>' +
+          resubmitField +
           '<div class="field-group">' +
             '<div class="row-2">' +
               '<div class="field"><label for="f-nickname">공개 이름 (닉네임) <span class="req">필수</span></label>' +
@@ -4184,20 +4190,12 @@
     if (!me && myPending) {
       var editBtn = '<button type="button" class="submit-btn" data-action="edit" data-id="' + escapeHtml(myPending.id) + '" style="width:100%;box-sizing:border-box;margin-top:12px;">✏️ 신청서 수정해서 다시 제출</button>';
       var waitBox;
-      if (myPending.rejectedReason) {
+      if (myPending.heldReason) {
         waitBox = '<div class="mine-status-box">' +
             '<div class="mine-status-icon">📌</div>' +
-            '<h3>신청 반려 안내</h3>' +
-            '<div class="mine-note reject" style="text-align:left;white-space:pre-wrap;margin:8px 0;">' + escapeHtml(myPending.rejectedReason) + '</div>' +
-            '<p class="sub">관리자가 신청을 <b>반려</b>했어요. 위 사유를 참고해 <b>프로필을 수정한 뒤 다시 제출</b>해 주세요. (하루 안에 수정하지 않으면 신청이 자동 정리돼요)</p>' +
-            editBtn +
-          '</div>';
-      } else if (myPending.heldReason) {
-        waitBox = '<div class="mine-status-box">' +
-            '<div class="mine-status-icon">📌</div>' +
-            '<h3>신청 보류 안내</h3>' +
+            '<h3>신청 보류 안내 (프로필 보완이 필요해요)</h3>' +
             '<div class="mine-note" style="text-align:left;white-space:pre-wrap;margin:8px 0;">' + escapeHtml(myPending.heldReason) + '</div>' +
-            '<p class="sub">관리자가 신청을 <b>보류</b>했어요. 위 내용을 확인하고 필요하면 수정해 주세요. (아직 명단에는 올라가지 않았어요)</p>' +
+            '<p class="sub">관리자가 위 사유로 <b>보완을 요청</b>했어요. 프로필을 수정하고, 다시 제출할 때 <b>변경 내용을 메시지로 남겨</b> 주세요. (승인되면 명단에 올라가요)</p>' +
             editBtn +
           '</div>';
       } else {
@@ -4494,10 +4492,8 @@
       var displayName = e.nickname || e.name || '(이름 없음)';
       var ageStr = e.birthYear ? (String(e.birthYear).slice(2) + '년생') : '-';
       var heldNote = e.heldReason ? '<div class="p-meta" style="color:var(--accent);margin-top:3px;white-space:pre-wrap;">📌 보류 중: ' + escapeHtml(e.heldReason) + '</div>' : '';
-      if (e.rejectedReason) heldNote += '<div class="p-meta" style="color:#c5221f;margin-top:3px;white-space:pre-wrap;">❌ 반려: ' + escapeHtml(e.rejectedReason) + (e.rejectedAt ? ' <span style="color:var(--muted);">(' + fmtDate(e.rejectedAt) + ')</span>' : '') + '</div>';
       var holdBtn = '<button type="button" class="card-btn" data-action="hold-pending" data-id="' + escapeHtml(e.id) + '">' + (e.heldReason ? '보류 사유 수정' : '보류') + '</button>';
-      var heldChip = (e.heldReason ? ' <span class="chip" style="background:var(--accent-soft);color:var(--accent);">📌 보류</span>' : '') +
-        (e.rejectedReason ? ' <span class="chip" style="background:#fce8e6;color:#c5221f;">❌ 반려</span>' : '');
+      var heldChip = e.heldReason ? ' <span class="chip" style="background:var(--accent-soft);color:var(--accent);">📌 보류</span>' : '';
       if (e.isMatchmaker) {
         return foldItem(
           '<span class="req-sum-who">🤝 ' + escapeHtml(displayName) + '</span> <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🆕 신규</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">주선자</span>' + heldChip,
@@ -5200,7 +5196,6 @@
     try { applyLogFilter(); } catch (e) {} /* 활동기록 필터 재적용 */
     try { adjustSwitcherClip(); } catch (e) {} /* 전환창 친구 2줄 초과 시 접기 */
     try { updateCharCounts(); } catch (e) {} /* 자기소개 등 글자수 카운터 */
-    try { purgeExpiredRejections(state); } catch (e) {} /* 반려 후 하루 지난 신청 정리(관리자) */
     maybeRestoreDraft();
   }
 
@@ -5480,8 +5475,12 @@
     var managedCreate = proxy || ownerByMM; /* 주선자 아래 관리 프로필 생성(managedBy 설정, 로그인 전환 안 함) */
     var origEntry = isEdit ? (state.entries || []).concat(state.pendingEntries || []).find(function (e) { return e.id === editingEntryId; }) : null;
     var origIsPending = !!(isEdit && origEntry && (state.pendingEntries || []).some(function (e) { return e.id === editingEntryId; }));
+    var wasHeld = !!(origEntry && origEntry.heldReason);
+    var resubmitEl = form.querySelector('[name="resubmitMsg"]');
+    var resubmitMsg = resubmitEl ? (resubmitEl.value || '').trim() : '';
 
     var missing = [];
+    if (wasHeld && !resubmitMsg) missing.push('관리자에게 전할 메시지');
     if (!nickname) missing.push('닉네임');
     if (!gender) missing.push('성별');
     if (!birthYear) missing.push('생년');
@@ -5658,6 +5657,7 @@
         if (origEntry && origEntry.nickname !== nickname) appendLog('edit', nickname, '닉네임 변경: ' + origEntry.nickname + ' → ' + nickname);
         else appendLog('edit', nickname, '프로필 수정');
         notifyAdmin(origIsPending ? '신청서 재제출' : '프로필 수정', nickname + '님이 ' + (origIsPending ? '신청서를 수정해 다시 제출했어요 (승인 대기).' : '프로필을 수정했어요.'));
+        if (wasHeld && resubmitMsg) { try { sendMessageTo(entryId, 'user', '[재신청] ' + resubmitMsg); } catch (e) {} } /* 보완 내용 → 관리자에게 메시지로 전달 */
         modalNotice('완료', origIsPending ? '수정해서 다시 제출했어요. 관리자 승인을 기다려 주세요.' : '프로필이 수정되었어요.');
         activeTab = currentUser ? 'mine' : 'list'; /* 회원이 메시지함에서 수정 → 저장 후 메시지함 복귀 */
         paint(currentState);
@@ -6300,48 +6300,25 @@
     var pend = ((currentState && currentState.pendingEntries) || []).find(function (e) { return e.id === id; });
     if (!pend) return;
     var nick = pend.nickname || '';
-    modalMessage('신청 반려', nick + '님 신청을 반려하고, 신청자에게 전할 사유·보완 안내를 남겨주세요. 신청자는 <b>하루 동안</b> 로그인해 사유를 보고 프로필을 수정·재제출할 수 있어요.', '반려', 'danger', '예: 사진이 흐려요 / 소개가 너무 짧아요. 수정해서 다시 제출해 주세요.', true).then(function (msg) {
-      if (msg === null || msg === undefined) return;
-      msg = (msg || '').trim();
-      if (!msg) return modalNotice('안내', '반려 사유를 입력해주세요.');
+    modalConfirm('신청 거절(삭제)', nick + '님 신청을 거절하고 <b>완전히 삭제</b>할까요? 되돌릴 수 없고, 이 사람은 더 이상 로그인할 수 없어요. (프로필 보완이 필요하면 대신 <b>보류</b>를 쓰세요)', '거절·삭제', 'danger').then(function (ok) {
+      if (!ok) return;
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
-          var s = doc.data();
-          var pendList = (s.pendingEntries || []).map(function (e) {
-            if (e.id !== id) return e;
-            var c = JSON.parse(JSON.stringify(e)); c.rejectedReason = msg; c.rejectedAt = new Date().toISOString(); delete c.heldReason; delete c.heldAt; return c;
-          });
-          tx.update(stateRef, { pendingEntries: pendList });
+          var state = doc.data();
+          var newPending = (state.pendingEntries || []).filter(function (e) { return e.id !== id; });
+          tx.update(stateRef, { pendingEntries: newPending });
         });
       }).then(function () {
-        appendLog('admin', '관리자', '신청 반려(사유) · ' + nick);
+        photosRef.doc(id).delete().catch(function () {});
+        delete photoCache[id];
+        appendLog('admin', '관리자', '신청 거절(삭제) · ' + nick);
         return refreshNow();
       }).then(function () {
-        modalNotice('반려 처리 완료', nick + '님을 반려했어요. 신청자 메시지함에 사유가 표시되고, 하루 동안 수정·재제출할 수 있어요.');
-      }).catch(function (err) { modalNotice('오류', '반려에 실패했어요: ' + (err.message || err)); });
+        modalNotice('거절 완료', nick + '님 신청을 삭제했어요.');
+      }).catch(function (err) { modalNotice('오류', '거절에 실패했어요: ' + (err.message || err)); });
     });
   }
 
-  /* 반려 후 하루 지난 신청은 자동 정리 (관리자 화면에서만 실행) */
-  var _purgingRej = false;
-  function purgeExpiredRejections(state) {
-    if (!isAdminUnlocked || _purgingRej) return;
-    var cutoff = Date.now() - 24 * 3600000;
-    var expired = (state.pendingEntries || []).filter(function (e) { return e.rejectedAt && new Date(e.rejectedAt).getTime() < cutoff; });
-    if (!expired.length) return;
-    _purgingRej = true;
-    db.runTransaction(function (tx) {
-      return tx.get(stateRef).then(function (doc) {
-        var s = doc.data();
-        var keep = (s.pendingEntries || []).filter(function (e) { return !(e.rejectedAt && new Date(e.rejectedAt).getTime() < cutoff); });
-        if (keep.length === (s.pendingEntries || []).length) return;
-        tx.update(stateRef, { pendingEntries: keep });
-      });
-    }).then(function () {
-      expired.forEach(function (e) { photosRef.doc(e.id).delete().catch(function () {}); });
-      _purgingRej = false;
-    }).catch(function () { _purgingRej = false; });
-  }
   function handleApproveRequest(id) {
     var state = currentState;
     var req = (state.dateRequests || []).find(function (r) { return r.id === id; });
