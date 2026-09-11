@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-244';
+  var APP_VERSION = '2026-09-11-245';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3179,13 +3179,20 @@
 
   /* 최근 접속 코스 표시(정확한 시간 숨김): 오늘/며칠 전/이번 주, 7일 넘으면 미표시.
      주선자가 관리하는 프로필(친구·본인)은 직접 로그인이 없으므로 주선자 로그인 기준으로 표시. */
-  function recentActivityChip(entry) {
-    if (!entry) return '';
+  /* 접속 기준 시각: 직접 로그인 기록 우선, 없으면 가입일(submittedAt)로 대체.
+     관리 프로필(친구·본인)은 주선자 로그인 기준, 그것도 없으면 가입일. */
+  function lastActiveAt(entry) {
+    if (!entry) return null;
     var seenAt = entry.lastSeenAt;
     if (entry.managedBy) {
       var mgr = ((currentState && currentState.entries) || []).find(function (x) { return x.id === entry.managedBy; });
       seenAt = (mgr && mgr.lastSeenAt) ? mgr.lastSeenAt : entry.lastSeenAt;
     }
+    return seenAt || entry.submittedAt || null;
+  }
+  function recentActivityChip(entry) {
+    if (!entry) return '';
+    var seenAt = lastActiveAt(entry);
     if (!seenAt) return '';
     var diff = Date.now() - new Date(seenAt).getTime();
     if (isNaN(diff) || diff < 0) return '';
@@ -3204,11 +3211,7 @@
   /* 접속 버킷 (관리자 "접속" 필터용): today/yesterday/fewdays(2~7일)/inactive(1주일+·없음) */
   function accessBucket(entry) {
     if (!entry) return 'inactive';
-    var seenAt = entry.lastSeenAt;
-    if (entry.managedBy) {
-      var mgr = ((currentState && currentState.entries) || []).find(function (x) { return x.id === entry.managedBy; });
-      seenAt = (mgr && mgr.lastSeenAt) ? mgr.lastSeenAt : entry.lastSeenAt;
-    }
+    var seenAt = lastActiveAt(entry);
     if (!seenAt) return 'inactive';
     var diff = Date.now() - new Date(seenAt).getTime();
     if (isNaN(diff) || diff < 0) return 'inactive';
@@ -3219,14 +3222,28 @@
     return 'inactive';
   }
   var accessFilter = 'all'; /* 관리자 접속 필터: all|today|yesterday|fewdays|inactive */
+  var ACCESS_OPTS = [['all', '전체'], ['today', '오늘 접속'], ['yesterday', '어제 접속'], ['fewdays', '며칠 전'], ['inactive', '1주일+ 미접속']];
+  function accessFilterLabel() { var o = ACCESS_OPTS.filter(function (x) { return x[0] === accessFilter; })[0]; return o ? o[1] : '전체'; }
   function accessFilterBtns() {
     if (!isAdminUnlocked) return '';
-    var opts = [['all', '전체'], ['today', '오늘 접속'], ['yesterday', '어제 접속'], ['fewdays', '며칠 전'], ['inactive', '1주일+ 미접속']];
-    return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 10px;align-items:center;">' +
-      '<span style="font-size:0.8rem;color:var(--muted);font-weight:700;">🕘 접속</span>' +
-      opts.map(function (o) {
-        return '<button type="button" class="filter-btn" data-action="access-filter" data-af="' + o[0] + '" aria-pressed="' + (accessFilter === o[0]) + '">' + o[1] + '</button>';
-      }).join('') + '</div>';
+    var on = accessFilter !== 'all';
+    return '<div style="margin:2px 0 10px;">' +
+      '<button type="button" class="filter-btn" data-action="access-filter-open" aria-pressed="' + on + '"' + (on ? ' style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;"' : '') + '>🕘 접속: ' + escapeHtml(accessFilterLabel()) + ' ▾</button>' +
+      '</div>';
+  }
+  function openAccessFilterPicker() {
+    var ov = openModal('<h3>🕘 접속 필터</h3><p class="modal-msg">접속(활동) 기준으로 걸러서 볼 수 있어요.</p>' +
+      '<div style="display:flex;flex-direction:column;gap:8px;">' +
+        ACCESS_OPTS.map(function (o) {
+          return '<button type="button" class="card-btn' + (accessFilter === o[0] ? ' approve' : '') + '" data-afpick="' + o[0] + '" style="width:100%;">' + o[1] + '</button>';
+        }).join('') +
+      '</div><div class="modal-actions"><button type="button" class="card-btn" id="modal-cancel">닫기</button></div>');
+    ov.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(ov); });
+    ov.addEventListener('click', function (e) {
+      if (e.target === ov) { closeModal(ov); return; }
+      var b = e.target.closest('[data-afpick]');
+      if (b) { accessFilter = b.getAttribute('data-afpick'); closeModal(ov); paint(currentState); }
+    });
   }
 
   /* ---- rendering ---- */
@@ -4985,6 +5002,8 @@
     var order = adminSecOrder();
     var headerBtns =
       '<div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
+        '<button type="button" class="card-btn primary" data-action="broadcast" style="flex:none;">📢 전체 공지</button>' +
+        '<button type="button" class="card-btn" data-action="fold-all" style="flex:none;">🔁 전체 펼치기·접기</button>' +
         '<button type="button" class="card-btn' + (adminEditMode ? ' approve' : '') + '" id="admin-edit-toggle" style="flex:none;">' + (adminEditMode ? '✅ 편집 완료' : '✏️ 섹션 편집') + '</button>' +
         '<button type="button" class="card-btn' + (adminNotifActive() ? ' approve' : '') + '" id="admin-notif-toggle" style="flex:none;">' + (adminNotifBroken() ? '🔔 관리자 알림 재설정 필요' : (adminNotifActive() ? '🔔 관리자 알림 켜짐' : '🔔 관리자 알림 켜기')) + '</button>' +
         '<button type="button" class="card-btn" id="admin-change-pw" style="flex:none;">🔑 비밀번호 변경</button>' +
@@ -5107,6 +5126,7 @@
         '</details>';
     }).join('');
     return '<div class="admin-panel">' +
+        '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;"><button type="button" class="card-btn" data-action="fold-all" style="flex:none;">🔁 전체 펼치기·접기</button></div>' +
         '<h2>🤝 주선자 관리<span class="pending-count">' + mms.length + '</span></h2>' +
         '<p class="sub">주선자별 본인·친구 트리예요. 이름을 누르면 프로필이 열리고, 🧑‍💼 주선자를 누르면 실명·연락처 상세가 열려요. (계정 상태 변경은 관리자 탭에서)</p>' +
         accessFilterBtns() +
@@ -5293,6 +5313,14 @@
     );
   }
 
+  /* 현재 패널의 모든 폴딩 섹션/카드 전체 펼치기·접기 토글 (하나라도 접혀 있으면 전체 펼침) */
+  function toggleFoldAll() {
+    var ds = document.querySelectorAll('#tab-panel details.admin-fold');
+    if (!ds.length) return;
+    var anyClosed = false;
+    for (var i = 0; i < ds.length; i++) { if (!ds[i].open) { anyClosed = true; break; } }
+    for (var j = 0; j < ds.length; j++) { ds[j].open = anyClosed; }
+  }
   /* ---- state & paint ---- */
   function paint(state) {
     currentState = state;
@@ -6005,6 +6033,35 @@
       }).then(function () { return refreshNow(); })
         .then(function () { modalNotice('삭제 완료', '삭제 이력을 지웠어요.'); })
         .catch(function (err) { modalNotice('오류', '삭제 실패: ' + (err.message || err)); });
+    });
+  }
+  /* 관리자: 전체 공지 — 로그인 가능한 모든 계정(일반 회원 + 주선자, 보관 제외)에게 관리자 메시지 일괄 발송 */
+  function handleBroadcast() {
+    if (!isAdminUnlocked) return;
+    var targets = (currentState.entries || []).filter(function (e) { return !e.managedBy && !e.deactivated; }); /* 최상위 로그인 계정 (관리 프로필 제외) */
+    if (!targets.length) { modalNotice('안내', '공지를 보낼 대상이 없어요.'); return; }
+    modalMessage('📢 전체 공지', targets.length + '명(로그인 계정)에게 관리자 명의로 공지를 보내요. 각자 "관리자 메시지"에 표시돼요.', '보내기', 'primary', '예: 이번 주 새로운 분들이 많이 등록됐어요! 명단을 둘러보고 마음에 드는 분께 먼저 다가가 보세요 :)', true).then(function (text) {
+      if (text === null || text === undefined) return;
+      text = (text || '').trim();
+      if (!text) return modalNotice('안내', '공지 내용을 입력해주세요.');
+      var loading = openModal('<h3>보내는 중…</h3><p class="modal-msg">' + targets.length + '명에게 공지를 보내고 있어요. 잠시만요…</p>');
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var now = Date.now();
+          var live = (s.entries || []).filter(function (e) { return !e.managedBy && !e.deactivated; });
+          var newMsgs = live.map(function (t, i) { return { id: genId(), entryId: t.id, from: 'admin', text: text, at: new Date(now + i).toISOString(), broadcast: true }; });
+          var msgs = (s.messages || []).concat(newMsgs);
+          if (msgs.length > 5000) msgs = msgs.slice(msgs.length - 5000);
+          tx.update(stateRef, { messages: msgs });
+        });
+      }).then(function () {
+        appendLog('admin', '관리자', '전체 공지 발송 · ' + targets.length + '명');
+        return refreshNow();
+      }).then(function () {
+        closeModal(loading);
+        modalNotice('전송 완료', targets.length + '명에게 공지를 보냈어요.');
+      }).catch(function (err) { closeModal(loading); modalNotice('오류', '전송 실패: ' + (err.message || err)); });
     });
   }
   /* 관리자: 연결된 회원에게 안내 일괄 발송 */
@@ -7591,7 +7648,9 @@
       else if (action === 'guest-phone') handleGuestPhone(id);
       else if (action === 'msg-del') { if (isAdminUnlocked) deleteAdminMessage(id); }
       else if (action === 'mymsg-del') { deleteMyMessage(id); }
-      else if (action === 'access-filter') { accessFilter = actionBtn.getAttribute('data-af') || 'all'; paint(currentState); return; }
+      else if (action === 'access-filter-open') { openAccessFilterPicker(); return; }
+      else if (action === 'fold-all') { toggleFoldAll(); return; }
+      else if (action === 'broadcast') { handleBroadcast(); return; }
       else if (action === 'admin-msg-delall') {
         if (isAdminUnlocked) modalConfirm('전체 삭제', nickForEntry(currentState, id) + '님과의 메시지를 모두 지울까요?').then(function (ok) { if (ok) deleteAdminThread(id); });
       }
