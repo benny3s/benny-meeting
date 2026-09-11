@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-252';
+  var APP_VERSION = '2026-09-11-253';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4656,11 +4656,37 @@
     /* 승인 후 프로필을 수정한 회원 → 관리자가 한 번 검토 */
     var editRevList = (state.entries || []).filter(function (e) { return e.editReviewAt && !e.deactivated; })
       .sort(function (a, b) { return (b.editReviewAt || '').localeCompare(a.editReviewAt || ''); });
+    /* 변경 내역(전/후) 렌더 */
+    function editChangesHtml(e) {
+      var chg = Array.isArray(e.editChanges) ? e.editChanges : null;
+      if (!chg) return '<div class="p-meta" style="margin-top:6px;color:var(--muted);">변경 항목 기록이 없어요 (구버전에서 수정됨). 프로필을 열어 확인해 주세요.</div>';
+      if (!chg.length) return '<div class="p-meta" style="margin-top:6px;color:var(--muted);">텍스트 변경은 없고, 사진/기타만 갱신됐을 수 있어요.</div>';
+      var rows = chg.map(function (c) {
+        if (c.note) {
+          return '<li style="margin-bottom:4px;"><b>' + escapeHtml(c.label) + '</b> <span style="color:var(--gold);">' + escapeHtml(c.note) + '</span></li>';
+        }
+        var b = c.before === '' ? '(없음)' : c.before;
+        var a = c.after === '' ? '(없음)' : c.after;
+        var isLong = (b.length > 24 || a.length > 24);
+        if (isLong) {
+          return '<li style="margin-bottom:6px;"><b>' + escapeHtml(c.label) + '</b>' +
+            '<div style="margin-top:2px;color:var(--muted);text-decoration:line-through;white-space:pre-wrap;">' + escapeHtml(b) + '</div>' +
+            '<div style="margin-top:2px;color:var(--ink);font-weight:600;white-space:pre-wrap;">→ ' + escapeHtml(a) + '</div></li>';
+        }
+        return '<li style="margin-bottom:4px;"><b>' + escapeHtml(c.label) + '</b> ' +
+          '<span style="color:var(--muted);text-decoration:line-through;">' + escapeHtml(b) + '</span> ' +
+          '<span style="color:var(--ink);">→ <b>' + escapeHtml(a) + '</b></span></li>';
+      }).join('');
+      return '<div class="p-meta" style="margin-top:6px;"><b>변경 항목</b><ul style="margin:4px 0 0;padding-left:18px;">' + rows + '</ul></div>';
+    }
     var editRevItems = editRevList.map(function (e) {
       var kind = e.ownerSelf ? '🙋 주선자 본인' : (e.managedBy ? '🤝 주선자 친구' : '일반 회원');
+      var chgCount = Array.isArray(e.editChanges) ? e.editChanges.length : 0;
+      var chgChip = chgCount ? ' <span class="chip" style="background:#e8f0fe;color:#1a73e8;">' + chgCount + '개 변경</span>' : '';
       return foldItem(
-        '<span class="req-sum-who">' + escapeHtml(e.nickname) + '</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">📝 수정됨</span><span class="req-sum-when">' + fmtDate(e.editReviewAt) + '</span>',
+        '<span class="req-sum-who">' + escapeHtml(e.nickname) + '</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">📝 수정됨</span>' + chgChip + '<span class="req-sum-when">' + fmtDate(e.editReviewAt) + '</span>',
         '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(e.region || '') + ' · ' + kind + '</div>' +
+        editChangesHtml(e) +
         '<div class="pending-actions">' +
           '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(e.id) + '">👤 프로필 보기</button>' +
           '<button type="button" class="card-btn approve" data-action="edit-reviewed" data-id="' + escapeHtml(e.id) + '">검토 완료</button>' +
@@ -4668,7 +4694,7 @@
       );
     }).join('');
     var editRevSection = adminFold('📝 프로필 변경', editRevList.length,
-      '<p class="sub">승인 후 프로필·사진을 수정한 회원이에요. 확인하고 <b>검토 완료</b>를 누르면 목록에서 사라져요.</p>' +
+      '<p class="sub">승인 후 프로필·사진을 수정한 회원이에요. 바뀐 항목을 전/후로 확인하고 <b>검토 완료</b>를 누르면 목록에서 사라져요. (실명·연락처 등 암호화 항목은 값 대신 변경 여부만 표시)</p>' +
       (editRevList.length ? editRevItems : '<p class="sub">검토할 프로필 변경이 없어요.</p>'), false, 'editrev');
     /* 보관(비활성) 계정 목록 — 사유·재활성화·연결 안내 */
     var deacList = (state.entries || []).filter(function (e) { return e.deactivated; });
@@ -5812,8 +5838,38 @@
                   if (results[3]) { u.pinAuth = results[3]; delete u.pinHash; }
                   /* 승인 대기(보류/반려) 상태에서 수정·재제출 → 반려/보류 해제하고 다시 대기열로 */
                   if (isPending) { delete u.rejectedReason; delete u.rejectedAt; delete u.heldReason; delete u.heldAt; u.submittedAt = new Date().toISOString(); }
-                  /* 승인된 회원이 프로필을 직접 수정 → 관리자 리뷰 대기 표시 (관리자 본인 수정은 제외) */
-                  else if (!isAdminUnlocked) { u.editReviewAt = new Date().toISOString(); }
+                  /* 승인된 회원이 프로필을 직접 수정 → 관리자 리뷰 대기 + 변경 내역(전/후) 기록. 관리자 본인 수정은 제외 */
+                  else if (!isAdminUnlocked) {
+                    u.editReviewAt = new Date().toISOString();
+                    /* 기존 미검토 변경이 있으면 before(최초 검토완료 시점 값)를 유지하며 병합 */
+                    var prev = Array.isArray(e.editChanges) ? e.editChanges : [];
+                    var prevMap = {}; prev.forEach(function (p) { prevMap[p.label] = p; });
+                    var chg = [];
+                    var cmp = function (label, before, after) {
+                      var base = (prevMap[label] && ('before' in prevMap[label])) ? prevMap[label].before : before;
+                      var bStr = (before === undefined || before === null) ? '' : String(before);
+                      var aStr = (after === undefined || after === null) ? '' : String(after);
+                      var baseStr = (base === undefined || base === null) ? '' : String(base);
+                      if (aStr === baseStr) return; /* 최종적으로 변화 없음(원복) */
+                      chg.push({ label: label, before: baseStr, after: aStr });
+                    };
+                    cmp('닉네임', e.nickname, nickname);
+                    cmp('성별', genderLabel(e.gender), genderLabel(gender));
+                    cmp('출생연도', e.birthYear, birthYear);
+                    cmp('지역', e.region, region);
+                    cmp('직장', e.workplace, workplace);
+                    cmp('키', e.height, height);
+                    cmp('소개', e.intro, intro);
+                    cmp('선호', e.idealType, idealType);
+                    cmp('비선호', e.dealbreaker, dealbreaker);
+                    var photoChanged = (e.photoCount || 0) !== finalPhotos.length || (e.photoThumb || '') !== (thumb || '');
+                    if (photoChanged || prevMap['사진']) chg.push({ label: '사진', note: '사진 변경 (' + (e.photoCount || 0) + '장 → ' + finalPhotos.length + '장)' });
+                    /* PII(암호화 항목)는 값 비노출 — 변경 여부만 */
+                    if (results[0] || prevMap['이름']) chg.push({ label: '이름', note: '변경됨 (값 비공개)' });
+                    if (results[1] || prevMap['연락처']) chg.push({ label: '연락처', note: '변경됨 (값 비공개)' });
+                    if (results[2] || prevMap['알게 된 경로']) chg.push({ label: '알게 된 경로', note: '변경됨 (값 비공개)' });
+                    u.editChanges = chg;
+                  }
                   return u;
                 });
               };
@@ -6271,7 +6327,7 @@
         var s = doc.data();
         var entries = (s.entries || []).map(function (e) {
           if (e.id !== id) return e;
-          var c = JSON.parse(JSON.stringify(e)); delete c.editReviewAt; return c;
+          var c = JSON.parse(JSON.stringify(e)); delete c.editReviewAt; delete c.editChanges; return c;
         });
         tx.update(stateRef, { entries: entries });
       });
