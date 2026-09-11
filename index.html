@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-235';
+  var APP_VERSION = '2026-09-11-236';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3348,7 +3348,7 @@
     var maleCount = entries.filter(function (e) { return e.gender === 'male'; }).length;
     var femaleCount = entries.filter(function (e) { return e.gender === 'female'; }).length;
     var me = findMyEntry(state);
-    var teaser = !currentUser && !isAdminUnlocked; /* 비로그인·비관리자 → 신원 가린 티저 뷰 */
+    var teaser = !isAdminUnlocked && !myAuthEntry(state); /* 비로그인·관리자 아님·승인 대기(미승인) → 신원 가린 티저 뷰 */
     var isPermFilter = (listFilter === 'photo' || listFilter === 'contact');
     var filtered = entries.filter(function (e) {
       if (myHiddenIds.indexOf(e.id) >= 0) return false; /* 지인 필터(마주치기 방지)로 숨김 */
