@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-255';
+  var APP_VERSION = '2026-09-11-256';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3307,10 +3307,10 @@
     });
   }
 
-  /* 검색용 텍스트 묶음(소문자): 닉네임·지역·직장·소개·선호·비선호 */
+  /* 검색용 텍스트 묶음(소문자, 연속 공백·줄바꿈은 공백 1개로 정규화): 닉네임·지역·직장·소개·선호·비선호 */
   function searchBlob(entry) {
     return [entry.nickname, entry.region, entry.workplace, entry.intro, entry.idealType, entry.dealbreaker]
-      .filter(Boolean).join(' ').toLowerCase();
+      .filter(Boolean).join(' ').toLowerCase().replace(/\s+/g, ' ').trim();
   }
   function cardHtml(entry, num, state, detailMode) {
     var displayName = entry.nickname || entry.name || '';
@@ -3495,12 +3495,12 @@
         ((searchOpen || listSearch) ? ' style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;"' : '') + '>🔍</button>'
       : '';
     var searchRow = (me && searchOpen)
-      ? '<div class="search-row" style="margin-top:8px;display:flex;gap:6px;align-items:center;">' +
+      ? '<div class="search-row" style="margin-top:2px;display:flex;gap:6px;align-items:center;">' +
           '<input type="text" id="list-search" value="' + escapeHtml(listSearch) + '" placeholder="🔍 닉네임 · 지역 · 소개 내용 검색" ' +
             'style="flex:1;min-width:0;padding:8px 12px;border:1px solid var(--line);border-radius:999px;font-size:0.92rem;font-family:inherit;box-sizing:border-box;">' +
           (listSearch ? '<button type="button" class="filter-btn" data-action="search-clear" style="flex:none;">✕</button>' : '') +
         '</div>' +
-        '<div id="search-count" class="p-meta" style="margin-top:4px;color:var(--muted);"></div>'
+        '<div id="search-count" class="p-meta" style="margin:8px 0 2px;color:var(--muted);"></div>'
       : '';
     return (
       '<div class="list-toolbar">' +
@@ -5435,7 +5435,7 @@
   /* ---- state & paint ---- */
   /* 명단 검색: 화면을 다시 그리지 않고 이미 렌더된 카드만 즉석에서 숨김/표시 (한글 조합 안전) */
   function applyListSearch() {
-    var q = (listSearch || '').trim().toLowerCase();
+    var q = (listSearch || '').toLowerCase().replace(/\s+/g, ' ').trim();
     var nodes = document.querySelectorAll('.roster-grid .pf-card[data-search], .compact-list .compact-row[data-search]');
     var shown = 0;
     for (var i = 0; i < nodes.length; i++) {
