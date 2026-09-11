@@ -888,7 +888,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-273';
+  var APP_VERSION = '2026-09-11-274';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2895,6 +2895,7 @@
       '<h3>💬 Q&amp;A · 관리자에게 문의</h3>' +
       '<div style="max-height:36vh;overflow-y:auto;margin:6px 0 10px;">' + body + '</div>' +
       '<textarea class="modal-input" id="mc-text" rows="3" maxlength="300" placeholder="건의사항이나 궁금한 점을 남겨주세요"></textarea>' +
+      '<button type="button" class="card-btn" data-kakao="1" style="width:100%;box-sizing:border-box;margin-top:8px;background:#FEE500;border-color:#FEE500;color:#3C1E1E;font-weight:700;">💬 카카오톡으로 문의</button>' +
       '<div class="modal-actions">' +
         (thread.length ? '<button type="button" class="card-btn" id="mc-delall">전체 삭제</button>' : '') +
         '<button type="button" class="card-btn" id="modal-cancel">닫기</button>' +
@@ -2933,6 +2934,7 @@
       '<textarea class="modal-input" id="guest-text" rows="4" maxlength="300" placeholder="궁금한 점이나 건의사항을 남겨주세요" style="margin-top:8px;">' + escapeHtml(opts.prefill || '') + '</textarea>' +
       '<p id="guest-warn" class="modal-msg" style="color:var(--accent);margin:4px 0 0;font-size:0.82rem;" hidden>이름·전화번호·내용을 모두 입력해주세요. (전화번호는 01012345678 형식)</p>' +
       '<p class="modal-msg" style="color:var(--muted);margin:6px 0 0;font-size:0.78rem;">' + ICON_LOCK + ' 전화번호는 암호화되어 관리자만 확인할 수 있어요.</p>' +
+      '<button type="button" class="card-btn" data-kakao="1" style="width:100%;box-sizing:border-box;margin-top:10px;background:#FEE500;border-color:#FEE500;color:#3C1E1E;font-weight:700;">💬 카카오톡으로 문의</button>' +
       '<div class="modal-actions">' +
         '<button type="button" class="card-btn" id="modal-cancel">닫기</button>' +
         '<button type="button" class="card-btn primary" id="guest-send">보내기</button>' +
@@ -5415,10 +5417,6 @@
           '<button type="button" class="admin-link" id="buy-coffee" style="background:var(--gold-soft);border-color:var(--gold);color:var(--gold);opacity:1;font-weight:700;">&#9749; 관리자 커피 사주기</button>' +
           '<button type="button" class="admin-link" id="feedback-btn">&#128172; Q&amp;A</button>' +
         '</div>' +
-        /* 3줄: 카카오 채널 문의 */
-        '<div class="admin-bar-row">' +
-          '<button type="button" class="admin-link" id="kakao-channel" style="background:#FEE500;border-color:#FEE500;color:#3C1E1E;opacity:1;font-weight:700;">&#128172; 카카오 채널 문의</button>' +
-        '</div>' +
         /* 3줄: 홈에 추가 / 알림 / 로그인 */
         '<div class="admin-bar-row">' +
           ((NOTIF_ENABLED && !isStandalone()) ? '<button type="button" class="admin-link" id="add-home">&#128241; 홈에 추가</button>' : '') +
@@ -7734,7 +7732,7 @@
       handleBuyCoffee();
       return;
     }
-    if (e.target.closest('#kakao-channel')) {
+    if (e.target.closest('[data-kakao]')) {
       try { window.open(KAKAO_CHAT_URL, '_blank'); } catch (err) { location.href = KAKAO_CHAT_URL; }
       return;
     }
