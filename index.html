@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-10-233';
+  var APP_VERSION = '2026-09-11-234';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1202,9 +1202,14 @@
   /* 명단 툴바의 "🙈 지인 필터" 버튼이 여는 패널 (모달). 내부 버튼(#acq-vcf/#acq-manual/#acq-clear)은 전역 위임 핸들러가 처리 */
   function openAcqFilterPanel() {
     if (!acqAuth()) { modalNotice('로그인 필요', '먼저 로그인해주세요.'); return; }
+    var applied = acqCounts.filter || 0, hidden = acqCounts.hidden || 0;
     var inner =
-      '<p class="modal-msg" style="text-align:left;">아는 사람과 <b>마주치기 방지</b> — 등록한 번호의 회원은 내 명단에서 숨겨지고, <b>상대 명단에서도 내가 숨겨져요(서로 안 보임)</b>. 올린 번호는 암호화 저장되고 상대에게 공개되지 않아요.' +
-        (acqCounts.filter ? ' 현재 <b>' + acqCounts.filter + '개</b> 등록' + (acqCounts.hidden ? ', <b>' + acqCounts.hidden + '명</b> 숨김 중' : '') + '.' : '') + '</p>' +
+      '<p class="modal-msg" style="text-align:left;margin-bottom:8px;">아는 사람과 <b>마주치기 방지</b> — 등록한 번호의 회원은 내 명단에서 숨겨지고, <b>상대 명단에서도 내가 숨겨져요(서로 안 보임)</b>.</p>' +
+      '<div style="background:var(--gold-soft);border:1px solid var(--gold);border-radius:12px;padding:10px 12px;margin-bottom:8px;">' +
+        '<div style="font-weight:700;">📇 현재 적용: ' + applied + '개' + (hidden ? ' · 🙈 ' + hidden + '명 숨김 중' : '') + '</div>' +
+        (applied ? '' : '<div class="sub" style="margin:2px 0 0;">아직 등록한 번호가 없어요. 아래에서 추가하면 아는 사람과 서로 안 보여요.</div>') +
+      '</div>' +
+      '<p class="sub" style="text-align:left;margin:0 0 10px;">🔒 <b>보안</b> — 올린 번호는 서버에서 바로 <b>지문(HMAC)으로만 변환·저장</b>되고 원본 번호는 저장하지 않아요. 관리자도 누구 번호인지 알 수 없고, 상대에게도 공개되지 않아요. (마주치기 방지 매칭에만 사용)</p>' +
       '<div style="display:flex;flex-direction:column;gap:8px;">' +
         '<label class="card-btn" style="cursor:pointer;text-align:center;">📇 연락처 파일(vcf) 올리기<input type="file" id="acq-vcf" accept=".vcf,text/vcard,text/x-vcard" style="display:none;"></label>' +
         '<button type="button" class="card-btn" id="acq-manual">✏️ 번호 직접 입력</button>' +
@@ -1945,7 +1950,7 @@
     if (!currentUser) return;
     var sub = ((currentState && currentState.entries) || []).find(function (e) { return e.id === subId && e.managedBy === currentUser.id; });
     if (!sub) return modalNotice('안내', '내가 소개한 친구만 임시 PIN을 발급할 수 있어요.');
-    modalNumericPinSetup('🔑 1일 임시 로그인 PIN 발급', '주선자(' + currentUser.nickname + ')님이 계속 관리하는 상태는 그대로 유지돼요. 다만 ' + sub.nickname + '님이 직접 로그인할 수 있도록 1일 동안만 쓰는 임시 PIN을 발급해요. 예를 들어 ' + sub.nickname + '님에게 온 사진 요청·대화 신청이 수락되면, 친구가 직접 로그인해 상대와 대화할 수 있어요. 사용할 PIN을 정해주세요 (숫자 4~8자리).').then(function (r) {
+    modalNumericPinSetup('🔑 1일 임시 로그인 PIN 발급', '주선자(' + currentUser.nickname + ')님이 계속 관리하는 상태는 그대로예요. ' + sub.nickname + '님이 하루 동안 직접 로그인할 수 있는 임시 PIN을 발급해요. 사용할 PIN을 정해 ' + sub.nickname + '님께 알려주세요 (숫자 4~8자리). 로그인 후 ' + sub.nickname + '님이 직접 PIN을 바꿀 수도 있어요.', '발급').then(function (r) {
       if (!r) return;
       if (!/^[0-9]{4,8}$/.test(r.p1)) return modalNotice('입력 오류', 'PIN은 숫자 4~8자리예요.');
       if (r.p1 !== r.p2) return modalNotice('오류', 'PIN이 일치하지 않아요.');
@@ -2041,7 +2046,7 @@
       sub.nickname + '님은 지금 주선자(' + currentUser.nickname + ')님이 관리하는 상태예요. 새 PIN을 정하면, 앞으로 ' + sub.nickname + '님이 자기 PIN으로 직접 로그인·관리하는 독립 계정이 됩니다. 전환 후에는 주선자 전환 목록에서 사라지고, 다시 관리하려면 그 친구가 "주선자 요청"을 보내야 해요. 계속할까요?',
       '전환', 'primary').then(function (ok) {
       if (!ok) return;
-      modalNumericPinSetup('독립 계정 PIN 설정', sub.nickname + '님이 앞으로 로그인에 사용할 개인 PIN을 정해주세요. (숫자 4~8자리)').then(function (r) {
+      modalNumericPinSetup('🎓 독립(일반) 계정 PIN 설정', sub.nickname + '님을 독립(일반) 계정으로 전환해요. 앞으로 로그인에 사용할 개인 PIN을 정해 ' + sub.nickname + '님께 알려주세요 (숫자 4~8자리). 로그인 후 ' + sub.nickname + '님이 직접 PIN을 바꿀 수도 있어요.', '설정').then(function (r) {
         if (!r) return;
         if (!/^[0-9]{4,8}$/.test(r.p1)) return modalNotice('입력 오류', 'PIN은 숫자 4~8자리예요.');
         if (r.p1 !== r.p2) return modalNotice('오류', 'PIN이 일치하지 않아요.');
@@ -5341,16 +5346,16 @@
   }
 
   /* 숫자 PIN 설정 모달 (신규/확인) */
-  function modalNumericPinSetup(title, message) {
+  function modalNumericPinSetup(title, message, okLabel) {
     return new Promise(function (resolve) {
       var overlay = openModal(
         '<h3>' + escapeHtml(title) + '</h3>' +
         '<p class="modal-msg">' + escapeHtml(message) + '</p>' +
-        '<input type="text" inputmode="numeric" class="modal-input" id="np1" data-numeric maxlength="8" placeholder="새 PIN (숫자 4~8자리)">' +
-        '<input type="text" inputmode="numeric" class="modal-input" id="np2" data-numeric maxlength="8" placeholder="새 PIN 확인" style="margin-top:8px;">' +
+        '<input type="text" inputmode="numeric" class="modal-input" id="np1" data-numeric maxlength="8" placeholder="PIN (숫자 4~8자리)">' +
+        '<input type="text" inputmode="numeric" class="modal-input" id="np2" data-numeric maxlength="8" placeholder="PIN 확인" style="margin-top:8px;">' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
-          '<button type="button" class="card-btn primary" id="modal-ok">변경</button>' +
+          '<button type="button" class="card-btn primary" id="modal-ok">' + escapeHtml(okLabel || '변경') + '</button>' +
         '</div>'
       );
       function finish(v) { closeModal(overlay); resolve(v); }
