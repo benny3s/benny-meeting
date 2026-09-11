@@ -888,7 +888,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-274';
+  var APP_VERSION = '2026-09-12-275';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3519,11 +3519,12 @@
     var ageBtn = '<button type="button" class="filter-btn" data-filter="age" aria-pressed="' + ageOn + '" title="눌러서 나이 오름차순 → 내림차순 → 해제"' +
       (ageOn ? ' style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;"' : '') + '>' +
       '나이' + (ageSort === 'asc' ? ' ▲' : (ageSort === 'desc' ? ' ▼' : '')) + '</button>';
-    var searchBtn = me
+    var canSearch = !!(me || isAdminUnlocked); /* 회원 로그인 또는 관리자 로그인 시 검색 제공 */
+    var searchBtn = canSearch
       ? '<button type="button" class="filter-btn" data-action="search-toggle" aria-pressed="' + (searchOpen || !!listSearch) + '" title="닉네임·지역·소개 검색"' +
         ((searchOpen || listSearch) ? ' style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;"' : '') + '>🔍</button>'
       : '';
-    var searchRow = (me && searchOpen)
+    var searchRow = (canSearch && searchOpen)
       ? '<div class="search-row" style="margin-top:2px;display:flex;gap:6px;align-items:center;">' +
           '<input type="text" id="list-search" value="' + escapeHtml(listSearch) + '" placeholder="🔍 닉네임 · 지역 · 소개 내용 검색" ' +
             'style="flex:1;min-width:0;padding:8px 12px;border:1px solid var(--line);border-radius:999px;font-size:0.92rem;font-family:inherit;box-sizing:border-box;">' +
@@ -5415,7 +5416,7 @@
         /* 2줄: 관리자 커피 사주기 / Q&A */
         '<div class="admin-bar-row">' +
           '<button type="button" class="admin-link" id="buy-coffee" style="background:var(--gold-soft);border-color:var(--gold);color:var(--gold);opacity:1;font-weight:700;">&#9749; 관리자 커피 사주기</button>' +
-          '<button type="button" class="admin-link" id="feedback-btn">&#128172; Q&amp;A</button>' +
+          '<button type="button" class="admin-link" id="feedback-btn" style="background:#FEE500;border-color:#FEE500;color:#3C1E1E;opacity:1;font-weight:700;">&#128172; Q&amp;A</button>' +
         '</div>' +
         /* 3줄: 홈에 추가 / 알림 / 로그인 */
         '<div class="admin-bar-row">' +
