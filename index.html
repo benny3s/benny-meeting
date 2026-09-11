@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-240';
+  var APP_VERSION = '2026-09-11-241';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2841,9 +2841,10 @@
       }).catch(function (err) { btn.disabled = false; modalNotice('오류', '전송 실패: ' + (err.message || err)); });
     });
   }
-  function msgLineHtml(m, canDelete) {
+  function msgLineHtml(m, del) {
     var isAdmin = m.from === 'admin';
-    var del = canDelete ? '<button type="button" data-action="msg-del" data-id="' + escapeHtml(m.id) + '" title="삭제" style="border:none;background:none;color:var(--muted);cursor:pointer;float:right;font-size:0.95rem;">&#10005;</button>' : '';
+    var delAction = del === true ? 'msg-del' : (del === 'user' ? 'mymsg-del' : '');
+    var del = delAction ? '<button type="button" data-action="' + delAction + '" data-id="' + escapeHtml(m.id) + '" title="삭제" style="border:none;background:none;color:var(--muted);cursor:pointer;float:right;font-size:0.95rem;">&#10005;</button>' : '';
     if (isAdmin) {
       /* 관리자 메시지는 눈에 띄게 강조 박스로 */
       return '<div style="border:1px solid var(--gold);background:var(--gold-soft);border-radius:12px;padding:10px 13px;margin:8px 0;">' +
@@ -2947,6 +2948,21 @@
         var s = doc.data();
         var msgs = (s.messages || []).map(function (m) {
           if (m.entryId === uid && !m.hiddenByUser) { var c = JSON.parse(JSON.stringify(m)); c.hiddenByUser = true; return c; }
+          return m;
+        });
+        tx.update(stateRef, { messages: msgs });
+      });
+    }).then(function () { return refreshNow(); });
+  }
+  /* 회원: 내 관리자 메시지 중 한 건만 숨기기(내 화면에서 삭제) */
+  function deleteMyMessage(id) {
+    var uid = currentUser && currentUser.id;
+    if (!uid) return Promise.resolve();
+    return db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var msgs = (s.messages || []).map(function (m) {
+          if (m.id === id && m.entryId === uid) { var c = JSON.parse(JSON.stringify(m)); c.hiddenByUser = true; return c; }
           return m;
         });
         tx.update(stateRef, { messages: msgs });
@@ -4264,12 +4280,15 @@
           pendNote +
           friendsNews +
           joinSection +
-          '<div class="mine-section"><h3>💬 관리자 메시지<span class="count">' + mmThread.length + '</span></h3>' +
-            (mmThread.length ? mmThread.map(function (m) { return msgLineHtml(m, false); }).join('') : '<p class="sub" style="margin:0;">아직 없어요.</p>') +
-            '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">' +
-              '<button type="button" class="card-btn primary" id="member-msg-open" style="flex:none;">✍️ 관리자에게 메시지</button>' +
-              (mmThread.length ? '<button type="button" class="card-btn" id="member-msg-delall" style="flex:none;">전체 삭제</button>' : '') +
-            '</div></div>' +
+          '<details class="mine-section"' + (mmThread.some(function (m) { return m.from === 'admin' && (m.at || '') > (myAuthEntry(state) && myAuthEntry(state).mineSeenAt || ''); }) ? ' open' : '') + '>' +
+            '<summary style="cursor:pointer;font-weight:700;list-style:revert;">💬 관리자 메시지<span class="count">' + mmThread.length + '</span></summary>' +
+            '<div style="margin-top:8px;">' +
+              (mmThread.length ? mmThread.map(function (m) { return msgLineHtml(m, 'user'); }).join('') : '<p class="sub" style="margin:0;">아직 없어요.</p>') +
+              '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">' +
+                '<button type="button" class="card-btn primary" id="member-msg-open" style="flex:none;">✍️ 관리자에게 메시지</button>' +
+                (mmThread.length ? '<button type="button" class="card-btn" id="member-msg-delall" style="flex:none;">전체 삭제</button>' : '') +
+              '</div>' +
+            '</div></details>' +
           '<div class="mine-section" style="margin-top:14px;"><button type="button" class="card-btn danger" id="delete-mm" style="flex:none;">🗑 주선자 계정 삭제</button>' +
             '<p class="sub" style="margin:6px 0 0;">계정과 내 소개팅 프로필을 삭제해요. (관리 중인 친구가 있으면 먼저 정리해야 해요)</p></div>';
     }
@@ -4319,18 +4338,21 @@
       );
     }).join('');
     var thread = threadFor(state, me.id, 'user');
+    var hasUnreadAdmin = thread.some(function (m) { return m.from === 'admin' && (m.at || '') > (me.mineSeenAt || ''); });
     var msgBody = thread.length
-      ? thread.map(function (m) { return msgLineHtml(m, false); }).join('')
+      ? thread.map(function (m) { return msgLineHtml(m, 'user'); }).join('')
       : '<p class="sub" style="margin:0;">아직 관리자와 주고받은 메시지가 없어요.</p>';
     var msgSection =
-      '<div class="mine-section">' +
-        '<h3>💬 관리자 메시지<span class="count">' + thread.length + '</span></h3>' +
-        msgBody +
-        '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">' +
-          '<button type="button" class="card-btn primary" id="member-msg-open" style="flex:none;">✍️ 관리자에게 메시지</button>' +
-          (thread.length ? '<button type="button" class="card-btn" id="member-msg-delall" style="flex:none;">전체 삭제</button>' : '') +
+      '<details class="mine-section"' + (hasUnreadAdmin ? ' open' : '') + '>' +
+        '<summary style="cursor:pointer;font-weight:700;list-style:revert;">💬 관리자 메시지<span class="count' + (hasUnreadAdmin ? ' blink' : '') + '">' + thread.length + '</span></summary>' +
+        '<div style="margin-top:8px;">' +
+          msgBody +
+          '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">' +
+            '<button type="button" class="card-btn primary" id="member-msg-open" style="flex:none;">✍️ 관리자에게 메시지</button>' +
+            (thread.length ? '<button type="button" class="card-btn" id="member-msg-delall" style="flex:none;">전체 삭제</button>' : '') +
+          '</div>' +
         '</div>' +
-      '</div>';
+      '</details>';
     /* Case B: 주선자의 "본인" 프로필로 보고 있음 → 주선자 홈(위) + 본인 메시지함(아래) 합쳐서 */
     if (authMM && me.ownerSelf && me.managedBy === currentUser.id) {
       return (
@@ -7485,6 +7507,7 @@
       else if (action === 'admin-msg-reply') handleAdminMessageCompose(id);
       else if (action === 'guest-phone') handleGuestPhone(id);
       else if (action === 'msg-del') { if (isAdminUnlocked) deleteAdminMessage(id); }
+      else if (action === 'mymsg-del') { deleteMyMessage(id); }
       else if (action === 'admin-msg-delall') {
         if (isAdminUnlocked) modalConfirm('전체 삭제', nickForEntry(currentState, id) + '님과의 메시지를 모두 지울까요?').then(function (ok) { if (ok) deleteAdminThread(id); });
       }
