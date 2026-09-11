@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-264';
+  var APP_VERSION = '2026-09-11-265';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2428,11 +2428,12 @@
         '<p class="modal-msg" id="login-mode-msg"></p>' +
         '<input type="text" class="modal-input" id="modal-login-search" placeholder="🔍 고유번호 또는 닉네임 검색" autocomplete="off">' +
         '<div class="login-list" id="modal-login-list"></div>' +
-        '<input type="password" inputmode="numeric" class="modal-input" id="modal-login-pin" data-numeric placeholder="개인 PIN" style="margin-top:10px;" autocomplete="off">' +
+        '<input type="text" inputmode="numeric" class="modal-input" id="modal-login-pin" data-numeric placeholder="개인 PIN" style="margin-top:10px;" autocomplete="off">' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
           '<button type="button" class="card-btn primary" id="modal-ok">로그인</button>' +
-        '</div>'
+        '</div>' +
+        '<p style="text-align:center;margin:10px 0 0;font-size:0.85rem;"><a href="#" id="login-forgot" style="color:var(--muted);text-decoration:underline;">PIN을 잊으셨나요? 관리자에게 문의</a></p>'
       );
       overlay.classList.add('login-modal');
       var searchInput = overlay.querySelector('#modal-login-search');
@@ -2468,6 +2469,7 @@
         }
       }
       overlay.addEventListener('click', function (e) {
+        if (e.target.closest('#login-forgot')) { e.preventDefault(); closeModal(overlay); resolve(null); openGuestMsgModal(); return; }
         var lb = e.target.closest('[data-lmode]');
         if (lb) { mode = lb.getAttribute('data-lmode'); selectedId = ''; syncToggle(); renderList(); }
       });
