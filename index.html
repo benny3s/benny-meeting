@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-246';
+  var APP_VERSION = '2026-09-11-247';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -896,8 +896,8 @@
   var activeTab = 'form';
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
   var adminEditMode = false; /* 관리자 섹션 편집(순서·기본 열림) 모드 */
-  var DEFAULT_SEC_ORDER = ['usage', 'pending', 'deaclist', 'dellog', 'active', 'adminmsg', 'done', 'cap', 'seen', 'log', 'test'];
-  var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', done: '✅ 요청완료', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록', test: '🧪 테스트·계정 상태' };
+  var DEFAULT_SEC_ORDER = ['usage', 'pending', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'done', 'cap', 'seen', 'log', 'test'];
+  var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', done: '✅ 요청완료', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록', test: '🧪 테스트·계정 상태' };
   /* 섹션 열림 상태는 "세션 메모리에만" 저장 → 리페인트(버튼 클릭 등) 동안엔 유지되지만,
      새로고침하면 초기화되어 모두 접힌 상태로 시작 (이전에 열었던 걸 기억하지 않음) */
   var _adminSecOpen = {}, _adminSecOrder = null;
@@ -3909,13 +3909,11 @@
                   '<button type="button" class="card-btn" id="pick-referrer" style="width:100%;box-sizing:border-box;margin-top:6px;">👥 회원 목록에서 선택</button>' +
                   '<span class="hint">어떻게 알게 됐는지 적어주세요 (소개자·경로 등). 회원 목록에서 골라 채울 수도 있어요. ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>') +
             '<div class="field"><label>사진 ' + (isEdit ? '<span class="opt">(최대 3장)</span>' : '<span class="req">필수</span> <span class="opt">1~3장</span>') + '</label>' +
-              '<span class="hint">기본은 <b class="ex">흐리게(비공개)</b> — 요청을 승인한 사람에게만 보여요. 아래 체크를 풀면 <b class="ex">전체 공개</b>가 됩니다.</span>' +
+              '<span class="hint">모든 사진은 <b class="ex">흐리게(비공개)</b> 처리돼요 — 📷 사진 요청을 승인한 사람에게만 원본이 보여요.</span>' +
               '<div class="photo-upload-area" id="photo-upload-area"></div>' +
               '<div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap;">' +
                 '<label class="photo-pick">사진 추가<input type="file" id="f-photo" multiple></label>' +
-                '<label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;cursor:pointer">' +
-                  '<input type="checkbox" name="blurPhoto" id="f-blur"' + (isEdit ? '' : ' checked') + ' style="width:16px;height:16px;accent-color:var(--accent)"> 사진 흐리게 처리 (요청 승인 시에만 공개)' +
-                '</label>' +
+                '<span class="hint" style="margin:0">🔒 사진은 항상 흐리게 처리됩니다.</span>' +
               '</div></div>' +
             '<div class="section-label">추가 정보</div>' +
             ((proxy || ownerMMForm)
@@ -4625,6 +4623,23 @@
     var approvalTotal = pending.length + delReqs.length + deacReqs.length;
     var pendingSection = adminFold('⏳ 승인 대기', approvalTotal,
       (approvalTotal ? (pendingItems + delReqItems + deacReqItems) : '<p class="sub">대기 중인 신청이 없어요.</p>'), false, 'pending');
+    /* 승인 후 프로필을 수정한 회원 → 관리자가 한 번 검토 */
+    var editRevList = (state.entries || []).filter(function (e) { return e.editReviewAt && !e.deactivated; })
+      .sort(function (a, b) { return (b.editReviewAt || '').localeCompare(a.editReviewAt || ''); });
+    var editRevItems = editRevList.map(function (e) {
+      var kind = e.ownerSelf ? '🙋 주선자 본인' : (e.managedBy ? '🤝 주선자 친구' : '일반 회원');
+      return foldItem(
+        '<span class="req-sum-who">' + escapeHtml(e.nickname) + '</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">📝 수정됨</span><span class="req-sum-when">' + fmtDate(e.editReviewAt) + '</span>',
+        '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(e.region || '') + ' · ' + kind + '</div>' +
+        '<div class="pending-actions">' +
+          '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(e.id) + '">👤 프로필 보기</button>' +
+          '<button type="button" class="card-btn approve" data-action="edit-reviewed" data-id="' + escapeHtml(e.id) + '">검토 완료</button>' +
+        '</div>'
+      );
+    }).join('');
+    var editRevSection = adminFold('📝 프로필 변경', editRevList.length,
+      '<p class="sub">승인 후 프로필·사진을 수정한 회원이에요. 확인하고 <b>검토 완료</b>를 누르면 목록에서 사라져요.</p>' +
+      (editRevList.length ? editRevItems : '<p class="sub">검토할 프로필 변경이 없어요.</p>'), false, 'editrev');
     /* 보관(비활성) 계정 목록 — 사유·재활성화·연결 안내 */
     var deacList = (state.entries || []).filter(function (e) { return e.deactivated; });
     var deacListSection = deacList.length
@@ -4994,7 +5009,7 @@
       '</div>';
     var testSection = adminFold('🧪 테스트·계정 상태', null, testBody, false, 'test');
     var secHtml = {
-      usage: usageStatsHtml(state), pending: pendingSection,
+      usage: usageStatsHtml(state), pending: pendingSection, editrev: editRevSection,
       deaclist: deacListSection, dellog: delLogSection,
       active: activeReqSection, adminmsg: adminMsgSection, done: doneSection,
       cap: capSection, seen: seenSection, log: logSection, test: testSection
@@ -5138,8 +5153,8 @@
         '<p class="sub">주선자별 본인·친구 트리예요. 이름을 누르면 프로필이 열리고, 🧑‍💼 주선자를 누르면 실명·연락처 상세가 열려요. (계정 상태 변경은 관리자 탭에서)</p>' +
         '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 10px;align-items:center;">' +
           '<button type="button" class="filter-btn" data-action="mm-scope" data-scope="all" aria-pressed="' + (mmScopeFilter === 'all') + '">전체</button>' +
-          '<button type="button" class="filter-btn" data-action="mm-scope" data-scope="self" aria-pressed="' + (mmScopeFilter === 'self') + '">🙋 본인 등록</button>' +
-          '<button type="button" class="filter-btn" data-action="mm-scope" data-scope="friend" aria-pressed="' + (mmScopeFilter === 'friend') + '">🤝 친구 등록</button>' +
+          '<button type="button" class="filter-btn" data-action="mm-scope" data-scope="self" aria-pressed="' + (mmScopeFilter === 'self') + '">🙋 본인</button>' +
+          '<button type="button" class="filter-btn" data-action="mm-scope" data-scope="friend" aria-pressed="' + (mmScopeFilter === 'friend') + '">🤝 친구</button>' +
           accessFilterBtn() +
         '</div>' +
         pendNote +
@@ -5626,7 +5641,7 @@
     var intro = (form.querySelector('[name="intro"]').value || '').trim();
     var idealType = (form.querySelector('[name="idealType"]').value || '').trim();
     var dealbreaker = (form.querySelector('[name="dealbreaker"]').value || '').trim();
-    var blurPhoto = form.querySelector('#f-blur') ? form.querySelector('#f-blur').checked : false;
+    var blurPhoto = true; /* 사진은 항상 흐리게 처리 (선택 불가) */
 
     var isEdit = !!editingEntryId;
     /* 친구 대신 소개(대리 등록) — renderForm과 동일한 판정: proxyRegisterMode 이거나, 주선자가 주선자 탭(formRole)으로 온 경우.
@@ -5767,6 +5782,8 @@
                   if (results[3]) { u.pinAuth = results[3]; delete u.pinHash; }
                   /* 승인 대기(보류/반려) 상태에서 수정·재제출 → 반려/보류 해제하고 다시 대기열로 */
                   if (isPending) { delete u.rejectedReason; delete u.rejectedAt; delete u.heldReason; delete u.heldAt; u.submittedAt = new Date().toISOString(); }
+                  /* 승인된 회원이 프로필을 직접 수정 → 관리자 리뷰 대기 표시 (관리자 본인 수정은 제외) */
+                  else if (!isAdminUnlocked) { u.editReviewAt = new Date().toISOString(); }
                   return u;
                 });
               };
@@ -5924,8 +5941,6 @@
       setVal('intro', entry.intro || '');
       setVal('idealType', entry.idealType || '');
       setVal('dealbreaker', entry.dealbreaker || '');
-      var blurCheck = form.querySelector('#f-blur');
-      if (blurCheck) blurCheck.checked = !!entry.blurPhoto;
       renderPhotoThumbs();
       updateCharCounts();
     }, 50);
@@ -6216,6 +6231,25 @@
       }).catch(function (err) { modalNotice('오류', '요청 실패: ' + (err.message || err)); });
     });
   }
+  /* 관리자: 프로필 수정 검토 완료 → editReviewAt 플래그 제거 (목록에서 사라짐) */
+  function handleEditReviewed(id) {
+    if (!isAdminUnlocked) return;
+    var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
+    if (!entry) return;
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var entries = (s.entries || []).map(function (e) {
+          if (e.id !== id) return e;
+          var c = JSON.parse(JSON.stringify(e)); delete c.editReviewAt; return c;
+        });
+        tx.update(stateRef, { entries: entries });
+      });
+    }).then(function () {
+      appendLog('admin', '관리자', '프로필 변경 검토 완료 · ' + entry.nickname);
+      return refreshNow();
+    }).catch(function (err) { modalNotice('오류', '처리 실패: ' + (err.message || err)); });
+  }
   function handleApproveDeactivate(id) {
     if (!isAdminUnlocked) return;
     var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
@@ -6400,8 +6434,8 @@
     var pend = ((currentState && currentState.pendingEntries) || []).find(function (e) { return e.id === id; });
     if (!pend) return;
     var nick = pend.nickname || '';
-    var dft = pend.isMatchmaker ? APPROVE_MSG_MM : APPROVE_MSG_DEFAULT;
-    modalMessage('신청 승인', nick + '님(' + (pend.isMatchmaker ? '주선자' : '일반 회원') + ')을 승인하고, 함께 보낼 안내 메시지를 남겨주세요. (비우면 메시지 없이 승인돼요)', '승인', 'approve', '', false, dft).then(function (welcome) {
+    var hint = pend.isMatchmaker ? APPROVE_MSG_MM : APPROVE_MSG_DEFAULT;
+    modalMessage('신청 승인', nick + '님(' + (pend.isMatchmaker ? '주선자' : '일반 회원') + ')을 승인해요. 필요하면 안내 메시지를 남길 수 있어요. (비워두면 메시지 없이 조용히 승인돼요)', '승인', 'approve', hint, false, '').then(function (welcome) {
       if (welcome === null || welcome === undefined) return; /* 취소 */
       welcome = (welcome || '').trim();
       db.runTransaction(function (tx) {
@@ -7602,6 +7636,7 @@
       else if (action === 'cancel-deactivate') handleCancelDeactivateReq(id);
       else if (action === 'set-status') handleSetAccountStatus(id, actionBtn.getAttribute('data-status'));
       else if (action === 'reactivate') handleReactivate(id);
+      else if (action === 'edit-reviewed') handleEditReviewed(id);
       else if (action === 'notify-connected') handleNotifyConnected(id);
       else if (action === 'del-tombstone') handleDeleteTombstone(id);
       else if (action === 'approve-request') handleApproveRequest(id);
@@ -7733,13 +7768,6 @@
     if (permCb) { setPermission(permCb.getAttribute('data-kind'), permCb.getAttribute('data-viewer'), permCb.getAttribute('data-target'), permCb.checked, permCb); return; }
     var secOpenCb = e.target.closest && e.target.closest('[data-secopen]');
     if (secOpenCb) { adminSecOpenMap()[secOpenCb.getAttribute('data-secopen')] = secOpenCb.checked; saveAdminSecOpen(); return; }
-    if (e.target.id === 'f-blur' && !e.target.checked) {
-      var blurCb = e.target;
-      modalConfirm('전체 공개 확인', '사진을 전체 공개할까요? 모든 회원이 요청 없이 바로 볼 수 있어요.', '전체 공개', 'danger').then(function (ok) {
-        if (!ok) blurCb.checked = true; /* 취소하면 다시 흐리게 */
-      });
-      return;
-    }
     if (e.target.id === 'acq-vcf') {
       handleAcqVcf(e.target.files && e.target.files[0]);
       e.target.value = '';
