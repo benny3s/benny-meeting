@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-256';
+  var APP_VERSION = '2026-09-11-257';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -5436,10 +5436,12 @@
   /* 명단 검색: 화면을 다시 그리지 않고 이미 렌더된 카드만 즉석에서 숨김/표시 (한글 조합 안전) */
   function applyListSearch() {
     var q = (listSearch || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    var tokens = q ? q.split(' ') : []; /* 공백으로 나눠 각 단어가 모두 포함되면 매칭(순서 무관) */
     var nodes = document.querySelectorAll('.roster-grid .pf-card[data-search], .compact-list .compact-row[data-search]');
     var shown = 0;
     for (var i = 0; i < nodes.length; i++) {
-      var match = !q || (nodes[i].getAttribute('data-search') || '').indexOf(q) >= 0;
+      var blob = nodes[i].getAttribute('data-search') || '';
+      var match = tokens.every(function (t) { return blob.indexOf(t) >= 0; });
       nodes[i].style.display = match ? '' : 'none';
       if (match) shown++;
     }
