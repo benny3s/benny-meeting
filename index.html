@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-253';
+  var APP_VERSION = '2026-09-11-254';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -893,6 +893,8 @@
   var ROOT_NAME = '베니';
   var listFilter = 'all';
   var ageSort = 'none'; /* 명단 나이 정렬: none | asc(오름차순·어린 순부터) | desc(내림차순·나이 많은 순부터) */
+  var searchOpen = false; /* 🔍 검색창 열림 여부 */
+  var listSearch = '';    /* 검색어(닉네임·지역·직장·소개·선호·비선호) */
   var listView = 'card'; /* 'card' | 'compact' */
   var activeTab = 'form';
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
@@ -3304,6 +3306,11 @@
     });
   }
 
+  /* 검색용 텍스트 묶음(소문자): 닉네임·지역·직장·소개·선호·비선호 */
+  function searchBlob(entry) {
+    return [entry.nickname, entry.region, entry.workplace, entry.intro, entry.idealType, entry.dealbreaker]
+      .filter(Boolean).join(' ').toLowerCase();
+  }
   function cardHtml(entry, num, state, detailMode) {
     var displayName = entry.nickname || entry.name || '';
     var thumb = cardThumb(entry);
@@ -3376,7 +3383,7 @@
       : '<button type="button" class="card-btn primary" data-action="request-contact" data-id="' + escapeHtml(entry.id) + '">💌 대화 신청</button>';
     var reqBtns = mineOrManaged ? '' : photoBtn + dateBtn;
     return (
-      '<article class="pf-card" data-id="' + escapeHtml(entry.id) + '">' +
+      '<article class="pf-card" data-id="' + escapeHtml(entry.id) + '" data-search="' + escapeHtml(searchBlob(entry)) + '">' +
         '<div class="pf-num">' + escapeHtml(formatUid(entry) || ('No. ' + String(num).padStart(3, '0'))) + '</div>' +
         photo +
         '<div class="pf-body">' +
@@ -3482,20 +3489,33 @@
     var ageBtn = '<button type="button" class="filter-btn" data-filter="age" aria-pressed="' + ageOn + '" title="눌러서 나이 오름차순 → 내림차순 → 해제"' +
       (ageOn ? ' style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;"' : '') + '>' +
       '나이' + (ageSort === 'asc' ? ' ▲' : (ageSort === 'desc' ? ' ▼' : '')) + '</button>';
+    var searchBtn = me
+      ? '<button type="button" class="filter-btn" data-action="search-toggle" aria-pressed="' + (searchOpen || !!listSearch) + '" title="닉네임·지역·소개 검색"' +
+        ((searchOpen || listSearch) ? ' style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;"' : '') + '>🔍</button>'
+      : '';
+    var searchRow = (me && searchOpen)
+      ? '<div class="search-row" style="margin-top:8px;display:flex;gap:6px;align-items:center;">' +
+          '<input type="text" id="list-search" value="' + escapeHtml(listSearch) + '" placeholder="🔍 닉네임 · 지역 · 소개 내용 검색" ' +
+            'style="flex:1;min-width:0;padding:8px 12px;border:1px solid var(--line);border-radius:999px;font-size:0.92rem;font-family:inherit;box-sizing:border-box;">' +
+          (listSearch ? '<button type="button" class="filter-btn" data-action="search-clear" style="flex:none;">✕</button>' : '') +
+        '</div>' +
+        '<div id="search-count" class="p-meta" style="margin-top:4px;color:var(--muted);"></div>'
+      : '';
     return (
       '<div class="list-toolbar">' +
         '<div class="summary"><strong>' + entries.length + '명</strong> <span style="font-size:0.82em;">남' + maleCount + '·여' + femaleCount + '</span>' + viewToggle + acqBtn + '</div>' +
         '<div class="filter-group">' +
-          '<button type="button" class="filter-btn" data-filter="all" aria-pressed="' + (listFilter === 'all') + '">전체</button>' +
-          '<button type="button" class="filter-btn" data-filter="gender" aria-pressed="' + (listFilter === 'male' || listFilter === 'female') + '" title="눌러서 남/여 전환"' +
+          '<button type="button" class="filter-btn" data-filter="gender" aria-pressed="' + (listFilter === 'male' || listFilter === 'female') + '" title="눌러서 남성 → 여성 → 전체"' +
             (listFilter === 'male' ? ' style="background:#D6EAF8;color:#2E6E8E;border-color:#AED6F1;font-weight:700;"'
               : listFilter === 'female' ? ' style="background:#FADBE7;color:#B3477A;border-color:#F3C4D6;font-weight:700;"' : '') + '>' +
             (listFilter === 'male' ? '👨 남성' : (listFilter === 'female' ? '👩 여성' : '성별')) + '</button>' +
           ageBtn +
           permBtns +
+          searchBtn +
           accessFilterBtn() +
         '</div>' +
       '</div>' +
+      searchRow +
       teaserCta +
       guide +
       body
@@ -3511,7 +3531,7 @@
       : '<div class="compact-thumb compact-thumb--empty" style="background:' + avatarColor(entry.id) + '">' + escapeHtml(initials(displayName)) + '</div>';
     var ageStr = entry.birthYear ? (String(entry.birthYear).slice(2) + '년생') : '-';
     return (
-      '<div class="compact-row" data-action="card-detail" data-id="' + escapeHtml(entry.id) + '">' +
+      '<div class="compact-row" data-action="card-detail" data-id="' + escapeHtml(entry.id) + '" data-search="' + escapeHtml(searchBlob(entry)) + '">' +
         photo +
         '<div class="compact-info">' +
           '<div class="compact-name">' + escapeHtml(displayName) + '</div>' +
@@ -3909,7 +3929,7 @@
             '</div>' +
             '<div class="row-2">' +
               '<div class="field"><label for="f-birthyear">생년 <span class="req">필수</span></label>' +
-                '<input type="number" id="f-birthyear" name="birthYear" min="1960" max="2010" placeholder="예: 1994" required></div>' +
+                '<input type="number" id="f-birthyear" name="birthYear" min="1900" max="2100" placeholder="예: 1994" required></div>' +
               '<div class="field"><label for="f-height">키 (cm) <span class="req">필수</span></label>' +
                 '<input type="number" id="f-height" name="height" min="130" max="220" placeholder="예: 168" required></div>' +
             '</div>' +
@@ -5405,9 +5425,23 @@
     for (var j = 0; j < ds.length; j++) { ds[j].open = anyClosed; }
   }
   /* ---- state & paint ---- */
+  /* 명단 검색: 화면을 다시 그리지 않고 이미 렌더된 카드만 즉석에서 숨김/표시 (한글 조합 안전) */
+  function applyListSearch() {
+    var q = (listSearch || '').trim().toLowerCase();
+    var nodes = document.querySelectorAll('.roster-grid .pf-card[data-search], .compact-list .compact-row[data-search]');
+    var shown = 0;
+    for (var i = 0; i < nodes.length; i++) {
+      var match = !q || (nodes[i].getAttribute('data-search') || '').indexOf(q) >= 0;
+      nodes[i].style.display = match ? '' : 'none';
+      if (match) shown++;
+    }
+    var cnt = document.getElementById('search-count');
+    if (cnt) cnt.textContent = q ? (nodes.length ? (shown + '명 검색됨' + (shown === 0 ? ' — 일치하는 회원이 없어요.' : '')) : '') : '';
+  }
   function paint(state) {
     currentState = state;
     document.getElementById('app').innerHTML = renderApp(state);
+    try { applyListSearch(); } catch (e) {} /* 검색어가 있으면 재적용 */
     try {
       var items = document.querySelectorAll('.admin-msg-item');
       for (var i = 0; i < items.length; i++) {
@@ -5730,6 +5764,10 @@
     }
     if (missing.length > 0) {
       modalNotice('입력 오류', '다음 항목을 채워주세요: ' + missing.join(', '));
+      return;
+    }
+    if (birthYear && (birthYear < 1900 || birthYear > 2100)) {
+      modalNotice('입력 오류', '생년은 1900~2100 사이로 입력해 주세요.');
       return;
     }
     if (proxy && !(currentUser && currentUser.id)) {
@@ -7568,13 +7606,29 @@
       if (sk) { adminSecOpenMap()[sk] = !secDetails.open; saveAdminSecOpen(); }
       /* return 하지 않음 → details 기본 토글 진행 */
     }
+    var searchToggle = e.target.closest('[data-action="search-toggle"]');
+    if (searchToggle) {
+      searchOpen = !searchOpen;
+      if (!searchOpen) listSearch = ''; /* 닫으면 검색어 초기화 */
+      paint(currentState);
+      if (searchOpen) { var si = document.getElementById('list-search'); if (si) si.focus(); }
+      return;
+    }
+    if (e.target.closest('[data-action="search-clear"]')) {
+      listSearch = '';
+      paint(currentState);
+      var si2 = document.getElementById('list-search'); if (si2) si2.focus();
+      return;
+    }
     var filterBtn = e.target.closest('[data-filter]');
     if (filterBtn) {
       var f = filterBtn.getAttribute('data-filter');
-      if (f === 'gender') { /* 성별 버튼: 남 ↔ 여 반복 (전체는 별도 '전체' 버튼으로) */
-        listFilter = (listFilter === 'male') ? 'female' : 'male';
+      if (f === 'gender') { /* 성별 버튼: 남성 → 여성 → 전체(해제) 순환 */
+        listFilter = (listFilter === 'male') ? 'female' : (listFilter === 'female' ? 'all' : 'male');
       } else if (f === 'age') { /* 나이 버튼: 오름차순 → 내림차순 → 해제 반복 */
         ageSort = (ageSort === 'none') ? 'asc' : (ageSort === 'asc' ? 'desc' : 'none');
+      } else if (f === 'photo' || f === 'contact') { /* 사진·대화 필터: 다시 누르면 해제 */
+        listFilter = (listFilter === f) ? 'all' : f;
       } else {
         listFilter = f;
       }
@@ -7796,6 +7850,7 @@
 
   function stripNonDigits(el) { var v = el.value.replace(/[^0-9]/g, ''); if (el.value !== v) el.value = v; }
   document.body.addEventListener('input', function (e) {
+    if (e.target.id === 'list-search') { listSearch = e.target.value; applyListSearch(); return; } /* paint 없이 즉시 필터 → 포커스·한글조합 유지 */
     if (e.target.hasAttribute && e.target.hasAttribute('data-numeric')) stripNonDigits(e.target);
     if (e.target.closest && e.target.closest('#entry-form')) saveDraft();
     if (e.target.id === 'f-intro' || e.target.id === 'f-idealtype' || e.target.id === 'f-dealbreaker') updateCharCounts();
