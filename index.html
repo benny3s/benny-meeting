@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-265';
+  var APP_VERSION = '2026-09-11-266';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2433,7 +2433,7 @@
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
           '<button type="button" class="card-btn primary" id="modal-ok">로그인</button>' +
         '</div>' +
-        '<p style="text-align:center;margin:10px 0 0;font-size:0.85rem;"><a href="#" id="login-forgot" style="color:var(--muted);text-decoration:underline;">PIN을 잊으셨나요? 관리자에게 문의</a></p>'
+        '<p style="text-align:center;margin:10px 0 0;font-size:0.85rem;"><a href="#" id="login-forgot" style="color:var(--muted);text-decoration:underline;">PIN을 잊으셨나요? 비밀번호 리셋 요청</a></p>'
       );
       overlay.classList.add('login-modal');
       var searchInput = overlay.querySelector('#modal-login-search');
@@ -2469,7 +2469,7 @@
         }
       }
       overlay.addEventListener('click', function (e) {
-        if (e.target.closest('#login-forgot')) { e.preventDefault(); closeModal(overlay); resolve(null); openGuestMsgModal(); return; }
+        if (e.target.closest('#login-forgot')) { e.preventDefault(); closeModal(overlay); resolve(null); openGuestMsgModal({ title: '🔑 비밀번호(PIN) 리셋 요청', intro: 'PIN을 잊으셨다면 리셋을 요청해 주세요. 관리자가 확인 후 새 PIN을 안내드려요. 본인 확인을 위해 <b>닉네임</b>과 <b>전화번호</b>를 정확히 남겨주세요.', prefill: '비밀번호(PIN) 리셋을 요청합니다. (닉네임: )' }); return; }
         var lb = e.target.closest('[data-lmode]');
         if (lb) { mode = lb.getAttribute('data-lmode'); selectedId = ''; syncToggle(); renderList(); }
       });
@@ -2907,14 +2907,15 @@
       });
     });
   }
-  /* 비로그인 Q&A: 작성자 이름 + 내용 → 게스트 문의로 관리자에게 전달 */
-  function openGuestMsgModal() {
+  /* 비로그인 Q&A: 작성자 이름 + 내용 → 게스트 문의로 관리자에게 전달. opts로 제목·안내·기본문구 지정(예: 비밀번호 리셋 요청) */
+  function openGuestMsgModal(opts) {
+    opts = opts || {};
     var ov = openModal(
-      '<h3>💬 Q&amp;A · 관리자에게 문의</h3>' +
-      '<p class="modal-msg" style="margin:0 0 8px;">로그인 없이도 문의할 수 있어요. 답변드릴 수 있게 연락처를 남겨주세요.</p>' +
+      '<h3>' + (opts.title || '💬 Q&amp;A · 관리자에게 문의') + '</h3>' +
+      '<p class="modal-msg" style="margin:0 0 8px;">' + (opts.intro || '로그인 없이도 문의할 수 있어요. 답변드릴 수 있게 연락처를 남겨주세요.') + '</p>' +
       '<input type="text" class="modal-input" id="guest-name" maxlength="30" placeholder="이름/닉네임 (예: 홍길동)">' +
       '<input type="tel" class="modal-input" id="guest-phone" inputmode="numeric" maxlength="13" placeholder="전화번호 (예: 01012345678)" style="margin-top:8px;">' +
-      '<textarea class="modal-input" id="guest-text" rows="4" maxlength="300" placeholder="궁금한 점이나 건의사항을 남겨주세요" style="margin-top:8px;"></textarea>' +
+      '<textarea class="modal-input" id="guest-text" rows="4" maxlength="300" placeholder="궁금한 점이나 건의사항을 남겨주세요" style="margin-top:8px;">' + escapeHtml(opts.prefill || '') + '</textarea>' +
       '<p id="guest-warn" class="modal-msg" style="color:var(--accent);margin:4px 0 0;font-size:0.82rem;" hidden>이름·전화번호·내용을 모두 입력해주세요. (전화번호는 01012345678 형식)</p>' +
       '<p class="modal-msg" style="color:var(--muted);margin:6px 0 0;font-size:0.78rem;">' + ICON_LOCK + ' 전화번호는 암호화되어 관리자만 확인할 수 있어요.</p>' +
       '<div class="modal-actions">' +
@@ -3694,7 +3695,7 @@
             '<button type="button" class="card-btn" id="pick-referrer" style="width:100%;box-sizing:border-box;margin-top:6px;">👥 회원 목록에서 선택</button>' +
             '<span class="hint">어떻게 알게 됐는지 적어주세요 (소개자·경로 등). ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
           '<div class="field"><label for="f-pin">개인 PIN <span class="req">필수</span></label>' +
-            '<input type="password" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8" placeholder="숫자 4~8자리" required autocomplete="new-password">' +
+            '<input type="password" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{6,10}" maxlength="10" placeholder="숫자 6~10자리" required autocomplete="new-password">' +
             '<span class="hint">로그인할 때 필요해요.</span></div>' +
           '<div class="consent-box"><label class="consent-label"><input type="checkbox" id="f-consent"> <span>개인정보 수집 및 이용에 동의합니다.</span></label>' +
             '<p class="consent-detail">수집 항목: 닉네임, 실명, 연락처, 알게 된 경로 · 목적: 주선자 관리·연락 · 동의 거부 시 등록 불가.</p></div>' +
@@ -3720,7 +3721,7 @@
     if (!referrerText) missing.push('알게 된 경로');
     if (!pin) missing.push('개인 PIN');
     if (missing.length) return modalNotice('입력 오류', '다음을 채워주세요: ' + missing.join(', '));
-    if (pin.length < 4) return modalNotice('입력 오류', 'PIN은 4자리 이상이어야 해요.');
+    if (!/^[0-9]{6,10}$/.test(pin)) return modalNotice('입력 오류', 'PIN은 숫자 6~10자리로 정해주세요.');
     if (!/^01[0-9]{8,9}$/.test(contact)) return modalNotice('입력 오류', '전화번호는 01012345678 형식으로 입력해주세요.');
     var consent = document.getElementById('f-consent');
     if (!consent || !consent.checked) return modalNotice('동의 필요', '개인정보 수집 및 이용에 동의해 주세요.');
@@ -3975,9 +3976,9 @@
               : (function () {
                   var loggedIn = !isEdit && !!currentUser; /* 로그인 상태로 본인 프로필 작성 시 PIN 재입력 생략 */
                   var pinLabelExtra = isEdit ? '<span class="opt">(비우면 유지)</span>' : (loggedIn ? '<span class="opt">(비우면 로그인 PIN 사용)</span>' : '<span class="req">필수</span>');
-                  var pinAttrs = isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : (loggedIn ? ' class="keep-ph" placeholder="(비우면 로그인 PIN 그대로 사용)"' : ' placeholder="숫자 4~8자리" required');
+                  var pinAttrs = isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : (loggedIn ? ' class="keep-ph" placeholder="(비우면 로그인 PIN 그대로 사용)"' : ' placeholder="숫자 6~10자리" required');
                   return '<div class="field"><label for="f-pin">개인 PIN ' + pinLabelExtra + '</label>' +
-                    '<input type="password" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8" autocomplete="new-password"' + pinAttrs + '>' +
+                    '<input type="password" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{6,10}" maxlength="10" autocomplete="new-password"' + pinAttrs + '>' +
                     '<span class="hint">나중에 본인이 신청을 취소하거나 대화를 신청할 때 필요해요.</span></div>';
                 })()) +
             exampleTip +
@@ -5812,11 +5813,12 @@
     }
     if (proxy && !referrerText) referrerText = '주선자: ' + ((currentUser && currentUser.nickname) || '');
     if (ownerByMM && !referrerText) referrerText = '주선자 본인';
-    if (!isEdit && !managedCreate && !pin && currentUser && currentUser.pin) pin = currentUser.pin; /* 로그인(일반) 상태 본인 프로필: 기존 PIN 그대로 사용 (주선자 관리 프로필은 PIN 없음) */
-    if (pin && pin.length < 4) {
-      modalNotice('입력 오류', 'PIN은 4자리 이상이어야 해요.');
+    /* 사용자가 새로 '입력한' PIN만 6~10자리 검증 (기존 회원이 재사용/유지하는 값은 아래에서 대입되므로 제외) */
+    if (pin && !/^[0-9]{6,10}$/.test(pin)) {
+      modalNotice('입력 오류', 'PIN은 숫자 6~10자리로 정해주세요.');
       return;
     }
+    if (!isEdit && !managedCreate && !pin && currentUser && currentUser.pin) pin = currentUser.pin; /* 로그인(일반) 상태 본인 프로필: 기존 PIN 그대로 사용 (주선자 관리 프로필은 PIN 없음) */
     if (contact && !/^01[0-9]{8,9}$/.test(contact)) {
       modalNotice('입력 오류', '전화번호는 01012345678 형식으로 입력해주세요.');
       return;
