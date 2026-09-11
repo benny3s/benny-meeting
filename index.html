@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-263';
+  var APP_VERSION = '2026-09-11-264';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1719,7 +1719,7 @@
     var isPw = !!opts.password;
     var inputHtml = isPw
       ? '<input type="password" class="modal-input" id="modal-pin-input" placeholder="비밀번호" maxlength="64" autocomplete="off">'
-      : '<input type="text" inputmode="numeric" class="modal-input" id="modal-pin-input" data-numeric placeholder="숫자 4~8자리" maxlength="12">';
+      : '<input type="password" inputmode="numeric" class="modal-input" id="modal-pin-input" data-numeric placeholder="숫자 4~8자리" maxlength="12" autocomplete="off">';
     return new Promise(function (resolve) {
       var overlay = openModal(
         '<h3>' + escapeHtml(title) + '</h3>' +
@@ -2428,7 +2428,7 @@
         '<p class="modal-msg" id="login-mode-msg"></p>' +
         '<input type="text" class="modal-input" id="modal-login-search" placeholder="🔍 고유번호 또는 닉네임 검색" autocomplete="off">' +
         '<div class="login-list" id="modal-login-list"></div>' +
-        '<input type="text" inputmode="numeric" class="modal-input" id="modal-login-pin" data-numeric placeholder="개인 PIN" style="margin-top:10px;">' +
+        '<input type="password" inputmode="numeric" class="modal-input" id="modal-login-pin" data-numeric placeholder="개인 PIN" style="margin-top:10px;" autocomplete="off">' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
           '<button type="button" class="card-btn primary" id="modal-ok">로그인</button>' +
@@ -3692,7 +3692,7 @@
             '<button type="button" class="card-btn" id="pick-referrer" style="width:100%;box-sizing:border-box;margin-top:6px;">👥 회원 목록에서 선택</button>' +
             '<span class="hint">어떻게 알게 됐는지 적어주세요 (소개자·경로 등). ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
           '<div class="field"><label for="f-pin">개인 PIN <span class="req">필수</span></label>' +
-            '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8" placeholder="숫자 4~8자리" required>' +
+            '<input type="password" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8" placeholder="숫자 4~8자리" required autocomplete="new-password">' +
             '<span class="hint">로그인할 때 필요해요.</span></div>' +
           '<div class="consent-box"><label class="consent-label"><input type="checkbox" id="f-consent"> <span>개인정보 수집 및 이용에 동의합니다.</span></label>' +
             '<p class="consent-detail">수집 항목: 닉네임, 실명, 연락처, 알게 된 경로 · 목적: 주선자 관리·연락 · 동의 거부 시 등록 불가.</p></div>' +
@@ -3975,7 +3975,7 @@
                   var pinLabelExtra = isEdit ? '<span class="opt">(비우면 유지)</span>' : (loggedIn ? '<span class="opt">(비우면 로그인 PIN 사용)</span>' : '<span class="req">필수</span>');
                   var pinAttrs = isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : (loggedIn ? ' class="keep-ph" placeholder="(비우면 로그인 PIN 그대로 사용)"' : ' placeholder="숫자 4~8자리" required');
                   return '<div class="field"><label for="f-pin">개인 PIN ' + pinLabelExtra + '</label>' +
-                    '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8"' + pinAttrs + '>' +
+                    '<input type="password" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,8}" maxlength="8" autocomplete="new-password"' + pinAttrs + '>' +
                     '<span class="hint">나중에 본인이 신청을 취소하거나 대화를 신청할 때 필요해요.</span></div>';
                 })()) +
             exampleTip +
@@ -5648,8 +5648,8 @@
       var overlay = openModal(
         '<h3>' + escapeHtml(title) + '</h3>' +
         '<p class="modal-msg">' + escapeHtml(message) + '</p>' +
-        '<input type="text" inputmode="numeric" class="modal-input" id="np1" data-numeric maxlength="8" placeholder="PIN (숫자 4~8자리)">' +
-        '<input type="text" inputmode="numeric" class="modal-input" id="np2" data-numeric maxlength="8" placeholder="PIN 확인" style="margin-top:8px;">' +
+        '<input type="password" inputmode="numeric" class="modal-input" id="np1" data-numeric maxlength="8" placeholder="PIN (숫자 4~8자리)" autocomplete="new-password">' +
+        '<input type="password" inputmode="numeric" class="modal-input" id="np2" data-numeric maxlength="8" placeholder="PIN 확인" style="margin-top:8px;" autocomplete="new-password">' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
           '<button type="button" class="card-btn primary" id="modal-ok">' + escapeHtml(okLabel || '변경') + '</button>' +
