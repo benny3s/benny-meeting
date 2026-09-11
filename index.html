@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-259';
+  var APP_VERSION = '2026-09-11-260';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3253,6 +3253,7 @@
   /* ---- rendering ---- */
   /* ---- 사진: 목록은 썸네일, 원본은 photos/{id} 문서에서 필요할 때 로드 ---- */
   var FULL_MAX = 1080, FULL_Q = 0.82;   /* 원본(고화질) — 확대 대응. 3장이 한 문서(1MB)에 담기므로 과하지 않게 */
+  var PHOTO_MAX_BYTES = 300 * 1024;     /* 사진 1장당 저장(base64) 상한 — 3장이라도 900KB로 1MB 한계 안전 */
   var THUMB_MAX = 220, THUMB_Q = 0.5;  /* 목록 썸네일(초경량) */
   /* 블러(승인 전) 사진은 썸네일 자체를 아주 저해상도로 생성 → 바이트를 빼가도 원본 식별 불가.
      화면에선 어차피 CSS 블러가 덮으므로 티가 안 남 (방법 A 롱프레스 차단과 병행) */
@@ -7917,7 +7918,15 @@
         var canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        cb(canvas.toDataURL('image/jpeg', quality));
+        /* 저장 용량 상한: base64 결과가 목표(300KB)를 넘으면 같은 캔버스(원본)에서 품질만 낮춰 재인코딩.
+           원본에서 매번 1회 압축이라 2세대 손실 없음. 해상도(1080)는 유지. */
+        var out = canvas.toDataURL('image/jpeg', quality);
+        var q = quality;
+        while (out.length > PHOTO_MAX_BYTES && q > 0.4) {
+          q = Math.round((q - 0.05) * 100) / 100;
+          out = canvas.toDataURL('image/jpeg', q);
+        }
+        cb(out);
       };
       img.src = ev.target.result;
     };
