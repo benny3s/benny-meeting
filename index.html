@@ -888,7 +888,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-269';
+  var APP_VERSION = '2026-09-11-270';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2436,7 +2436,7 @@
         '<div class="login-list" id="modal-login-list"></div>' +
         '<div style="position:relative;margin-top:10px;">' +
           '<input type="password" inputmode="numeric" class="modal-input" id="modal-login-pin" data-numeric placeholder="개인 PIN" style="margin-top:0;padding-right:46px;" autocomplete="off">' +
-          '<button type="button" id="login-pin-eye" aria-label="PIN 표시/숨기기" title="표시/숨기기" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.15rem;padding:6px;line-height:1;">👁️</button>' +
+          '<button type="button" id="login-pin-eye" aria-label="PIN 표시/숨기기" title="표시/숨기기" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.15rem;padding:6px;line-height:1;">👀</button>' +
         '</div>' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
@@ -2482,7 +2482,7 @@
         if (e.target.closest('#login-pin-eye')) {
           var pinI = overlay.querySelector('#modal-login-pin');
           var eyeB = e.target.closest('#login-pin-eye');
-          if (pinI) { var reveal = pinI.type === 'password'; pinI.type = reveal ? 'text' : 'password'; eyeB.textContent = reveal ? '🙈' : '👁️'; pinI.focus(); }
+          if (pinI) { var reveal = pinI.type === 'password'; pinI.type = reveal ? 'text' : 'password'; eyeB.textContent = reveal ? '🙈' : '👀'; pinI.focus(); }
           return;
         }
         var lb = e.target.closest('[data-lmode]');
