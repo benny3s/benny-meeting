@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-234';
+  var APP_VERSION = '2026-09-11-235';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1131,7 +1131,7 @@
     var loading = openModal('<h3>적용 중…</h3><p class="modal-msg">번호 ' + numbers.length + '개로 지인 필터를 적용하고 있어요. 잠시만요…</p>');
     callFn('setAcqFilter', { entryId: a.entryId, pin: a.pin, numbers: numbers, mode: mode }).then(function (r) {
       var c = (r && r.data && r.data.count) || 0;
-      refreshMyHidden(function () { closeModal(loading); paint(currentState); modalNotice('적용 완료', '지인 필터에 번호 ' + c + '개가 등록됐어요. 해당하는 회원과는 서로 명단에서 숨겨져요.'); });
+      refreshMyHidden(function () { closeModal(loading); refreshAcqPanel(); paint(currentState); modalNotice('적용 완료', '지인 필터에 번호 ' + c + '개가 등록됐어요. 해당하는 회원과는 서로 명단에서 숨겨져요.'); });
     }).catch(function (e) { closeModal(loading); modalNotice('오류', '필터 적용 실패: ' + ((e && e.message) || e)); });
   }
   function chooseAcqModeThenApply(numbers) {
@@ -1183,9 +1183,10 @@
     var a = acqAuth(); if (!a) return;
     modalConfirm('지인 필터 전체 삭제', '내가 등록한 지인 필터를 모두 지울까요? 다만 상대가 나를 필터에 걸어둔 경우엔, 삭제 후에도 서로 보이지 않을 수 있어요.', '전체 삭제', 'danger').then(function (ok) {
       if (!ok) return;
+      var loading = openModal('<h3>삭제 중…</h3><p class="modal-msg">지인 필터를 삭제하고 있어요. 잠시만요…</p>');
       callFn('clearAcqFilter', { entryId: a.entryId, pin: a.pin }).then(function () {
-        refreshMyHidden(function () { paint(currentState); modalNotice('삭제 완료', '지인 필터를 모두 삭제했어요.'); });
-      }).catch(function (e) { modalNotice('오류', '삭제 실패: ' + ((e && e.message) || e)); });
+        refreshMyHidden(function () { closeModal(loading); refreshAcqPanel(); paint(currentState); modalNotice('삭제 완료', '지인 필터를 모두 삭제했어요.'); });
+      }).catch(function (e) { closeModal(loading); modalNotice('오류', '삭제 실패: ' + ((e && e.message) || e)); });
     });
   }
   function acqFilterSectionHtml() {
@@ -1200,13 +1201,12 @@
       '</div></div>';
   }
   /* 명단 툴바의 "🙈 지인 필터" 버튼이 여는 패널 (모달). 내부 버튼(#acq-vcf/#acq-manual/#acq-clear)은 전역 위임 핸들러가 처리 */
-  function openAcqFilterPanel() {
-    if (!acqAuth()) { modalNotice('로그인 필요', '먼저 로그인해주세요.'); return; }
-    var applied = acqCounts.filter || 0, hidden = acqCounts.hidden || 0;
-    var inner =
-      '<p class="modal-msg" style="text-align:left;margin-bottom:8px;">아는 사람과 <b>마주치기 방지</b> — 등록한 번호의 회원은 내 명단에서 숨겨지고, <b>상대 명단에서도 내가 숨겨져요(서로 안 보임)</b>.</p>' +
+  var _acqPanelOv = null;
+  function acqPanelBodyHtml() {
+    var applied = acqCounts.filter || 0;
+    return '<p class="modal-msg" style="text-align:left;margin-bottom:8px;">아는 사람과 <b>마주치기 방지</b> — 등록한 번호의 회원은 내 명단에서 숨겨지고, <b>상대 명단에서도 내가 숨겨져요(서로 안 보임)</b>.</p>' +
       '<div style="background:var(--gold-soft);border:1px solid var(--gold);border-radius:12px;padding:10px 12px;margin-bottom:8px;">' +
-        '<div style="font-weight:700;">📇 현재 적용: ' + applied + '개' + (hidden ? ' · 🙈 ' + hidden + '명 숨김 중' : '') + '</div>' +
+        '<div style="font-weight:700;">📇 현재 적용된 번호: ' + applied + '개</div>' +
         (applied ? '' : '<div class="sub" style="margin:2px 0 0;">아직 등록한 번호가 없어요. 아래에서 추가하면 아는 사람과 서로 안 보여요.</div>') +
       '</div>' +
       '<p class="sub" style="text-align:left;margin:0 0 10px;">🔒 <b>보안</b> — 올린 번호는 서버에서 바로 <b>지문(HMAC)으로만 변환·저장</b>되고 원본 번호는 저장하지 않아요. 관리자도 누구 번호인지 알 수 없고, 상대에게도 공개되지 않아요. (마주치기 방지 매칭에만 사용)</p>' +
@@ -1216,10 +1216,17 @@
         '<button type="button" class="card-btn" id="acq-guide" style="background:transparent;border:1px dashed var(--line);color:var(--muted);">📖 연락처 파일 내보내는 방법 (안드로이드·아이폰)</button>' +
         '<button type="button" class="card-btn danger" id="acq-clear">🔄 필터 리셋 (전체 삭제)</button>' +
       '</div>';
-    var ov = openModal('<h3>🙈 지인 필터</h3>' + inner + '<div class="modal-actions"><button type="button" class="card-btn" id="modal-cancel">닫기</button></div>');
-    ov.querySelector('#acq-guide').addEventListener('click', function () { openAcqGuide(); });
-    ov.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(ov); });
-    ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(ov); });
+  }
+  function bindAcqPanel(ov) { var g = ov.querySelector('#acq-guide'); if (g) g.addEventListener('click', function () { openAcqGuide(); }); }
+  function refreshAcqPanel() { if (_acqPanelOv) { var b = _acqPanelOv.querySelector('#acq-panel-body'); if (b) { b.innerHTML = acqPanelBodyHtml(); bindAcqPanel(_acqPanelOv); } } }
+  function openAcqFilterPanel() {
+    if (!acqAuth()) { modalNotice('로그인 필요', '먼저 로그인해주세요.'); return; }
+    var ov = openModal('<h3>🙈 지인 필터</h3><div id="acq-panel-body">' + acqPanelBodyHtml() + '</div><div class="modal-actions"><button type="button" class="card-btn" id="modal-cancel">닫기</button></div>');
+    _acqPanelOv = ov;
+    bindAcqPanel(ov);
+    function close() { _acqPanelOv = null; closeModal(ov); }
+    ov.querySelector('#modal-cancel').addEventListener('click', close);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
   }
   /* 연락처를 vcf(연락처 파일)로 내보내는 방법 — 안드로이드/아이폰 안내 */
   function openAcqGuide() {
