@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-262';
+  var APP_VERSION = '2026-09-11-263';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1637,13 +1637,17 @@
   }
 
   function decryptWithAdmin(privateKey, encObj) {
-    return crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, b64decode(encObj.wrappedKey)).then(function (rawAesKey) {
-      return crypto.subtle.importKey('raw', rawAesKey, { name: 'AES-GCM' }, false, ['decrypt']).then(function (aesKey) {
-        var iv = new Uint8Array(b64decode(encObj.iv));
-        return crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, aesKey, b64decode(encObj.ciphertext));
+    /* b64decode(atob) 등은 데이터가 손상되면 동기 예외를 던짐 → Promise로 감싸 항상 거부(reject)로 전달(호출부 .catch에서 처리) */
+    return Promise.resolve().then(function () {
+      if (!encObj || !encObj.wrappedKey || !encObj.iv || !encObj.ciphertext) throw new Error('암호문 형식 오류');
+      return crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, b64decode(encObj.wrappedKey)).then(function (rawAesKey) {
+        return crypto.subtle.importKey('raw', rawAesKey, { name: 'AES-GCM' }, false, ['decrypt']).then(function (aesKey) {
+          var iv = new Uint8Array(b64decode(encObj.iv));
+          return crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, aesKey, b64decode(encObj.ciphertext));
+        });
+      }).then(function (plainBuf) {
+        return JSON.parse(textDec.decode(plainBuf));
       });
-    }).then(function (plainBuf) {
-      return JSON.parse(textDec.decode(plainBuf));
     });
   }
 
@@ -3558,6 +3562,7 @@
   }
 
   function handleCardDetail(id) {
+   try {
     var state = currentState;
     var entry = (state.entries || []).find(function (e) { return e.id === id; });
     if (!entry) return;
@@ -3576,6 +3581,9 @@
       var btn = e.target.closest('[data-action]');
       if (btn && closeActions.indexOf(btn.getAttribute('data-action')) >= 0) closeModal(overlay);
     });
+   } catch (err) {
+    try { modalNotice('오류', '프로필을 여는 중 문제가 생겼어요: ' + (err && err.message || err)); } catch (e2) {}
+   }
   }
 
   /* 회원 상세 팝업의 "알람 설정" 값을 pushTokens/{id} 문서에서 조회해 채움 (관리자용) */
@@ -7468,6 +7476,7 @@
   }
 
   function handleDetail(id) {
+   try {
     var state = currentState;
     var entry = state.entries.find(function (e) { return e.id === id; });
     if (!entry) return;
@@ -7514,6 +7523,9 @@
       var rnEl = document.getElementById('detail-realname');
       if (rnEl && !entry.realNameEnc) rnEl.textContent = '(없음)';
     }
+   } catch (err) {
+    try { modalNotice('오류', '상세 정보를 여는 중 문제가 생겼어요: ' + (err && err.message || err)); } catch (e2) {}
+   }
   }
 
   /* 관리자가 회원 PIN을 새로 재설정 (원본 열람 불가한 기존 회원용) */
