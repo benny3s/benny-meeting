@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-260';
+  var APP_VERSION = '2026-09-11-261';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -7909,22 +7909,30 @@
     reader.onload = function (ev) {
       var img = new Image();
       img.onload = function () {
-        var w = img.width, h = img.height;
-        if (w > maxW || h > maxH) {
-          var ratio = Math.min(maxW / w, maxH / h);
-          w = Math.round(w * ratio);
-          h = Math.round(h * ratio);
+        var baseW = img.width, baseH = img.height;
+        if (baseW > maxW || baseH > maxH) {
+          var ratio = Math.min(maxW / baseW, maxH / baseH);
+          baseW = Math.round(baseW * ratio);
+          baseH = Math.round(baseH * ratio);
         }
-        var canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        /* 저장 용량 상한: base64 결과가 목표(300KB)를 넘으면 같은 캔버스(원본)에서 품질만 낮춰 재인코딩.
-           원본에서 매번 1회 압축이라 2세대 손실 없음. 해상도(1080)는 유지. */
-        var out = canvas.toDataURL('image/jpeg', quality);
-        var q = quality;
-        while (out.length > PHOTO_MAX_BYTES && q > 0.4) {
-          q = Math.round((q - 0.05) * 100) / 100;
+        /* 저장 용량 상한 보장: 목표(300KB) 이하가 될 때까지
+           ① 원본 캔버스에서 품질을 0.82→0.45로 낮춰 재인코딩(해상도 유지, 2세대 손실 없음)
+           ② 그래도 크면 해상도를 15%씩 줄여 재시도 (노이즈 많은 극단적 사진 대비) */
+        var out = null, scale = 1;
+        for (var attempt = 0; attempt < 7; attempt++) {
+          var w = Math.max(1, Math.round(baseW * scale));
+          var h = Math.max(1, Math.round(baseH * scale));
+          var canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          var q = quality;
           out = canvas.toDataURL('image/jpeg', q);
+          while (out.length > PHOTO_MAX_BYTES && q > 0.45) {
+            q = Math.round((q - 0.05) * 100) / 100;
+            out = canvas.toDataURL('image/jpeg', q);
+          }
+          if (out.length <= PHOTO_MAX_BYTES) break;
+          scale *= 0.85;
         }
         cb(out);
       };
