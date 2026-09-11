@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-267';
+  var APP_VERSION = '2026-09-11-268';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2428,7 +2428,10 @@
         '<p class="modal-msg" id="login-mode-msg"></p>' +
         '<input type="text" class="modal-input" id="modal-login-search" placeholder="🔍 고유번호 또는 닉네임 검색" autocomplete="off">' +
         '<div class="login-list" id="modal-login-list"></div>' +
-        '<input type="text" inputmode="numeric" class="modal-input" id="modal-login-pin" data-numeric placeholder="개인 PIN" style="margin-top:10px;" autocomplete="off">' +
+        '<div style="position:relative;margin-top:10px;">' +
+          '<input type="password" inputmode="numeric" class="modal-input" id="modal-login-pin" data-numeric placeholder="개인 PIN" style="margin-top:0;padding-right:46px;" autocomplete="off">' +
+          '<button type="button" id="login-pin-eye" aria-label="PIN 표시/숨기기" title="표시/숨기기" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.15rem;padding:6px;line-height:1;">👁️</button>' +
+        '</div>' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
           '<button type="button" class="card-btn primary" id="modal-ok">로그인</button>' +
@@ -2470,6 +2473,12 @@
       }
       overlay.addEventListener('click', function (e) {
         if (e.target.closest('#login-forgot')) { e.preventDefault(); closeModal(overlay); resolve(null); openGuestMsgModal({ title: '🔑 비밀번호(PIN) 리셋 요청', intro: 'PIN을 잊으셨다면 리셋을 요청해 주세요. 관리자가 확인 후 새 PIN을 안내드려요. 본인 확인을 위해 <b>닉네임</b>과 <b>전화번호</b>를 정확히 남겨주세요.', prefill: '비밀번호(PIN) 리셋을 요청합니다. (닉네임: )' }); return; }
+        if (e.target.closest('#login-pin-eye')) {
+          var pinI = overlay.querySelector('#modal-login-pin');
+          var eyeB = e.target.closest('#login-pin-eye');
+          if (pinI) { var reveal = pinI.type === 'password'; pinI.type = reveal ? 'text' : 'password'; eyeB.textContent = reveal ? '🙈' : '👁️'; pinI.focus(); }
+          return;
+        }
         var lb = e.target.closest('[data-lmode]');
         if (lb) { mode = lb.getAttribute('data-lmode'); selectedId = ''; syncToggle(); renderList(); }
       });
