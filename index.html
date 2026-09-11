@@ -888,7 +888,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-275';
+  var APP_VERSION = '2026-09-12-276';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -920,13 +920,24 @@
     return v ? ' open' : '';
   }
   function adminSecOrder() {
-    if (_adminSecOrder === null) { try { _adminSecOrder = JSON.parse(localStorage.getItem('adminSecOrder')) || []; } catch (e) { _adminSecOrder = []; } }
+    /* 순서는 서버(app/state.adminSecOrder)에 저장 → 모든 기기 공통. 없으면 이 기기 localStorage 폴백 */
+    var src = null;
+    if (currentState && Array.isArray(currentState.adminSecOrder)) src = currentState.adminSecOrder;
+    else {
+      if (_adminSecOrder === null) { try { _adminSecOrder = JSON.parse(localStorage.getItem('adminSecOrder')) || []; } catch (e) { _adminSecOrder = []; } }
+      src = _adminSecOrder;
+    }
     /* 저장된 순서(알려진 키만) + 빠진 기본 키를 뒤에 보충 → 새 섹션도 자동 노출 */
-    var known = _adminSecOrder.filter(function (k) { return DEFAULT_SEC_ORDER.indexOf(k) >= 0; });
+    var known = (src || []).filter(function (k) { return DEFAULT_SEC_ORDER.indexOf(k) >= 0; });
     DEFAULT_SEC_ORDER.forEach(function (k) { if (known.indexOf(k) < 0) known.push(k); });
     return known;
   }
-  function saveAdminSecOrder(arr) { _adminSecOrder = arr.slice(); try { localStorage.setItem('adminSecOrder', JSON.stringify(_adminSecOrder)); } catch (e) {} }
+  function saveAdminSecOrder(arr) {
+    _adminSecOrder = arr.slice();
+    if (currentState) currentState.adminSecOrder = arr.slice(); /* 즉시 화면 반영 */
+    try { localStorage.setItem('adminSecOrder', JSON.stringify(_adminSecOrder)); } catch (e) {}
+    try { stateRef.update({ adminSecOrder: arr.slice() }).catch(function () {}); } catch (e) {} /* 서버 저장(모든 기기 공통) */
+  }
   function testAccountsShown() { return false; } /* 하위호환(더 이상 관리자 표시 토글 없음) */
   /* 테스트 계정끼리는 서로 보이게 → 테스트 계정으로 로그인 시 명단에서 다른 테스트 계정도 보여 요청 가능 */
   function meIsTest() { var me = currentUser && findMyEntry(currentState); return !!(me && me.testAccount && !me.deactivated); }
@@ -2380,6 +2391,9 @@
       if (!raw) return;
       var u = JSON.parse(raw);
       if (!u || !u.id) return;
+      /* 보관(비활성) 계정이면 저장된 세션을 폐기하고 로그인 해제 (보관 후에도 세션 잔류로 앱을 쓰던 문제 방지) */
+      var meNow = ((state && state.entries) || []).find(function (e) { return e.id === u.id; });
+      if (meNow && meNow.deactivated) { try { localStorage.removeItem('meetUser'); sessionStorage.removeItem('meetUser'); } catch (e2) {} currentUser = null; return; }
       /* 저장된 로그인은 그대로 복원. (예전엔 state에 없으면 지워버려서, 로딩이 늦거나
          비어있을 때 로그인이 자꾸 풀렸음) 계정이 실제로 삭제된 경우엔 '내 정보 없음'으로 보이고
          본인이 다시 로그인/로그아웃 하면 됨. */
@@ -3083,6 +3097,8 @@
     db.runTransaction(function (tx) {
       return tx.get(stateRef).then(function (doc) {
         var s = doc.data();
+        var target = (s.entries || []).find(function (e) { return e.id === entryId; });
+        if (target && target.deactivated) return; /* 보관 계정은 접속 시각·로그를 갱신하지 않음 (세션 잔류로 인한 유령 접속 방지) */
         var changed = false, nick = '';
         var entries = (s.entries || []).map(function (e) {
           if (e.id === entryId) {
@@ -6975,7 +6991,9 @@
         var entries = (s.entries || []).map(function (e) {
           if (e.id !== id) return e;
           var c = JSON.parse(JSON.stringify(e));
-          if (makeTest) c.testAccount = true; else delete c.testAccount;
+          /* 상호배타: 테스트로 지정하면 보관 플래그 제거 (동시 설정 방지) */
+          if (makeTest) { c.testAccount = true; delete c.deactivated; delete c.deactivatedReason; delete c.deactivatedAt; delete c.deactivateRequested; delete c.deactivateReqAt; delete c.deactivateReason; }
+          else delete c.testAccount;
           return c;
         });
         tx.update(stateRef, { entries: entries });
@@ -7784,6 +7802,8 @@
         if (!ok) return;
         _adminSecOrder = []; _adminSecOpen = {};
         try { localStorage.removeItem('adminSecOrder'); localStorage.removeItem('adminSecOpen'); } catch (e2) {}
+        if (currentState) currentState.adminSecOrder = DEFAULT_SEC_ORDER.slice(); /* 즉시 반영 */
+        try { stateRef.update({ adminSecOrder: firebase.firestore.FieldValue.delete() }).catch(function () {}); } catch (e3) {} /* 서버 값 제거 → 기본값 */
         paint(currentState);
       });
       return;
