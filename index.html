@@ -882,7 +882,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-238';
+  var APP_VERSION = '2026-09-11-239';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -5036,6 +5036,11 @@
     var liveBanner = liveBits.length
       ? '<div class="live-banner">✨ ' + liveBits.join(' <span class="live-dot">·</span> ') + '</div>'
       : '';
+    /* 보류(보완 요청)된 신청자에게 모든 탭 상단에 눈에 띄는 안내 배너 */
+    var myPendNow = currentUser ? findMyPending(state) : null;
+    var heldBanner = (myPendNow && myPendNow.heldReason)
+      ? '<div class="live-banner" data-tab="mine" style="cursor:pointer;background:#fce8e6;border-color:#e0a3a0;color:#8a2a24;">📌 신청 보류: ' + escapeHtml(myPendNow.heldReason) + ' <b>· 눌러서 수정·재제출</b></div>'
+      : '';
     var tabs =
       '<button type="button" class="tab-btn" data-tab="form" role="tab" aria-selected="' + (activeTab === 'form') + '">신청서 작성</button>' +
       '<button type="button" class="tab-btn" data-tab="list" role="tab" aria-selected="' + (activeTab === 'list') + '">명단 보기<span class="count">' + entries.length + '</span></button>';
@@ -5166,6 +5171,7 @@
                 : '<button type="button" class="admin-link" id="user-login">' + ICON_LOCK + ' 로그인</button>')) +
         '</div>' +
       '</div></div>' +
+      heldBanner +
       liveBanner +
       ((NOTIF_ENABLED && !memberNotifActive())
         ? '<div class="notice-bar">' +
@@ -6203,25 +6209,36 @@
     });
   }
 
+  /* 승인 시 함께 보낼 기본 안내 메시지 (관리자가 수정 가능) */
+  var APPROVE_MSG_DEFAULT = '축하해요! 프로필이 승인됐어요 🎉 이제 명단에서 마음에 드는 분께 📷 사진 요청·💌 대화 신청을 보낼 수 있어요. 상단 🔔 알림을 켜두면 소식을 바로 받아볼 수 있어요. 좋은 인연 되시길 바라요!';
   function handleApprove(id) {
     var pend = ((currentState && currentState.pendingEntries) || []).find(function (e) { return e.id === id; });
-    var nick = pend ? pend.nickname : '';
-    db.runTransaction(function (tx) {
-      return tx.get(stateRef).then(function (doc) {
-        var state = doc.data();
-        var idx = (state.pendingEntries || []).findIndex(function (e) { return e.id === id; });
-        if (idx < 0) return;
-        var entry = state.pendingEntries.splice(idx, 1)[0];
-        if (!entry.serial) entry.serial = nextSerial(state);
-        delete entry.rejectedReason; delete entry.rejectedAt; delete entry.heldReason; delete entry.heldAt; /* 승인 시 반려/보류 흔적 제거 */
-        var newEntries = (state.entries || []).concat([entry]);
-        tx.update(stateRef, { pendingEntries: state.pendingEntries, entries: newEntries });
+    if (!pend) return;
+    var nick = pend.nickname || '';
+    modalMessage('신청 승인', nick + '님을 승인하고, 함께 보낼 안내 메시지를 남겨주세요. (비우면 메시지 없이 승인돼요)', '승인', 'approve', '', false, APPROVE_MSG_DEFAULT).then(function (welcome) {
+      if (welcome === null || welcome === undefined) return; /* 취소 */
+      welcome = (welcome || '').trim();
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var state = doc.data();
+          var idx = (state.pendingEntries || []).findIndex(function (e) { return e.id === id; });
+          if (idx < 0) return;
+          var entry = state.pendingEntries.splice(idx, 1)[0];
+          if (!entry.serial) entry.serial = nextSerial(state);
+          delete entry.rejectedReason; delete entry.rejectedAt; delete entry.heldReason; delete entry.heldAt; /* 승인 시 반려/보류 흔적 제거 */
+          var newEntries = (state.entries || []).concat([entry]);
+          tx.update(stateRef, { pendingEntries: state.pendingEntries, entries: newEntries });
+        });
+      }).then(function () {
+        appendLog('admin', '관리자', '신청 승인 · ' + nick);
+        if (welcome) { try { return sendMessageTo(id, 'admin', welcome); } catch (e) {} }
+      }).then(function () {
+        return refreshNow();
+      }).then(function () {
+        modalNotice('승인 완료', nick + '님을 승인했어요.' + (welcome ? ' 안내 메시지도 보냈어요.' : ''));
+      }).catch(function (err) {
+        modalNotice('오류', '승인에 실패했어요: ' + (err.message || err));
       });
-    }).then(function () {
-      appendLog('admin', '관리자', '신청 승인 · ' + nick);
-      return refreshNow();
-    }).catch(function (err) {
-      modalNotice('오류', '승인에 실패했어요: ' + (err.message || err));
     });
   }
 
