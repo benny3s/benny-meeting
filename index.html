@@ -888,7 +888,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-272';
+  var APP_VERSION = '2026-09-11-273';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -5415,6 +5415,10 @@
           '<button type="button" class="admin-link" id="buy-coffee" style="background:var(--gold-soft);border-color:var(--gold);color:var(--gold);opacity:1;font-weight:700;">&#9749; 관리자 커피 사주기</button>' +
           '<button type="button" class="admin-link" id="feedback-btn">&#128172; Q&amp;A</button>' +
         '</div>' +
+        /* 3줄: 카카오 채널 문의 */
+        '<div class="admin-bar-row">' +
+          '<button type="button" class="admin-link" id="kakao-channel" style="background:#FEE500;border-color:#FEE500;color:#3C1E1E;opacity:1;font-weight:700;">&#128172; 카카오 채널 문의</button>' +
+        '</div>' +
         /* 3줄: 홈에 추가 / 알림 / 로그인 */
         '<div class="admin-bar-row">' +
           ((NOTIF_ENABLED && !isStandalone()) ? '<button type="button" class="admin-link" id="add-home">&#128241; 홈에 추가</button>' : '') +
@@ -7730,6 +7734,10 @@
       handleBuyCoffee();
       return;
     }
+    if (e.target.closest('#kakao-channel')) {
+      try { window.open(KAKAO_CHAT_URL, '_blank'); } catch (err) { location.href = KAKAO_CHAT_URL; }
+      return;
+    }
     if (e.target.closest('#pick-referrer')) {
       handlePickReferrer();
       return;
@@ -8364,6 +8372,8 @@
   }
   /* 관리자에게 커피 사주기(카카오페이 후원). PC·모바일 모두 팝업(QR + 링크 복사 + 링크 열기) */
   var COFFEE_URL = 'https://qr.kakaopay.com/281006011000080950628454';
+  var KAKAO_CHANNEL_URL = 'http://pf.kakao.com/_axijrX';
+  var KAKAO_CHAT_URL = 'http://pf.kakao.com/_axijrX/chat';
   function handleBuyCoffee() {
     var ov = openModal(
       '<h3>&#9749; 관리자에게 커피 한 잔</h3>' +
