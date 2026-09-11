@@ -249,11 +249,17 @@
   .role-toggle { display: flex; gap: 10px; margin: 0 0 12px; }
   .role-btn {
     flex: 1; text-align: center; padding: 12px 8px;
-    border: 1px solid var(--line); border-radius: 10px;
-    cursor: pointer; font-weight: 400; color: var(--muted);
+    border: 1.5px solid var(--line); border-radius: 10px;
+    cursor: pointer; font-weight: 600; color: var(--ink);
     background: var(--paper); user-select: none; font-family: inherit; font-size: 0.95rem;
+    transition: border-color .12s, background .12s, box-shadow .12s, color .12s;
   }
-  .role-btn.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-deep); font-weight: 700; }
+  .role-btn:not(.active):hover { border-color: var(--accent); color: var(--accent-deep); }
+  .role-btn.active {
+    border-color: var(--accent); background: var(--accent-soft);
+    color: var(--accent-deep); font-weight: 800;
+    box-shadow: 0 0 0 2px var(--accent-soft), 0 2px 8px rgba(0,0,0,0.12);
+  }
 
   /* ---------- Degree radio group (relationship to Benny) ---------- */
   .degree-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
@@ -882,7 +888,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-268';
+  var APP_VERSION = '2026-09-11-269';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
