@@ -888,7 +888,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-11-270';
+  var APP_VERSION = '2026-09-11-271';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3673,9 +3673,9 @@
         '<ul style="padding-left:18px;margin:0;list-style:none;font-size:0.88rem;line-height:1.75;">' +
           '<li><b>① 친구 등록</b>, 어울릴만한 사람 물색</li>' +
           '<li><b>② 사진/대화 요청 가능</b> <span style="color:var(--muted);">(주선자로 대신 채팅도 가능 · 메시지에 주선자 표시)</span></li>' +
-          '<li><b>③ 2가지 방법 제공</b><br>' +
-            '&nbsp;&nbsp;<b>&#128273; 1일 PIN</b> 발급 시 1일 로그인 가능<br>' +
-            '&nbsp;&nbsp;<b>&#129706; 일반(독립) 계정</b>으로 승격 가능</li>' +
+          '<li><b>③ 친구에게 계정 넘기기</b> <span style="color:var(--muted);">(원할 때 · 2가지)</span><br>' +
+            '&nbsp;&nbsp;<b>&#128273; 1일 임시 PIN</b> — 친구가 하루 동안 직접 로그인<br>' +
+            '&nbsp;&nbsp;<b>&#129706; 독립 계정 전환</b> — 내 관리에서 분리해 친구 본인 계정으로</li>' +
         '</ul>' +
       '</div>';
     return roleToggleHtml() +
@@ -8187,9 +8187,9 @@
           '<ul style="padding-left:18px;margin:6px 0;list-style:none;">' +
             '<li style="' + li + '"><b>① 친구 등록</b>, 어울릴만한 사람 물색</li>' +
             '<li style="' + li + '"><b>② 사진/대화 요청 가능</b> <span style="color:var(--muted);">(주선자로 대신 채팅도 가능 · 메시지에 주선자 표시)</span></li>' +
-            '<li style="' + li + '"><b>③ 2가지 방법 제공</b><br>' +
-              '&nbsp;&nbsp;<b>&#128273; 1일 PIN</b> 발급 시 1일 로그인 가능<br>' +
-              '&nbsp;&nbsp;<b>&#129706; 일반(독립) 계정</b>으로 승격 가능</li>' +
+            '<li style="' + li + '"><b>③ 친구에게 계정 넘기기</b> <span style="color:var(--muted);">(원할 때 · 2가지)</span><br>' +
+              '&nbsp;&nbsp;<b>&#128273; 1일 임시 PIN</b> — 친구가 하루 동안 직접 로그인<br>' +
+              '&nbsp;&nbsp;<b>&#129706; 독립 계정 전환</b> — 내 관리에서 분리해 친구 본인 계정으로</li>' +
           '</ul>' +
         '</div>' +
         '<div style="' + box + 'margin-bottom:0;">' +
