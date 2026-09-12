@@ -890,7 +890,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-283';
+  var APP_VERSION = '2026-09-12-284';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -5400,7 +5400,9 @@
         var canFold = friendSubs.length >= 2;
         var childChips;
         if (!canFold) {
-          childChips = chipList.map(function (c) { return line(c.html); }).join('') + line(addBtn);
+          /* 친구 1명: 그 프로필 오른쪽에 +추가 (2명+의 더보기 위치와 동일) · 0명: +추가만 */
+          if (chipList.length === 1) childChips = line(chipList[0].html + addBtn);
+          else childChips = line(addBtn);
         } else if (!switcherExpanded) {
           /* 접힘: 선택된 친구(없으면 첫 번째) 한 명 + 오른쪽 "더보기" */
           var actives = chipList.filter(function (c) { return c.on; });
@@ -8438,8 +8440,8 @@
       '<div style="text-align:center;margin:6px 0 10px;"><img src="coffee-qr.png" alt="카카오페이 후원 QR" style="width:230px;max-width:80%;border-radius:12px;"></div>' +
       '<p class="modal-msg" style="text-align:center;font-size:0.84rem;">휴대폰 카메라로 <b>QR을 스캔</b>하거나, 아래 <b>카카오페이 열기</b>를 눌러 후원할 수 있어요. <span style="color:var(--muted);">(링크 열기는 휴대폰에서 동작해요)</span></p>' +
       '<div class="modal-actions" style="flex-direction:column;gap:8px;align-items:stretch;">' +
-        '<button type="button" class="card-btn primary" id="coffee-copy">🔗 링크 복사</button>' +
-        '<button type="button" class="card-btn" id="coffee-open">☕ 카카오페이 열기</button>' +
+        '<button type="button" class="card-btn" id="coffee-open" style="background:#FEE500;border-color:#FEE500;color:#3C1E1E;font-weight:700;">☕ 카카오페이 열기</button>' +
+        '<button type="button" class="card-btn" id="coffee-copy">🔗 링크 복사</button>' +
         '<button type="button" class="card-btn" id="modal-cancel">닫기</button>' +
       '</div>'
     );
