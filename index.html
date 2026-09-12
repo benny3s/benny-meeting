@@ -96,7 +96,7 @@
   .masthead-icon { color: var(--accent); flex-shrink: 0; }
   .masthead h1 { font-size: clamp(1.5rem, 4vw, 2.1rem); letter-spacing: 0.01em; }
   .masthead p { margin: 6px 0 0; color: var(--paper); opacity: 0.72; font-size: 0.92rem; }
-  .masthead-sub { max-width: 880px; margin: 10px auto 0; color: var(--paper); opacity: 0.72; font-size: 0.92rem; line-height: 1.5; }
+  .masthead-sub { margin: 6px 0 0; color: var(--paper); opacity: 0.72; font-size: 0.92rem; line-height: 1.5; }
   .admin-bar { max-width: 880px; margin: 14px auto 0; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
   .admin-bar-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .notice-bar {
@@ -889,7 +889,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-277';
+  var APP_VERSION = '2026-09-12-278';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4959,9 +4959,10 @@
       var n = e.acqFilterCount || 0;
       return '<td style="text-align:center;' + (n ? 'font-weight:700;color:var(--accent);' : 'color:var(--muted);') + '">' + n + '</td>';
     }
-    /* 테스트 체크박스 (관리자가 직접 지정/해제). 순수 주선자 계정은 대상 아님 */
+    /* 테스트 체크박스 (관리자가 직접 지정/해제). 순수 주선자 계정은 대상 아님. 보관 계정은 상호배타로 비활성화 */
     function testCell(e) {
       if (isMatchmakerEntry(e)) return '<td style="text-align:center;color:var(--muted);">—</td>';
+      if (e.deactivated) return '<td style="text-align:center;"><input type="checkbox" disabled title="보관 계정은 테스트로 지정할 수 없어요" style="width:17px;height:17px;opacity:.4;cursor:not-allowed;"></td>';
       return '<td style="text-align:center;"><input type="checkbox" data-testtoggle="' + escapeHtml(e.id) + '"' + (e.testAccount ? ' checked' : '') + ' style="width:17px;height:17px;accent-color:var(--accent);cursor:pointer;"></td>';
     }
     /* 계정 유형 분류: 일반(general) / 주선자(mm) / 주선자 관리 프로필(managed=대리·본인) */
@@ -4985,16 +4986,18 @@
         permCell(e, pc.photoN, 'photo') + permCell(e, pc.contactN, 'contact') + acqCell(e) + testCell(e) + '</tr>';
     }
     var seenRows;
-    if (adminSeenType === 'all') {
-      seenRows = tops.map(function (d) {
+    if (adminSeenType === 'all' || adminSeenType === 'mm') {
+      /* 전체·주선자: 상위 계정 + 그 아래 관리 프로필(본인·친구)을 트리로. 주선자 필터는 주선자 트리만 */
+      var topList = tops.filter(function (d) { return adminSeenType === 'all' || d.e.isMatchmaker; });
+      seenRows = topList.map(function (d) {
         var e = d.e;
         var row = seenRow(e, false);
         var kids = (childrenByMgr[e.id] || []).slice().sort(function (a, b) { return (b.ownerSelf ? 1 : 0) - (a.ownerSelf ? 1 : 0); });
         row += kids.map(function (c) { return seenRow(c, true); }).join('');
         return row;
-      }).join('');
+      }).join('') || '<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:14px;">해당 유형의 회원이 없어요.</td></tr>';
     } else {
-      /* 특정 유형만: 트리 없이 평면 목록 (adminSeenSort 정렬 적용 — 필터 걸어도 헤더 정렬 동작) */
+      /* 일반/관리 프로필: 트리 없이 평면 목록 (adminSeenSort 정렬 적용 — 필터 걸어도 헤더 정렬 동작) */
       var flat = allEntries.filter(function (e) { return acctType(e) === adminSeenType; })
         .map(function (e) { var pc = permCounts(e); return { e: e, photoN: pc.photoN, contactN: pc.contactN }; });
       flat.sort(seenCmp);
@@ -5423,9 +5426,9 @@
     return (
       '<div class="masthead"><div class="masthead-inner">' +
         '<div class="masthead-icon">' + ICON_LOGO + '</div>' +
-        '<div><h1 id="masthead-title" title="새로고침" style="cursor:pointer;">베니브릿지</h1></div>' +
+        '<div><h1 id="masthead-title" title="새로고침" style="cursor:pointer;">베니브릿지</h1>' +
+          '<p class="masthead-sub">관리자 주변 사람들 중심으로, 좋은 인연을 맺어주는 작은 공간이에요.</p></div>' +
       '</div>' +
-      '<p class="masthead-sub">관리자 주변 사람들 중심으로, 좋은 인연을 맺어주는 작은 공간이에요.</p>' +
       '<div class="admin-bar">' +
         /* 1줄: 공지·사용법 / URL 복사 */
         '<div class="admin-bar-row">' +
