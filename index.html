@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-306';
+  var APP_VERSION = '2026-09-12-307';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -987,6 +987,7 @@
   var showHiddenReqs = false;                          /* 요청 섹션: 관리자 화면에서 숨긴 요청 보기 토글 */
   var adminReqStatus = 'all';                          /* 요청 상태 필터: all|pending|held|approved|rejected */
   var adminReqAge = 'all';                             /* 요청 나이 필터(색상 기준): all|today|yesterday|few|old */
+  var adminReqPendingStale = false;                    /* 대기 필터 2단계: 요청 후 상대가 로그인 안 한 대기건만 */
   var currentState = null;
   var photoDataUrls = [];
   var formPhotosReady = true; /* 수정 시 원본 사진 로드 완료 여부 */
@@ -5013,13 +5014,29 @@
     function reqStatKey(r) { var st = reqStatus(r); if (st === 'approved' || st === 'user_approved') return 'approved'; if (st === 'rejected') return 'rejected'; if (st === 'held') return 'held'; return 'pending'; }
     var _todayK = kstDay(new Date().toISOString());
     function reqAgeKey(r) { var subK = r.submittedAt ? kstDay(r.submittedAt) : ''; if (!subK) return 'old'; var dd = Math.round((Date.parse(_todayK) - Date.parse(subK)) / 86400000); return dd <= 0 ? 'today' : (dd === 1 ? 'yesterday' : (dd <= 4 ? 'few' : 'old')); }
-    function reqPassStatus(r) { return adminReqStatus === 'all' || reqStatKey(r) === adminReqStatus; }
+    /* 대기 2단계: 요청 후 상대(수신자)가 아직 로그인 안 함 → 관리자가 직접 안내 대상 */
+    var _entById = {};
+    (state.entries || []).forEach(function (e) { _entById[e.id] = e; });
+    function recipientStale(r) {
+      var toE = _entById[r.toId]; if (!toE) return false;
+      var seen = lastActiveAt(toE);
+      if (!seen) return true;
+      return new Date(seen).getTime() < new Date(r.submittedAt || 0).getTime();
+    }
+    var pendingStale = adminReqStatus === 'pending' && adminReqPendingStale;
+    function reqPassStatus(r) {
+      if (adminReqStatus === 'all') return true;
+      if (reqStatKey(r) !== adminReqStatus) return false;
+      if (pendingStale && !recipientStale(r)) return false;
+      return true;
+    }
     function reqPassAge(r) { return adminReqAge === 'all' || reqAgeKey(r) === adminReqAge; }
     /* 개수는 "다른 필터"를 반영해 갱신 (상태 개수 ← 현재 나이필터 적용 · 나이 개수 ← 현재 상태필터 적용) */
     var statCounts = { all: 0, pending: 0, held: 0, approved: 0, rejected: 0 };
     var ageCounts = { all: 0, today: 0, yesterday: 0, few: 0, old: 0 };
+    var pendingStaleCount = 0;
     _reqPool.forEach(function (r) {
-      if (reqPassAge(r)) { statCounts.all++; statCounts[reqStatKey(r)]++; }
+      if (reqPassAge(r)) { statCounts.all++; statCounts[reqStatKey(r)]++; if (reqStatKey(r) === 'pending' && recipientStale(r)) pendingStaleCount++; }
       if (reqPassStatus(r)) { ageCounts.all++; ageCounts[reqAgeKey(r)]++; }
     });
     var _reqBase = _reqPool.filter(function (r) { return reqPassStatus(r) && reqPassAge(r); });
@@ -5030,7 +5047,15 @@
     var _statusOpts = [['all', '전체'], ['pending', '대기'], ['held', '보류'], ['approved', '승인'], ['rejected', '거절']];
     function reqStatusBtn(k, label) {
       var active = adminReqStatus === k;
-      return '<button type="button" class="card-btn' + (active ? ' primary' : '') + '" data-action="req-status" data-key="' + k + '" style="flex:none;padding:5px 11px;font-size:0.82rem;">' + label + ' ' + statCounts[k] + '</button>';
+      var lbl = label, cnt = statCounts[k];
+      if (k === 'pending' && active && adminReqPendingStale) { lbl = '대기·미접속'; cnt = pendingStaleCount; }
+      return '<button type="button" class="card-btn' + (active ? ' primary' : '') + '" data-action="req-status" data-key="' + k + '" style="flex:none;padding:5px 11px;font-size:0.82rem;">' + lbl + ' ' + cnt + '</button>';
+    }
+    var reqPendingHint = '';
+    if (adminReqStatus === 'pending') {
+      reqPendingHint = adminReqPendingStale
+        ? '<p class="sub" style="margin:0 0 8px;color:var(--accent);">🔔 요청 후 아직 로그인 안 한 대기자예요. 상대가 요청을 못 봤을 수 있어요 — 직접 안내해보세요. (한 번 더 누르면 해제)</p>'
+        : '<p class="sub" style="margin:0 0 8px;color:var(--muted);">대기를 한 번 더 누르면 <b>요청 후 미접속</b>인 대기자만 볼 수 있어요.</p>';
     }
     var reqStatusRow =
       '<div style="display:flex;align-items:center;gap:6px;margin:2px 0 8px;flex-wrap:wrap;">' +
@@ -5315,11 +5340,13 @@
     var reqHiddenNote = showHiddenReqs
       ? '<p class="sub" style="margin-top:0;">🙈 <b>숨긴 요청</b> — 관리자 화면에서만 숨겨졌고, <b>당사자 기록엔 그대로 남아있어요.</b> [↩︎ 복원]으로 되돌리거나 [🗑 완전삭제]로 양쪽에서 지울 수 있어요.</p>'
       : '';
-    var reqEmpty = (adminReqStatus !== 'all' || adminReqAge !== 'all')
-      ? '<p class="sub">조건에 맞는 요청이 없어요.</p>'
-      : (showHiddenReqs ? '<p class="sub">숨긴 요청이 없어요.</p>' : '<p class="sub">아직 요청이 없어요.</p>');
+    var reqEmpty = pendingStale
+      ? '<p class="sub">요청 후 미접속인 대기자가 없어요 🙆</p>'
+      : ((adminReqStatus !== 'all' || adminReqAge !== 'all')
+        ? '<p class="sub">조건에 맞는 요청이 없어요.</p>'
+        : (showHiddenReqs ? '<p class="sub">숨긴 요청이 없어요.</p>' : '<p class="sub">아직 요청이 없어요.</p>'));
     var activeReqSection = adminFold('📬 요청함', visibleReqs.length,
-      reqStatusRow + reqAgeRow + reqSortSelect + hiddenRow + reqHiddenNote +
+      reqStatusRow + reqAgeRow + reqSortSelect + hiddenRow + reqPendingHint + reqHiddenNote +
       (listReqs.length ? allReqItems : reqEmpty), false, 'active');
     var secHtml = {
       usage: usageStatsHtml(state), pending: pendingSection, held: heldSection, editrev: editRevSection,
@@ -8167,9 +8194,18 @@
         adminReqSort = (parts[0] === rk) ? (rk + '_' + (parts[1] === 'desc' ? 'asc' : 'desc')) : (rk + '_desc');
         paint(currentState); return;
       }
-      else if (action === 'req-status') { adminReqStatus = actionBtn.getAttribute('data-key') || 'all'; paint(currentState); return; }
+      else if (action === 'req-status') {
+        var sk = actionBtn.getAttribute('data-key') || 'all';
+        if (sk === 'pending') {
+          /* 대기 3단계 순환: 대기 → 대기·미접속 → 해제(전체) */
+          if (adminReqStatus !== 'pending') { adminReqStatus = 'pending'; adminReqPendingStale = false; }
+          else if (!adminReqPendingStale) { adminReqPendingStale = true; }
+          else { adminReqStatus = 'all'; adminReqPendingStale = false; }
+        } else { adminReqStatus = sk; adminReqPendingStale = false; }
+        paint(currentState); return;
+      }
       else if (action === 'req-age') { adminReqAge = actionBtn.getAttribute('data-key') || 'all'; paint(currentState); return; }
-      else if (action === 'toggle-hidden-reqs') { showHiddenReqs = !showHiddenReqs; adminReqStatus = 'all'; adminReqAge = 'all'; paint(currentState); return; }
+      else if (action === 'toggle-hidden-reqs') { showHiddenReqs = !showHiddenReqs; adminReqStatus = 'all'; adminReqAge = 'all'; adminReqPendingStale = false; paint(currentState); return; }
       else if (action === 'req-hide') { handleHideRequest(id); return; }
       else if (action === 'req-unhide') { handleUnhideRequest(id); return; }
       else if (action === 'fold-all') { toggleFoldAll(); return; }
