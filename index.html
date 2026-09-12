@@ -612,8 +612,9 @@
   /* 요청 나이별 색 구분: 오늘=하늘색 / 5일 넘게 대기=회색 (테마 안전 tint) */
   /* 요청 나이별 색: 오늘=하늘 / 1~2일=기본 / 3~4일=연회색 / 5일+=진회색 */
   .req-fold.req-need { border-color: var(--accent); background: var(--gold-soft); }
-  /* 요청 나이별 색상 (회원 접속칩과 다른 팔레트): 오늘=연두 · 1~2일=기본 · 3~4일=연한회색 · 5일+=진한회색 */
-  .req-fold.req-today { background: rgba(52,168,83,0.14); border-color: rgba(52,168,83,0.5); }
+  /* 요청 나이별 색상 (명단 접속칩과 동일 팔레트): 오늘=진한 녹색 · 어제=연한 녹색 · 2~4일=연한회색 · 5일+=진한회색 */
+  .req-fold.req-today { background: #bfe6cc; border-color: #8ccfa2; }
+  .req-fold.req-yesterday { background: #e9f6ee; border-color: #cfe9d7; }
   .req-fold.req-old { background: rgba(120,120,120,0.10); border-color: rgba(120,120,120,0.32); }
   .req-fold.req-stale { background: rgba(80,80,80,0.24); border-color: rgba(80,80,80,0.58); }
   /* 사용량 현황 표 */
@@ -890,7 +891,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-296';
+  var APP_VERSION = '2026-09-12-297';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4932,11 +4933,11 @@
       } else {
         actionBtns = decideBtns;
       }
-      /* 요청 나이(KST 하루 기준): 오늘=하늘 · 1~2일=기본 · 3~4일=연회색 · 5일+=진회색. 요청함·요청완료 공통 */
+      /* 요청 나이(KST 하루 기준): 오늘=진한녹색 · 어제=연한녹색 · 2~4일=연회색 · 5일+=진회색. 명단 접속칩과 동일 · 요청함·요청완료 공통 */
       var todayK = kstDay(new Date().toISOString());
       var subK = r.submittedAt ? kstDay(r.submittedAt) : '';
       var dayDiff = subK ? Math.round((Date.parse(todayK) - Date.parse(subK)) / 86400000) : 0;
-      var ageCls = dayDiff <= 0 ? ' req-today' : (dayDiff <= 2 ? '' : (dayDiff <= 4 ? ' req-old' : ' req-stale'));
+      var ageCls = dayDiff <= 0 ? ' req-today' : (dayDiff === 1 ? ' req-yesterday' : (dayDiff <= 4 ? ' req-old' : ' req-stale'));
       var foldCls = 'req-fold' + ageCls;
       /* 요청함(대기/보류)은 요청 시각 그대로 · 요청완료(승인/거절)는 처리(승인/거절) 시각 표시 */
       var footWhen = ((st === 'approved' || st === 'rejected') && r.decidedAt)
