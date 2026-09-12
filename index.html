@@ -890,7 +890,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-287';
+  var APP_VERSION = '2026-09-12-288';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3741,7 +3741,7 @@
             '<button type="button" class="card-btn" id="pick-referrer" style="width:100%;box-sizing:border-box;margin-top:6px;">👥 회원 목록에서 선택</button>' +
             '<span class="hint">어떻게 알게 됐는지 적어주세요 (소개자·경로 등). ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
           '<div class="field"><label for="f-pin">개인 PIN <span class="req">필수</span></label>' +
-            '<input type="password" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,10}" maxlength="10" placeholder="숫자 4~10자리" required autocomplete="new-password">' +
+            '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,10}" maxlength="10" placeholder="숫자 4~10자리" required autocomplete="off" style="-webkit-text-security:disc;text-security:disc;">' +
             '<span class="hint">로그인할 때 필요해요.</span></div>' +
           '<div class="consent-box"><label class="consent-label"><input type="checkbox" id="f-consent"> <span>개인정보 수집 및 이용에 동의합니다.</span></label>' +
             '<p class="consent-detail">수집 항목: 닉네임, 실명, 연락처, 알게 된 경로 · 목적: 주선자 관리·연락 · 동의 거부 시 등록 불가.</p></div>' +
@@ -4024,7 +4024,7 @@
                   var pinLabelExtra = isEdit ? '<span class="opt">(비우면 유지)</span>' : (loggedIn ? '<span class="opt">(비우면 로그인 PIN 사용)</span>' : '<span class="req">필수</span>');
                   var pinAttrs = isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : (loggedIn ? ' class="keep-ph" placeholder="(비우면 로그인 PIN 그대로 사용)"' : ' placeholder="숫자 4~10자리" required');
                   return '<div class="field"><label for="f-pin">개인 PIN ' + pinLabelExtra + '</label>' +
-                    '<input type="password" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,10}" maxlength="10" autocomplete="new-password"' + pinAttrs + '>' +
+                    '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,10}" maxlength="10" autocomplete="off" style="-webkit-text-security:disc;text-security:disc;"' + pinAttrs + '>' +
                     '<span class="hint">나중에 본인이 신청을 취소하거나 대화를 신청할 때 필요해요.</span></div>';
                 })()) +
             exampleTip +
@@ -4445,14 +4445,11 @@
     }
     var reqs = state.dateRequests || [];
     var groups = [
-      { key: 'in-photo', title: '📷 받은 사진 요청', incoming: true, type: 'photo' },
-      { key: 'in-contact', title: '💌 받은 대화 신청', incoming: true, type: 'contact' },
-      { key: 'out-photo', title: '📷 보낸 사진 요청', incoming: false, type: 'photo' },
-      { key: 'out-contact', title: '💌 보낸 대화 신청', incoming: false, type: 'contact' }
+      { key: 'in', title: '📥 받은 요청', incoming: true },
+      { key: 'out', title: '📤 보낸 요청', incoming: false }
     ];
     var sections = groups.map(function (g) {
       var items = reqs.filter(function (r) {
-        if ((r.type || 'contact') !== g.type) return false;
         if ((r.hiddenBy || []).indexOf(me.id) >= 0) return false;
         var mine = g.incoming ? r.toId === me.id : r.fromId === me.id;
         if (!mine) return false;
@@ -4558,10 +4555,10 @@
         (me.deleteRequested ? '<div class="mine-note reject" style="margin-top:10px;">🗑 삭제 요청이 접수되어 <b>관리자 확인 중</b>이에요. <button type="button" class="card-btn" data-action="cancel-delete" data-id="' + escapeHtml(me.id) + '" style="flex:none;padding:4px 12px;margin-left:8px;">삭제 요청 취소</button></div>' : '') +
         (me.deactivateRequested ? '<div class="mine-note" style="margin-top:10px;background:var(--gold-soft);border-color:var(--gold);">🗄 비활성화(보관) 요청이 접수되어 <b>관리자 확인 중</b>이에요. <button type="button" class="card-btn" data-action="cancel-deactivate" data-id="' + escapeHtml(me.id) + '" style="flex:none;padding:4px 12px;margin-left:8px;">요청 취소</button></div>' : '') +
         (me.deactivated ? '<div class="mine-note" style="margin-top:10px;background:var(--gold-soft);border-color:var(--gold);">🗄 <b>보관 상태</b>예요 (명단에 노출되지 않아요). 복구는 상단 <b>💬 Q&amp;A</b>로 문의하거나 카카오톡으로 요청해 주세요.</div>' : '') +
+        (isSubProfile ? '' : msgSection) + /* 관리자 메시지를 맨 위로 */
         (isSubProfile ? '' : joinRequestSectionHtml(state, false)) + /* 나에게 온 주선자 요청 있으면 표시 */
         sections +
         connectionsSummaryHtml(state, me) +
-        (isSubProfile ? '' : msgSection) +
       '</div>'
     );
   }
