@@ -890,7 +890,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-290';
+  var APP_VERSION = '2026-09-12-291';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2889,6 +2889,65 @@
       }).catch(function (err) { btn.disabled = false; modalNotice('오류', '전송 실패: ' + (err.message || err)); });
     });
   }
+  /* 관리자↔회원 메시지를 대화방(말풍선)으로 렌더 — 관리자=오른쪽(accent) · 회원=왼쪽(회색). withDel이면 개별 삭제 ✕ */
+  function adminChatBubble(m, withDel) {
+    var mine = m.from === 'admin';
+    var who = mine ? '👑 관리자' : (m.guestName ? '🙋 ' + escapeHtml(m.guestName) + ' · 비회원' : '🙋 회원');
+    var delBtn = withDel ? ' <button type="button" data-action="msg-del" data-id="' + escapeHtml(m.id) + '" title="삭제" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:0.82rem;padding:0;">&#10005;</button>' : '';
+    return '<div style="display:flex;flex-direction:column;align-items:' + (mine ? 'flex-end' : 'flex-start') + ';margin:6px 0;">' +
+      '<div style="font-size:0.66rem;font-weight:700;color:var(--muted);margin-bottom:2px;' + (mine ? 'text-align:right;' : '') + '">' + who + ' · ' + fmtDate(m.at) + delBtn + '</div>' +
+      '<div style="max-width:80%;padding:7px 11px;border-radius:13px;background:' + (mine ? 'var(--accent)' : '#efefef') + ';color:' + (mine ? '#fff' : 'var(--ink)') + ';white-space:pre-wrap;word-break:break-word;">' +
+        escapeHtml(m.text) +
+      '</div></div>';
+  }
+  /* 관리자용 대화방: 회원과 주고받은 내역을 말풍선으로 보여주고 그 자리에서 답장 (openDmChat과 동일 패턴, 폴링·읽음처리) */
+  function openAdminChat(entryId) {
+    if (!isAdminUnlocked) { modalNotice('안내', '관리자만 사용할 수 있어요.'); return; }
+    if (!entryId) return;
+    var nick = nickForEntry(currentState, entryId);
+    var overlay = openModal(
+      '<h3>💬 ' + escapeHtml(nick) + '님과의 대화</h3>' +
+      '<p class="modal-msg" style="margin:0 0 8px;font-size:0.8rem;color:var(--muted);">내 메시지는 회원에게 <b>👑 관리자</b>로 표시돼요. 회원은 <b>💬 Q&amp;A</b>에서 이 대화를 봐요.</p>' +
+      '<div id="ac-body" style="max-height:44vh;overflow-y:auto;margin:6px 0 10px;padding:0 2px;"></div>' +
+      '<textarea class="modal-input" id="ac-text" rows="2" maxlength="1000" placeholder="메시지 입력 (최대 1000자)"></textarea>' +
+      '<div class="modal-actions">' +
+        '<button type="button" class="card-btn" id="modal-cancel">닫기</button>' +
+        '<button type="button" class="card-btn primary" id="ac-send">보내기</button>' +
+      '</div>'
+    );
+    overlay.classList.add('wide-modal');
+    function draw() {
+      var thread = threadFor(currentState, entryId, 'admin');
+      var el = overlay.querySelector('#ac-body');
+      el.innerHTML = thread.length ? thread.map(function (m) { return adminChatBubble(m, false); }).join('') : '<p class="modal-msg" style="margin:0;">아직 주고받은 메시지가 없어요. 먼저 인사를 건네보세요!</p>';
+      el.scrollTop = el.scrollHeight;
+    }
+    draw(); markAdminUserRead(entryId);
+    var lastCount = threadFor(currentState, entryId, 'admin').length;
+    /* 열려 있는 동안 폴링: 회원이 보낸 새 메시지를 채팅창에만 반영 (앱 전체 리페인트 없이) */
+    var poll = setInterval(function () {
+      stateRef.get({ source: 'server' }).then(function (doc) {
+        if (!doc.exists) return;
+        currentState = doc.data();
+        var th = threadFor(currentState, entryId, 'admin');
+        if (th.length !== lastCount) { lastCount = th.length; draw(); markAdminUserRead(entryId); }
+      }).catch(function () {});
+    }, 3500);
+    function close() { clearInterval(poll); closeModal(overlay); paint(currentState); }
+    overlay.querySelector('#modal-cancel').addEventListener('click', close);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    overlay.querySelector('#ac-send').addEventListener('click', function () {
+      var ta = overlay.querySelector('#ac-text'); var t = ta.value.trim();
+      if (!t) return;
+      var btn = overlay.querySelector('#ac-send'); btn.disabled = true;
+      sendMessageTo(entryId, 'admin', t).then(function () {
+        appendLog('admin', '관리자', '메시지 발송 · ' + nick);
+        ta.value = ''; return refreshNow();
+      }).then(function () {
+        draw(); lastCount = threadFor(currentState, entryId, 'admin').length; btn.disabled = false;
+      }).catch(function (err) { btn.disabled = false; modalNotice('오류', '전송 실패: ' + (err.message || err)); });
+    });
+  }
   function msgLineHtml(m, del) {
     var isAdmin = m.from === 'admin';
     var delAction = del === true ? 'msg-del' : (del === 'user' ? 'mymsg-del' : '');
@@ -3019,17 +3078,6 @@
         tx.update(stateRef, { messages: msgs });
       });
     }).then(function () { return refreshNow(); });
-  }
-  function handleAdminMessageCompose(entryId) {
-    var nick = nickForEntry(currentState, entryId);
-    modalMessage('메시지 보내기', nick + '님에게 보낼 메시지를 입력하세요.', '보내기', 'primary', '예: 안녕하세요! 관리자입니다.').then(function (t) {
-      if (t === null) return;
-      if (!t) { modalNotice('안내', '내용을 입력해주세요.'); return; }
-      sendMessageTo(entryId, 'admin', t).then(function () {
-        appendLog('admin', '관리자', '메시지 발송 · ' + nick);
-        modalNotice('보냈어요 ✅', nick + '님에게 메시지를 보냈어요.');
-      }).catch(function (err) { modalNotice('오류', '전송 실패: ' + (err.message || err)); });
-    });
   }
   function deleteAdminMessage(id) {
     return db.runTransaction(function (tx) {
@@ -3425,7 +3473,7 @@
     }
     var adminBtn = isAdminUnlocked
       ? '<button type="button" class="card-btn admin-detail-btn" data-action="detail" data-id="' + escapeHtml(entry.id) + '">🔍 상세</button>' +
-        '<button type="button" class="card-btn" data-action="admin-msg" data-id="' + escapeHtml(entry.id) + '">💬 메시지</button>'
+        '<button type="button" class="card-btn" data-action="admin-msg" data-id="' + escapeHtml(entry.id) + '">💬 대화</button>'
       : '';
     /* 내 프로필이거나 내가 관리하는 친구면 사진/번호 "요청" 버튼은 숨김 (자기 자신에게 요청은 무의미) */
     var mineOrManaged = !!(currentUser && (entry.id === currentUser.id || entry.managedBy === currentUser.id));
@@ -5118,7 +5166,7 @@
     });
     var adminMsgItems = msgEntryIds.map(function (eid) {
       var msgs = msgByEntry[eid].slice().sort(function (a, b) { return (a.at || '').localeCompare(b.at || ''); });
-      var lines = msgs.map(function (m) { return msgLineHtml(m, true); }).join('');
+      var lines = msgs.map(function (m) { return adminChatBubble(m, true); }).join('');
       var last = msgs[msgs.length - 1];
       var preview = (last.from === 'admin' ? '나: ' : '') + (last.text || '');
       var unreadHere = msgs.filter(function (m) { return m.from === 'user' && !m.readByAdmin; }).length;
@@ -5135,7 +5183,7 @@
             (eid.indexOf('guest-') === 0
               ? (msgs.filter(function (m) { return m.guestPhoneEnc; })[0]
                   ? '<button type="button" class="card-btn primary" data-action="guest-phone" data-id="' + escapeHtml(msgs.filter(function (m) { return m.guestPhoneEnc; })[0].id) + '" style="flex:none;">📞 연락처 확인</button>' : '')
-              : '<button type="button" class="card-btn primary" data-action="admin-msg-reply" data-id="' + escapeHtml(eid) + '" style="flex:none;">✍️ 답장</button>') +
+              : '<button type="button" class="card-btn primary" data-action="admin-msg-reply" data-id="' + escapeHtml(eid) + '" style="flex:none;">💬 대화</button>') +
             '<button type="button" class="card-btn danger" data-action="admin-msg-delall" data-id="' + escapeHtml(eid) + '" style="flex:none;">전체 삭제</button>' +
           '</div>' +
         '</div>' +
@@ -5143,7 +5191,7 @@
     }).join('');
     var adminMsgUnreadTotal = (state.messages || []).filter(function (m) { return m.from === 'user' && !m.hiddenByAdmin && !m.readByAdmin; }).length;
     var adminMsgSection = adminFold('💬 관리자 메시지', msgEntryIds.length,
-      '<p class="sub">회원별로 한 줄씩 보여요. 눌러서 대화를 펼치고 답장할 수 있어요. (✕ 개별 삭제 / 전체 삭제)</p>' +
+      '<p class="sub">회원별 대화예요. 눌러서 내역을 펼치거나 [💬 대화]로 대화방을 열어 답장해요. (✕ 개별 삭제 / 전체 삭제)</p>' +
       (msgEntryIds.length ? adminMsgItems : '<p class="sub">아직 메시지가 없어요.</p>'), false, 'adminmsg');
 
     var activeReqSection = adminFold('📬 요청함', activeReqs.length,
@@ -7952,8 +8000,8 @@
       else if (action === 'reapply') handleReapplyRequest(id);
       else if (action === 'hide-request') handleHideRequest(id);
       else if (action === 'reset-pin') handleAdminResetPin(id);
-      else if (action === 'admin-msg') handleAdminMessageCompose(id);
-      else if (action === 'admin-msg-reply') handleAdminMessageCompose(id);
+      else if (action === 'admin-msg') openAdminChat(id);
+      else if (action === 'admin-msg-reply') openAdminChat(id);
       else if (action === 'guest-phone') handleGuestPhone(id);
       else if (action === 'msg-del') { if (isAdminUnlocked) deleteAdminMessage(id); }
       else if (action === 'mymsg-del') { deleteMyMessage(id); }
