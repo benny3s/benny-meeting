@@ -890,7 +890,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-295';
+  var APP_VERSION = '2026-09-12-296';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3306,10 +3306,10 @@
     else if (diff < 108 * H) label = '며칠 전';
     else if (diff < 168 * H) label = '이번 주';
     else return '';
-    var green = (label === '오늘' || label === '어제'); /* 오늘·어제까지 연두색, 나머지는 회색 */
-    var style = green
-      ? 'background:#e6f4ea;color:#137333;border-color:#b7e0c4;'
-      : 'background:#eef1f4;color:#5f6368;';
+    var style; /* 오늘=진한 녹색 · 어제=연한 녹색 · 며칠 전·이번 주=회색 */
+    if (label === '오늘') style = 'background:#bfe6cc;color:#0b5a2a;border-color:#8ccfa2;';
+    else if (label === '어제') style = 'background:#e9f6ee;color:#2e8b52;border-color:#cfe9d7;';
+    else style = 'background:#eef1f4;color:#5f6368;';
     return '<span class="chip" style="' + style + '">' + escapeHtml(label) + ' 접속</span>';
   }
   /* 접속 버킷 (관리자 "접속" 필터용): today/yesterday/fewdays(2~7일)/inactive(1주일+·없음) */
