@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-304';
+  var APP_VERSION = '2026-09-12-305';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3694,7 +3694,7 @@
     overlay.classList.add('card-detail-modal');
     /* 관리자: 알람 설정 여부를 pushTokens에서 조회해 채움 */
     if (isAdminUnlocked) fillNotifStatus(entry.id);
-    var closeActions = ['edit', 'delete', 'admin-manage', 'request-photo', 'request-contact', 'detail'];
+    var closeActions = ['edit', 'delete', 'admin-manage', 'request-photo', 'request-contact', 'detail', 'card-detail'];
     overlay.addEventListener('click', function (e) {
       if (e.target === overlay) { closeModal(overlay); return; }
       if (e.target.closest('#card-detail-close')) { closeModal(overlay); return; }
@@ -7761,48 +7761,46 @@
     var state = currentState;
     var entry = state.entries.find(function (e) { return e.id === id; });
     if (!entry) return;
+    var isMM = isMatchmakerEntry(entry); /* 순수 주선자(본인 프로필 없음) → 성별·생년 등 없음 */
     var rows = '<div class="detail-grid">';
     rows += '<div class="detail-row"><div class="detail-label">고유번호</div><div class="detail-value">' + escapeHtml(formatUid(entry) || '—') + '</div></div>';
-    rows += '<div class="detail-row"><div class="detail-label">닉네임</div><div class="detail-value">' + escapeHtml(entry.nickname) + '</div></div>';
-    if (decryptedContacts[entry.id]) {
-      rows += '<div class="detail-row"><div class="detail-label">연락처</div><div class="detail-value">' + escapeHtml(decryptedContacts[entry.id]) + '</div></div>';
-    }
-    if (isAdminUnlocked && adminPrivateKey && entry.realNameEnc) {
-      decryptWithAdmin(adminPrivateKey, entry.realNameEnc).then(function (name) {
-        var nameEl = document.getElementById('detail-realname');
-        if (nameEl) nameEl.textContent = name;
-      }).catch(function () { var el = document.getElementById('detail-realname'); if (el) el.textContent = '(복호화 실패)'; });
-    }
-    if (isAdminUnlocked && adminPrivateKey && entry.referrerEnc) {
-      decryptWithAdmin(adminPrivateKey, entry.referrerEnc).then(function (ref) {
-        var refEl = document.getElementById('detail-referrer');
-        if (refEl) refEl.textContent = ref;
-      }).catch(function () { var el = document.getElementById('detail-referrer'); if (el) el.textContent = '(복호화 실패)'; });
-    }
+    rows += '<div class="detail-row"><div class="detail-label">닉네임</div><div class="detail-value">' + escapeHtml(entry.nickname || '') + '</div></div>';
+    if (isMM) rows += '<div class="detail-row"><div class="detail-label">구분</div><div class="detail-value">🤝 주선자(매니저) — 명단 비노출</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">실명</div><div class="detail-value" id="detail-realname">' + (entry.realNameEnc ? '복호화 중...' : '-') + '</div></div>';
+    rows += '<div class="detail-row"><div class="detail-label">연락처</div><div class="detail-value" id="detail-contact">' + (entry.contactEnc ? '복호화 중...' : (decryptedContacts[entry.id] ? escapeHtml(decryptedContacts[entry.id]) : '-')) + '</div></div>';
     rows += '<div class="detail-row"><div class="detail-label">알게 된 경로</div><div class="detail-value" id="detail-referrer">' + (entry.referrerEnc ? '복호화 중...' : '-') + '</div></div>';
-    rows += '<div class="detail-row"><div class="detail-label">성별</div><div class="detail-value">' + genderLabel(entry.gender) + '</div></div>';
-    rows += '<div class="detail-row"><div class="detail-label">생년</div><div class="detail-value">' + (entry.birthYear || '-') + '</div></div>';
-    rows += '<div class="detail-row"><div class="detail-label">지역</div><div class="detail-value">' + escapeHtml(entry.region) + '</div></div>';
-    rows += '<div class="detail-row"><div class="detail-label">직장</div><div class="detail-value">' + escapeHtml(entry.workplace) + '</div></div>';
-    if (entry.height) rows += '<div class="detail-row"><div class="detail-label">키</div><div class="detail-value">' + escapeHtml(entry.height) + 'cm</div></div>';
+    if (!isMM) {
+      rows += '<div class="detail-row"><div class="detail-label">성별</div><div class="detail-value">' + genderLabel(entry.gender) + '</div></div>';
+      rows += '<div class="detail-row"><div class="detail-label">생년</div><div class="detail-value">' + (entry.birthYear || '-') + '</div></div>';
+      rows += '<div class="detail-row"><div class="detail-label">지역</div><div class="detail-value">' + escapeHtml(entry.region || '-') + '</div></div>';
+      rows += '<div class="detail-row"><div class="detail-label">직장</div><div class="detail-value">' + escapeHtml(entry.workplace || '-') + '</div></div>';
+      if (entry.height) rows += '<div class="detail-row"><div class="detail-label">키</div><div class="detail-value">' + escapeHtml(entry.height) + 'cm</div></div>';
+    }
     rows += '<div class="detail-row"><div class="detail-label">개인 PIN</div><div class="detail-value" id="detail-pin">확인 중...</div></div>';
     rows += '</div>';
-    modalNotice(escapeHtml(entry.nickname) + ' 상세', '').then(function () {});
-    var box = document.querySelector('.modal-box');
-    if (box) {
-      var msgEl = box.querySelector('.modal-msg');
-      if (msgEl) msgEl.innerHTML = rows;
+    /* 자체 오버레이로 렌더 (스택된 모달과 querySelector 충돌 방지) */
+    var overlay = openModal(
+      '<h3>' + escapeHtml(entry.nickname || '') + ' 상세</h3>' +
+      '<div class="modal-msg" style="text-align:left;">' + rows + '</div>' +
+      '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">확인</button></div>'
+    );
+    overlay.querySelector('#modal-ok').addEventListener('click', function () { closeModal(overlay); });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(overlay); });
+    var q = function (sel) { return overlay.querySelector(sel); };
+    if (isAdminUnlocked && adminPrivateKey && entry.realNameEnc) {
+      decryptWithAdmin(adminPrivateKey, entry.realNameEnc).then(function (name) { var el = q('#detail-realname'); if (el) el.textContent = name; }).catch(function () { var el = q('#detail-realname'); if (el) el.textContent = '(복호화 실패)'; });
+    } else if (!entry.realNameEnc) { var rn = q('#detail-realname'); if (rn) rn.textContent = '(없음)'; }
+    if (isAdminUnlocked && adminPrivateKey && entry.contactEnc) {
+      decryptWithAdmin(adminPrivateKey, entry.contactEnc).then(function (c) { var el = q('#detail-contact'); if (el) el.textContent = c; }).catch(function () { var el = q('#detail-contact'); if (el) el.textContent = '(복호화 실패)'; });
     }
-    if (isAdminUnlocked) {
-      var pinEl = document.getElementById('detail-pin');
+    if (isAdminUnlocked && adminPrivateKey && entry.referrerEnc) {
+      decryptWithAdmin(adminPrivateKey, entry.referrerEnc).then(function (ref) { var el = q('#detail-referrer'); if (el) el.textContent = ref; }).catch(function () { var el = q('#detail-referrer'); if (el) el.textContent = '(복호화 실패)'; });
+    }
+    var pinEl = q('#detail-pin');
+    if (pinEl) {
       /* 보안상 PIN 원본은 표시하지 않아요. 잊어버린 회원은 재설정만 가능. */
-      if (pinEl) {
-        pinEl.innerHTML = '<span style="color:var(--muted);">보안상 표시하지 않아요</span>' +
-          ' <button type="button" class="card-btn" data-action="reset-pin" data-id="' + escapeHtml(entry.id) + '" style="flex:none;padding:2px 10px;margin-left:6px;">PIN 재설정</button>';
-      }
-      var rnEl = document.getElementById('detail-realname');
-      if (rnEl && !entry.realNameEnc) rnEl.textContent = '(없음)';
+      if (isAdminUnlocked) pinEl.innerHTML = '<span style="color:var(--muted);">보안상 표시하지 않아요</span> <button type="button" class="card-btn" data-action="reset-pin" data-id="' + escapeHtml(entry.id) + '" style="flex:none;padding:2px 10px;margin-left:6px;">PIN 재설정</button>';
+      else pinEl.textContent = '-';
     }
    } catch (err) {
     try { modalNotice('오류', '상세 정보를 여는 중 문제가 생겼어요: ' + (err && err.message || err)); } catch (e2) {}
