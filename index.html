@@ -891,7 +891,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-297';
+  var APP_VERSION = '2026-09-12-298';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -6663,12 +6663,17 @@
       }
       var remainToday = typeLimit - sentTodayType; /* 이번 건 포함 남은 횟수 */
       var icon = isPhoto ? '📷' : '💌';
+      /* 주선자가 친구 프로필로 전환해 대신 요청 중이면 예시 문구를 "친구 대신" 톤으로 */
+      var isViaMm = !!(fromEntry.managedBy && fromEntry.managedBy === currentUser.id && !fromEntry.ownerSelf && isMatchmakerEntry(myAuthEntry(state)));
+      var noteEx = isPhoto
+        ? (isViaMm ? '예) 안녕하세요! 제가 아는 친구를 대신해 사진 요청드려요. 좋은 인연이 될 것 같아 조심스레 연락드립니다 :)' : '예) 안녕하세요! 프로필 보고 관심이 있어서 사진 요청 드립니다. 제 사진도 공개해드렸으니, 보시고 편하게 답변 주세요.')
+        : (isViaMm ? '예) 안녕하세요! 제가 아는 친구를 대신해 대화 신청드려요. 두 분이 잘 맞을 것 같아 조심스레 소개드려요 :)' : '예) 안녕하세요! 저랑 공통점이 있어서 꼭 한 번 대화해보고 싶어요 :)');
       var noteOverlay = openModal(
         '<h3>' + icon + ' ' + escapeHtml(target.nickname) + '님에게 ' + actionText + '</h3>' +
         '<p class="modal-msg">' + (isPhoto ? '수락하면 <b>서로 사진이 공개</b>돼요. ' : '수락하면 <b>앱 안에서 채팅</b>으로 대화할 수 있어요 (대화 후 번호/카톡 교환 추천해요). ') + '간단한 인사·요청 이유를 꼭 남겨주세요 <b>(최소 10자)</b>.</p>' +
         (isPhoto ? '' : '<p class="modal-msg" style="font-size:0.82rem;color:var(--muted);margin:-2px 0 6px;">대화 내용은 안전·분쟁 대비를 위해 서버에 보관되지만, 관리자 화면에는 공개되지 않아요.</p>') +
         '<p class="modal-msg" style="color:var(--gold);font-size:0.82rem;margin:-2px 0 6px;">오늘 ' + actionText + ' 남은 횟수: <b>' + remainToday + '/' + typeLimit + '</b></p>' +
-        '<textarea class="modal-input" id="modal-note" rows="3" maxlength="200" placeholder="' + (isPhoto ? '예) 안녕하세요! 프로필 보고 관심이 있어서 사진 요청 드립니다. 제 사진도 공개해드렸으니, 보시고 편하게 답변 주세요.' : '예) 안녕하세요! 저랑 공통점이 있어서 꼭 한 번 대화해보고 싶어요 :)') + '"></textarea>' +
+        '<textarea class="modal-input" id="modal-note" rows="3" maxlength="200" placeholder="' + noteEx + '"></textarea>' +
         '<p id="modal-note-warn" class="modal-msg" style="color:var(--accent);margin:4px 0 0;font-size:0.82rem;" hidden>최소 10자 이상 남겨주세요.</p>' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
