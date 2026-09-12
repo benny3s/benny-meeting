@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-312';
+  var APP_VERSION = '2026-09-12-313';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -987,6 +987,7 @@
   var adminReqStatus = 'all';                          /* 요청 상태 필터: all|pending|held|approved|rejected */
   var adminReqAge = 'all';                             /* 요청 나이 필터(색상 기준): all|today|yesterday|few|old */
   var adminReqPendingStale = false;                    /* 대기 필터 2단계: 요청 후 상대가 로그인 안 한 대기건만 */
+  var adminReqSearch = '';                             /* 요청함 검색어(요청자·상대 닉네임/고유번호) */
   var currentState = null;
   var photoDataUrls = [];
   var formPhotosReady = true; /* 수정 시 원본 사진 로드 완료 여부 */
@@ -4988,8 +4989,9 @@
       var decTime = r.decidedAt ? new Date(r.decidedAt).toLocaleString('ko-KR') : '';
       var whenBlock = '<span class="when">📮 요청 ' + reqTime + '</span>' +
         (decTime && decLabel ? '<span class="when">' + decLabel + ' ' + decTime + '</span>' : '');
+      var searchBlob = (fromName + ' ' + toName + ' ' + uidOf(fromId) + ' ' + uidOf(toId)).toLowerCase();
       return (
-        '<details class="' + foldCls + '">' +
+        '<details class="' + foldCls + '" data-reqsearch="' + escapeHtml(searchBlob) + '">' +
           summary +
           '<div class="req-fold-body">' +
             body +
@@ -5106,6 +5108,7 @@
         '<span style="font-weight:700;font-size:0.86rem;">정렬</span>' +
         reqSortBtn('req', '요청시간') + reqSortBtn('dec', '승인시간') +
       '</div>';
+    var reqSearchBox = '<input type="text" id="admin-req-search" value="' + escapeHtml(adminReqSearch) + '" placeholder="🔍 닉네임 · 고유번호 검색" autocomplete="off" style="width:100%;box-sizing:border-box;margin:0 0 10px;padding:8px 12px;border:1px solid var(--line);border-radius:999px;font-size:0.92rem;font-family:inherit;">';
 
     /* 회원 명단 (트리): 로그인 계정(주선자/일반)이 최상위, 그 아래 관리 프로필(본인/친구) */
     /* e(이 사람)가 볼 수 있는 사진/번호 수 (e가 "보는 주체") */
@@ -5354,8 +5357,9 @@
         ? '<p class="sub">조건에 맞는 요청이 없어요.</p>'
         : '<p class="sub">아직 요청이 없어요.</p>');
     var activeReqSection = adminFold('📬 요청함', visibleReqs.length,
-      reqStatusRow + reqAgeRow + reqSortSelect + reqPendingHint +
-      (listReqs.length ? allReqItems : reqEmpty), false, 'active');
+      reqStatusRow + reqAgeRow + reqSortSelect + reqSearchBox + reqPendingHint +
+      (listReqs.length ? allReqItems : reqEmpty) +
+      '<p class="sub" id="req-search-empty" hidden>검색 결과가 없어요.</p>', false, 'active');
     var secHtml = {
       usage: usageStatsHtml(state), pending: pendingSection, held: heldSection, editrev: editRevSection,
       deaclist: deacListSection, dellog: delLogSection,
@@ -5743,12 +5747,28 @@
       cards[i].style.display = tokens.every(function (t) { return blob.indexOf(t) >= 0; }) ? '' : 'none';
     }
   }
+  /* 요청함 검색: 요청 행만 즉석 숨김/표시 (재렌더 없이 → 포커스·한글조합 유지) */
+  function applyReqSearch() {
+    var q = (adminReqSearch || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    var tokens = q ? q.split(' ') : [];
+    var rows = document.querySelectorAll('.req-fold[data-reqsearch]');
+    var shown = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var blob = rows[i].getAttribute('data-reqsearch') || '';
+      var vis = tokens.every(function (t) { return blob.indexOf(t) >= 0; });
+      rows[i].style.display = vis ? '' : 'none';
+      if (vis) shown++;
+    }
+    var emptyNote = document.getElementById('req-search-empty');
+    if (emptyNote) emptyNote.hidden = !(q && rows.length && shown === 0);
+  }
   function paint(state) {
     currentState = state;
     document.getElementById('app').innerHTML = renderApp(state);
     try { applyListSearch(); } catch (e) {} /* 검색어가 있으면 재적용 */
     try { applySeenSearch(); } catch (e) {} /* 회원 명단 검색 재적용 */
     try { applyMmSearch(); } catch (e) {} /* 주선자 탭 검색 재적용 */
+    try { applyReqSearch(); } catch (e) {} /* 요청함 검색 재적용 */
     try {
       var items = document.querySelectorAll('.admin-msg-item');
       for (var i = 0; i < items.length; i++) {
@@ -8213,6 +8233,7 @@
     if (e.target.id === 'list-search') { listSearch = e.target.value; applyListSearch(); return; } /* paint 없이 즉시 필터 → 포커스·한글조합 유지 */
     if (e.target.id === 'seen-search') { seenSearch = e.target.value; applySeenSearch(); return; } /* 회원 명단 검색: paint 없이 즉시 */
     if (e.target.id === 'mm-search') { mmSearch = e.target.value; applyMmSearch(); return; } /* 주선자 탭 검색: paint 없이 즉시 */
+    if (e.target.id === 'admin-req-search') { adminReqSearch = e.target.value; applyReqSearch(); return; } /* 요청함 검색: paint 없이 즉시 */
     if (e.target.hasAttribute && e.target.hasAttribute('data-numeric')) stripNonDigits(e.target);
     if (e.target.closest && e.target.closest('#entry-form')) saveDraft();
     if (e.target.id === 'f-intro' || e.target.id === 'f-idealtype' || e.target.id === 'f-dealbreaker') updateCharCounts();
