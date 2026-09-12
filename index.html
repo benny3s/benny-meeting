@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-305';
+  var APP_VERSION = '2026-09-12-306';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -5008,18 +5008,21 @@
     /* 관리자 화면에서 숨긴 요청 분리 (당사자 기록엔 남아있음) */
     var visibleReqs = reqs.filter(function (r) { return !r.adminHidden; });
     var hiddenReqs = reqs.filter(function (r) { return r.adminHidden; });
-    var activeCount = visibleReqs.filter(function (r) { return !isDone(r); }).length;
     var _rsKey0 = adminReqSort.split('_')[0];
     var _reqPool = (showHiddenReqs ? hiddenReqs : visibleReqs);
     function reqStatKey(r) { var st = reqStatus(r); if (st === 'approved' || st === 'user_approved') return 'approved'; if (st === 'rejected') return 'rejected'; if (st === 'held') return 'held'; return 'pending'; }
     var _todayK = kstDay(new Date().toISOString());
     function reqAgeKey(r) { var subK = r.submittedAt ? kstDay(r.submittedAt) : ''; if (!subK) return 'old'; var dd = Math.round((Date.parse(_todayK) - Date.parse(subK)) / 86400000); return dd <= 0 ? 'today' : (dd === 1 ? 'yesterday' : (dd <= 4 ? 'few' : 'old')); }
-    var statCounts = { all: _reqPool.length, pending: 0, held: 0, approved: 0, rejected: 0 };
-    var ageCounts = { all: _reqPool.length, today: 0, yesterday: 0, few: 0, old: 0 };
-    _reqPool.forEach(function (r) { statCounts[reqStatKey(r)]++; ageCounts[reqAgeKey(r)]++; });
-    var _reqBase = _reqPool.slice();
-    if (adminReqStatus !== 'all') _reqBase = _reqBase.filter(function (r) { return reqStatKey(r) === adminReqStatus; });
-    if (adminReqAge !== 'all') _reqBase = _reqBase.filter(function (r) { return reqAgeKey(r) === adminReqAge; });
+    function reqPassStatus(r) { return adminReqStatus === 'all' || reqStatKey(r) === adminReqStatus; }
+    function reqPassAge(r) { return adminReqAge === 'all' || reqAgeKey(r) === adminReqAge; }
+    /* 개수는 "다른 필터"를 반영해 갱신 (상태 개수 ← 현재 나이필터 적용 · 나이 개수 ← 현재 상태필터 적용) */
+    var statCounts = { all: 0, pending: 0, held: 0, approved: 0, rejected: 0 };
+    var ageCounts = { all: 0, today: 0, yesterday: 0, few: 0, old: 0 };
+    _reqPool.forEach(function (r) {
+      if (reqPassAge(r)) { statCounts.all++; statCounts[reqStatKey(r)]++; }
+      if (reqPassStatus(r)) { ageCounts.all++; ageCounts[reqAgeKey(r)]++; }
+    });
+    var _reqBase = _reqPool.filter(function (r) { return reqPassStatus(r) && reqPassAge(r); });
     /* 승인시간 정렬은 "처리 시각"이 있는 요청만 의미 있음 → 미처리(대기)는 제외 */
     if (_rsKey0 === 'dec' || _rsKey0 === 'gap') _reqBase = _reqBase.filter(function (r) { return r.decidedAt; });
     var listReqs = _reqBase.sort(reqSortCmp);
@@ -5057,15 +5060,16 @@
       var arrow = active ? (_rsDir === 'asc' ? ' ▲' : ' ▼') : '';
       return '<button type="button" class="card-btn' + (active ? ' primary' : '') + '" data-action="req-sort" data-key="' + key + '" style="flex:none;padding:5px 12px;font-size:0.82rem;">' + label + arrow + '</button>';
     }
-    var hiddenToggleBtn = (hiddenReqs.length || showHiddenReqs)
-      ? '<button type="button" class="card-btn' + (showHiddenReqs ? ' primary' : '') + '" data-action="toggle-hidden-reqs" style="flex:none;padding:5px 12px;font-size:0.82rem;margin-left:auto;">' + (showHiddenReqs ? '↩︎ 일반 요청' : '🙈 숨긴 요청 ' + hiddenReqs.length) + '</button>'
-      : '';
     var reqSortSelect =
-      '<div style="display:flex;align-items:center;gap:8px;margin:2px 0 12px;flex-wrap:wrap;">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin:2px 0 10px;flex-wrap:wrap;">' +
         '<span style="font-weight:700;font-size:0.86rem;">정렬</span>' +
         reqSortBtn('req', '요청시간') + reqSortBtn('dec', '승인시간') +
-        hiddenToggleBtn +
       '</div>';
+    var hiddenRow = (hiddenReqs.length || showHiddenReqs)
+      ? '<div style="display:flex;margin:2px 0 4px;">' +
+          '<button type="button" class="card-btn' + (showHiddenReqs ? ' primary' : '') + '" data-action="toggle-hidden-reqs" style="flex:none;padding:5px 12px;font-size:0.82rem;">' + (showHiddenReqs ? '↩︎ 일반 요청' : '🙈 숨긴 요청 ' + hiddenReqs.length) + '</button>' +
+        '</div>'
+      : '';
 
     /* 회원 명단 (트리): 로그인 계정(주선자/일반)이 최상위, 그 아래 관리 프로필(본인/친구) */
     /* e(이 사람)가 볼 수 있는 사진/번호 수 (e가 "보는 주체") */
@@ -5308,14 +5312,14 @@
       '<p class="sub">나와 대화를 주고받은 회원이에요 (전체 공지만 받은 사람은 제외). 안 읽은 대화는 <b>위에 강조·자동 펼침</b>돼요. [💬 대화]로 답장, [👤 프로필]로 바로 이동. (✕ 개별 / 전체 삭제)</p>' +
       (msgEntryIds.length ? adminMsgItems : '<p class="sub">아직 주고받은 대화가 없어요.</p>'), false, 'adminmsg');
 
-    var reqDesc = showHiddenReqs
-      ? '<p class="sub">🙈 <b>숨긴 요청</b> — 관리자 화면에서만 숨겨졌고, <b>당사자 기록엔 그대로 남아있어요.</b> [↩︎ 복원]으로 되돌리거나 [🗑 완전삭제]로 양쪽에서 완전히 지울 수 있어요.</p>'
-      : '<p class="sub">사진 요청·대화 신청 전체예요 (대기·보류·완료 통합).' + (activeCount ? ' <b style="color:var(--accent);">미처리 ' + activeCount + '건.</b>' : ' 미처리 없음.') + ' <span style="color:var(--muted);">[🙈 숨기기]는 내 화면에서만 정리 · [🗑 완전삭제]는 양쪽 기록 제거(스팸용).</span></p>';
+    var reqHiddenNote = showHiddenReqs
+      ? '<p class="sub" style="margin-top:0;">🙈 <b>숨긴 요청</b> — 관리자 화면에서만 숨겨졌고, <b>당사자 기록엔 그대로 남아있어요.</b> [↩︎ 복원]으로 되돌리거나 [🗑 완전삭제]로 양쪽에서 지울 수 있어요.</p>'
+      : '';
     var reqEmpty = (adminReqStatus !== 'all' || adminReqAge !== 'all')
       ? '<p class="sub">조건에 맞는 요청이 없어요.</p>'
       : (showHiddenReqs ? '<p class="sub">숨긴 요청이 없어요.</p>' : '<p class="sub">아직 요청이 없어요.</p>');
     var activeReqSection = adminFold('📬 요청함', visibleReqs.length,
-      reqDesc + reqStatusRow + reqSortSelect + reqAgeRow +
+      reqStatusRow + reqAgeRow + reqSortSelect + hiddenRow + reqHiddenNote +
       (listReqs.length ? allReqItems : reqEmpty), false, 'active');
     var secHtml = {
       usage: usageStatsHtml(state), pending: pendingSection, held: heldSection, editrev: editRevSection,
