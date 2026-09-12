@@ -775,7 +775,7 @@
   .pf-switch-chip:hover { border-color: var(--gold); }
   .pf-switch-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
   .pf-switch-chip.pf-switch-add { border-style: dashed; color: var(--accent); }
-  .pf-switch-chip.pf-switch-fold { color: var(--muted); background: transparent; }
+  .pf-switch-chip.pf-switch-fold { color: var(--gold); background: var(--gold-soft); border-color: var(--gold); font-weight: 700; }
   .ps-none { align-self: center; color: var(--muted); font-size: 0.85rem; padding: 4px 2px; }
   .cap-bar {
     height: 12px; border-radius: 999px; background: var(--line);
@@ -890,7 +890,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-281';
+  var APP_VERSION = '2026-09-12-282';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2450,7 +2450,7 @@
           '<button type="button" class="role-btn" data-lmode="mm">🤝 주선자</button>' +
         '</div>' +
         '<p class="modal-msg" id="login-mode-msg"></p>' +
-        '<input type="text" class="modal-input" id="modal-login-search" placeholder="🔍 고유번호 또는 닉네임 검색" autocomplete="off">' +
+        '<input type="text" class="modal-input" id="modal-login-search" placeholder="🔍 고유번호 또는 닉네임 검색" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" name="benny-login-search" data-lpignore="true" data-1p-ignore="true" data-form-type="other">' +
         '<div class="login-list" id="modal-login-list"></div>' +
         '<div style="position:relative;margin-top:10px;">' +
           '<input type="password" inputmode="numeric" class="modal-input" id="modal-login-pin" data-numeric placeholder="개인 PIN" style="margin-top:0;padding-right:46px;" autocomplete="off">' +
@@ -3147,13 +3147,16 @@
     return '<span class="chip" style="background:#f1f3f4;color:#5f6368;">대기중</span>';
   }
   /* 답장 메시지 입력 모달 (승인/보류/거절 공통). OK=문자열('' 가능), 취소=null */
-  function modalMessage(title, msg, okLabel, okClass, placeholder, requireText, prefill) {
+  function modalMessage(title, msg, okLabel, okClass, placeholder, requireText, prefill, minLen) {
+    minLen = minLen || 0;
+    var mustFill = requireText || minLen > 0;
+    var warnText = minLen > 0 ? ('최소 ' + minLen + '자 이상 입력해주세요.') : '사유를 입력해주세요.';
     return new Promise(function (resolve) {
       var overlay = openModal(
         '<h3>' + escapeHtml(title) + '</h3>' +
         '<p class="modal-msg">' + escapeHtml(msg) + '</p>' +
-        '<textarea class="modal-input" id="modal-msg-text" rows="3" maxlength="200" placeholder="' + escapeHtml(placeholder || (requireText ? '사유를 적어주세요 (필수)' : '답장 메시지 (선택)')) + '"></textarea>' +
-        (requireText ? '<p id="modal-msg-warn" class="modal-msg" style="color:var(--accent);margin:4px 0 0;font-size:0.82rem;" hidden>사유를 입력해주세요.</p>' : '') +
+        '<textarea class="modal-input" id="modal-msg-text" rows="3" maxlength="200" placeholder="' + escapeHtml(placeholder || (mustFill ? (minLen > 0 ? '답장을 적어주세요 (최소 ' + minLen + '자)' : '사유를 적어주세요 (필수)') : '답장 메시지 (선택)')) + '"></textarea>' +
+        (mustFill ? '<p id="modal-msg-warn" class="modal-msg" style="color:var(--accent);margin:4px 0 0;font-size:0.82rem;" hidden>' + escapeHtml(warnText) + '</p>' : '') +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="modal-cancel">취소</button>' +
           '<button type="button" class="card-btn ' + (okClass || 'primary') + '" id="modal-ok">' + escapeHtml(okLabel || '확인') + '</button>' +
@@ -3165,7 +3168,7 @@
       overlay.querySelector('#modal-cancel').addEventListener('click', function () { finish(null); });
       overlay.querySelector('#modal-ok').addEventListener('click', function () {
         var v = textEl.value.trim();
-        if (requireText && !v) { var w = overlay.querySelector('#modal-msg-warn'); if (w) w.hidden = false; textEl.focus(); return; }
+        if ((requireText && !v) || (minLen > 0 && v.length < minLen)) { var w = overlay.querySelector('#modal-msg-warn'); if (w) w.hidden = false; textEl.focus(); return; }
         finish(v);
       });
       overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(null); });
@@ -7116,8 +7119,8 @@
     var msg = (isPhoto
       ? escapeHtml(fromName) + '님의 사진 요청을 수락할까요? 수락하면 서로 사진을 볼 수 있어요.'
       : escapeHtml(fromName) + '님의 대화 신청을 수락할까요? 수락하면 앱 안에서 채팅으로 대화할 수 있어요 (번호는 공개되지 않아요).') +
-      ' 상대에게 전할 인사를 남길 수 있어요.';
-    modalMessage('요청 수락', msg, '수락', 'primary', '예: 반가워요! 잘 부탁드려요 :)').then(function (replyMsg) {
+      ' 상대에게 전할 인사를 꼭 남겨주세요 (최소 10자).';
+    modalMessage('요청 수락', msg, '수락', 'primary', '예: 반가워요! 잘 부탁드려요 :)', false, null, 10).then(function (replyMsg) {
       if (replyMsg === null) return;
       return db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
@@ -7158,7 +7161,7 @@
     var isPhoto = (req.type || 'contact') === 'photo';
     var from = (state.entries || []).find(function (e) { return e.id === req.fromId; });
     var fromName = from ? from.nickname : '상대방';
-    modalMessage('요청 거절', escapeHtml(fromName) + '님의 ' + (isPhoto ? '사진' : '번호') + ' 요청을 거절할까요? 더 알고 싶은 점이 있으면 남겨주세요. 상대가 정보를 담아 다시 요청할 수 있어요.', '거절하기', 'danger', '예: 직장·직업이 궁금해요. 알려주시면 다시 볼게요! / 종교가 달라서요').then(function (rejectMsg) {
+    modalMessage('요청 거절', escapeHtml(fromName) + '님의 ' + (isPhoto ? '사진' : '번호') + ' 요청을 거절할까요? 사유를 꼭 남겨주세요 (최소 10자). 상대가 정보를 담아 다시 요청할 수 있어요.', '거절하기', 'danger', '예: 직장·직업이 궁금해요. 알려주시면 다시 볼게요! / 종교가 달라서요', false, null, 10).then(function (rejectMsg) {
       if (rejectMsg === null || rejectMsg === undefined) return;
       return db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
@@ -7197,7 +7200,7 @@
     var isPhoto = (req.type || 'contact') === 'photo';
     var from = (state.entries || []).find(function (e) { return e.id === req.fromId; });
     var fromName = from ? from.nickname : '상대방';
-    modalMessage('요청 보류', escapeHtml(fromName) + '님의 요청을 보류할까요? 더 알고 싶은 점(사유)을 꼭 남겨주세요. 상대가 정보를 담아 다시 요청할 수 있어요.', '보류하기', 'primary', '예: 직장·직업이 궁금해요. 알려주시면 결정할게요! / 키가 어떻게 되세요?', true).then(function (holdMsg) {
+    modalMessage('요청 보류', escapeHtml(fromName) + '님의 요청을 보류할까요? 더 알고 싶은 점(사유)을 꼭 남겨주세요 (최소 10자). 상대가 정보를 담아 다시 요청할 수 있어요.', '보류하기', 'primary', '예: 직장·직업이 궁금해요. 알려주시면 결정할게요! / 키가 어떻게 되세요?', true, null, 10).then(function (holdMsg) {
       if (holdMsg === null || holdMsg === undefined) return;
       return db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
