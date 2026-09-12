@@ -890,7 +890,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-289';
+  var APP_VERSION = '2026-09-12-290';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -908,8 +908,8 @@
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
   var _mmFoldOpen = {};  /* 주선자 탭: 카드별 접힘 상태 (리페인트 후 유지용, 기본 열림) */
   var adminEditMode = false; /* 관리자 섹션 편집(순서·기본 열림) 모드 */
-  var DEFAULT_SEC_ORDER = ['usage', 'pending', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'done', 'cap', 'seen', 'log'];
-  var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', done: '✅ 요청완료', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록' };
+  var DEFAULT_SEC_ORDER = ['usage', 'pending', 'held', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'done', 'cap', 'seen', 'log'];
+  var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', held: '📌 보류 중', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', done: '✅ 요청완료', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록' };
   /* 섹션 열림 상태는 "세션 메모리에만" 저장 → 리페인트(버튼 클릭 등) 동안엔 유지되지만,
      새로고침하면 초기화되어 모두 접힌 상태로 시작 (이전에 열었던 걸 기억하지 않음) */
   var _adminSecOpen = {}, _adminSecOrder = null;
@@ -929,9 +929,14 @@
       if (_adminSecOrder === null) { try { _adminSecOrder = JSON.parse(localStorage.getItem('adminSecOrder')) || []; } catch (e) { _adminSecOrder = []; } }
       src = _adminSecOrder;
     }
-    /* 저장된 순서(알려진 키만) + 빠진 기본 키를 뒤에 보충 → 새 섹션도 자동 노출 */
+    /* 저장된 순서(알려진 키만) + 빠진 기본 키를 "기본 순서상 이웃" 자리에 보충 → 새 섹션이 제자리에 노출 */
     var known = (src || []).filter(function (k) { return DEFAULT_SEC_ORDER.indexOf(k) >= 0; });
-    DEFAULT_SEC_ORDER.forEach(function (k) { if (known.indexOf(k) < 0) known.push(k); });
+    DEFAULT_SEC_ORDER.forEach(function (k, di) {
+      if (known.indexOf(k) >= 0) return;
+      var insertAt = known.length; /* 못 찾으면 맨 뒤 */
+      for (var j = di - 1; j >= 0; j--) { var idx = known.indexOf(DEFAULT_SEC_ORDER[j]); if (idx >= 0) { insertAt = idx + 1; break; } }
+      known.splice(insertAt, 0, k);
+    });
     return known;
   }
   function saveAdminSecOrder(arr) {
@@ -4646,15 +4651,16 @@
       '</details>';
     }
     var pending = state.pendingEntries || [];
-    var pendingItems = pending.map(function (e) {
+    function pendingItemHtml(e) {
       var displayName = e.nickname || e.name || '(이름 없음)';
       var ageStr = e.birthYear ? (String(e.birthYear).slice(2) + '년생') : '-';
-      var heldNote = e.heldReason ? '<div class="p-meta" style="color:var(--accent);margin-top:3px;white-space:pre-wrap;">📌 보류 중: ' + escapeHtml(e.heldReason) + '</div>' : '';
+      var heldNote = e.heldReason ? '<div class="p-meta" style="color:var(--accent);margin-top:3px;white-space:pre-wrap;">📌 보류 사유: ' + escapeHtml(e.heldReason) + '</div>' : '';
       var holdBtn = '<button type="button" class="card-btn" data-action="hold-pending" data-id="' + escapeHtml(e.id) + '">' + (e.heldReason ? '보류 사유 수정' : '보류') + '</button>';
       var heldChip = e.heldReason ? ' <span class="chip" style="background:var(--accent-soft);color:var(--accent);">📌 보류</span>' : '';
+      var newChip = e.heldReason ? '' : '<span class="chip" style="background:#e8f0fe;color:#1a73e8;">🆕 신규</span>';
       if (e.isMatchmaker) {
         return foldItem(
-          '<span class="req-sum-who">🤝 ' + escapeHtml(displayName) + '</span> <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🆕 신규</span> <span class="chip" style="background:var(--gold-soft);color:var(--gold);">주선자</span>' + heldChip,
+          '<span class="req-sum-who">🤝 ' + escapeHtml(displayName) + '</span> ' + newChip + ' <span class="chip" style="background:var(--gold-soft);color:var(--gold);">주선자</span>' + heldChip,
           '<div class="p-meta">주선자(매니저) 등록 — 명단에 노출되지 않아요. 승인하면 친구들을 대신 소개할 수 있어요.</div>' +
           heldNote +
           '<div class="pending-actions">' +
@@ -4682,7 +4688,7 @@
         typeNote = '';
       }
       return foldItem(
-        '<span class="req-sum-who">' + escapeHtml(displayName) + '</span> <span class="chip" style="background:#e8f0fe;color:#1a73e8;">🆕 신규</span>' + typeChip + heldChip + '<span class="req-sum-when">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + '</span>',
+        '<span class="req-sum-who">' + escapeHtml(displayName) + '</span> ' + newChip + typeChip + heldChip + '<span class="req-sum-when">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + '</span>',
         '<div class="p-meta">' + genderLabel(e.gender) + ' · ' + escapeHtml(ageStr) + ' · ' + escapeHtml(e.region || '') + '</div>' +
         typeNote +
         '<div class="p-meta" style="margin-top:3px;">' + photoStatus + '</div>' +
@@ -4694,7 +4700,12 @@
           '<button type="button" class="card-btn danger" data-action="reject" data-id="' + escapeHtml(e.id) + '">거절</button>' +
         '</div>'
       );
-    }).join('');
+    }
+    /* 보류(heldReason 있음)와 새 신청을 분리 → 승인 대기엔 처리할 것만, 보류는 별도 섹션 */
+    var freshPending = pending.filter(function (e) { return !e.heldReason; });
+    var heldPending = pending.filter(function (e) { return e.heldReason; });
+    var pendingItems = freshPending.map(pendingItemHtml).join('');
+    var heldItems = heldPending.map(pendingItemHtml).join('');
     /* 삭제 요청·비활성화 요청 → "승인 대기"에 함께 합침 (신규 가입 + 삭제 + 보관 전환) */
     var delReqs = (state.entries || []).filter(function (e) { return e.deleteRequested; });
     var deacReqs = (state.entries || []).filter(function (e) { return e.deactivateRequested; });
@@ -4722,9 +4733,12 @@
         '</div>'
       );
     }).join('');
-    var approvalTotal = pending.length + delReqs.length + deacReqs.length;
+    var approvalTotal = freshPending.length + delReqs.length + deacReqs.length;
     var pendingSection = adminFold('⏳ 승인 대기', approvalTotal,
       (approvalTotal ? (pendingItems + delReqItems + deacReqItems) : '<p class="sub">대기 중인 신청이 없어요.</p>'), false, 'pending');
+    var heldSection = adminFold('📌 보류 중', heldPending.length,
+      '<p class="sub">보완을 요청(보류)해둔 신청·회원이에요. 로그인은 되고 보류 사유도 보이지만, 명단엔 안 보여요. 본인이 프로필을 고쳐 <b>재제출하면 자동으로 "승인 대기"로</b> 올라와요.</p>' +
+      (heldPending.length ? heldItems : '<p class="sub">보류 중인 신청이 없어요.</p>'), false, 'held');
     /* 승인 후 프로필을 수정한 회원 → 관리자가 한 번 검토 */
     var editRevList = (state.entries || []).filter(function (e) { return e.editReviewAt && !e.deactivated; })
       .sort(function (a, b) { return (b.editReviewAt || '').localeCompare(a.editReviewAt || ''); });
@@ -5136,7 +5150,7 @@
       '<p class="sub">아직 처리하지 않은 사진 요청·대화 신청이에요.</p>' +
       (activeReqs.length ? activeItems : '<p class="sub">처리할 요청이 없어요.</p>'), false, 'active');
     var secHtml = {
-      usage: usageStatsHtml(state), pending: pendingSection, editrev: editRevSection,
+      usage: usageStatsHtml(state), pending: pendingSection, held: heldSection, editrev: editRevSection,
       deaclist: deacListSection, dellog: delLogSection,
       active: activeReqSection, adminmsg: adminMsgSection, done: doneSection,
       cap: capSection, seen: seenSection, log: logSection
