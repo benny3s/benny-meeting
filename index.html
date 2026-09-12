@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-301';
+  var APP_VERSION = '2026-09-12-302';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -5001,17 +5001,17 @@
     var allReqs = reqs.slice().sort(reqSortCmp);
     var allReqItems = allReqs.map(adminReqRow).join('');
     var activeCount = reqs.filter(function (r) { return !isDone(r); }).length;
-    var reqSortOpts = [
-      ['req_desc', '요청시간 ↓ (최신 먼저)'], ['req_asc', '요청시간 ↑ (오래된 먼저)'],
-      ['dec_desc', '승인시간 ↓ (최신 먼저)'], ['dec_asc', '승인시간 ↑ (오래된 먼저)'],
-      ['gap_desc', '처리간격 ↓ (오래 걸린 것)'], ['gap_asc', '처리간격 ↑ (빨리 처리된 것)']
-    ];
+    /* 정렬 버튼: 요청/승인/간격을 누르면 그 기준으로 정렬, 같은 걸 다시 누르면 ▲▼ 방향 토글 */
+    var _rsKey = adminReqSort.split('_')[0], _rsDir = adminReqSort.split('_')[1];
+    function reqSortBtn(key, label) {
+      var active = _rsKey === key;
+      var arrow = active ? (_rsDir === 'asc' ? ' ▲' : ' ▼') : '';
+      return '<button type="button" class="card-btn' + (active ? ' primary' : '') + '" data-action="req-sort" data-key="' + key + '" style="flex:none;padding:5px 12px;font-size:0.82rem;">' + label + arrow + '</button>';
+    }
     var reqSortSelect =
       '<div style="display:flex;align-items:center;gap:8px;margin:2px 0 12px;flex-wrap:wrap;">' +
         '<span style="font-weight:700;font-size:0.86rem;">정렬</span>' +
-        '<select id="admin-req-sort" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font-family:inherit;font-size:0.85rem;">' +
-          reqSortOpts.map(function (o) { return '<option value="' + o[0] + '"' + (adminReqSort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
-        '</select>' +
+        reqSortBtn('req', '요청시간') + reqSortBtn('dec', '승인시간') + reqSortBtn('gap', '간격') +
       '</div>';
 
     /* 회원 명단 (트리): 로그인 계정(주선자/일반)이 최상위, 그 아래 관리 프로필(본인/친구) */
@@ -8081,6 +8081,12 @@
       else if (action === 'mymsg-del') { modalConfirm('메시지 삭제', '이 메시지를 삭제할까요? 되돌릴 수 없어요.', '삭제', 'danger').then(function (ok) { if (ok) deleteMyMessage(id); }); }
       else if (action === 'access-filter-open') { openAccessFilterPicker(actionBtn.getAttribute('data-scope') || 'list'); return; }
       else if (action === 'mm-scope') { mmScopeFilter = actionBtn.getAttribute('data-scope') || 'all'; paint(currentState); return; }
+      else if (action === 'req-sort') {
+        var rk = actionBtn.getAttribute('data-key') || 'req';
+        var parts = adminReqSort.split('_');
+        adminReqSort = (parts[0] === rk) ? (rk + '_' + (parts[1] === 'desc' ? 'asc' : 'desc')) : (rk + '_desc');
+        paint(currentState); return;
+      }
       else if (action === 'fold-all') { toggleFoldAll(); return; }
       else if (action === 'broadcast') { handleBroadcast(); return; }
       else if (action === 'admin-msg-delall') {
@@ -8165,7 +8171,6 @@
   }
 
   document.body.addEventListener('change', function (e) {
-    if (e.target.id === 'admin-req-sort') { adminReqSort = e.target.value; paint(currentState); return; }
     var testCb = e.target.closest && e.target.closest('[data-testtoggle]');
     if (testCb) { handleSetTest(testCb.getAttribute('data-testtoggle'), testCb.checked); return; }
     var permCb = e.target.closest && e.target.closest('[data-permtoggle]');
