@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-309';
+  var APP_VERSION = '2026-09-12-310';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -8488,6 +8488,44 @@
     });
   }
 
+  /* 주기적 만족도·공유 체크인: 월요일 06시(KST) 기준 주 1회, 로그인 회원에게 한 번 표시 */
+  function checkinPeriod() {
+    var nowKst = new Date(Date.now() + 9 * 3600 * 1000);
+    var daysSinceMon = (nowKst.getUTCDay() + 6) % 7; /* Mon=0 … Sun=6 */
+    var a = new Date(nowKst);
+    a.setUTCDate(a.getUTCDate() - daysSinceMon);
+    a.setUTCHours(6, 0, 0, 0);
+    if (nowKst.getTime() < a.getTime()) a.setUTCDate(a.getUTCDate() - 7); /* 월요일 06시 이전이면 지난주 기준 */
+    return { id: a.toISOString().slice(0, 10), anchorMs: a.getTime() - 9 * 3600 * 1000 };
+  }
+  function showCheckinModal() {
+    var overlay = openModal(
+      '<h3>베니브릿지, 요즘 어떠세요? 😊</h3>' +
+      '<p class="modal-msg" style="text-align:left;line-height:1.7;">사용하시면서 <b>좋았던 점·불편한 점</b>이 있으면 편하게 알려주세요. 여러분 의견으로 더 나아져요.<br>' +
+      '주변에 진지하게 좋은 인연을 찾는 지인이 있다면 링크도 전해주시면 큰 힘이 돼요 🙏</p>' +
+      '<div class="modal-actions" style="flex-direction:column;gap:8px;align-items:stretch;">' +
+        '<button type="button" class="card-btn" id="ci-feedback" style="width:100%;background:#FEE500;border-color:#FEE500;color:#3C1E1E;font-weight:700;">&#128172; 의견 남기기</button>' +
+        '<button type="button" class="card-btn" id="ci-share" style="width:100%;background:#1a73e8;border-color:#1a73e8;color:#fff;font-weight:700;">&#128279; 친구에게 공유</button>' +
+        '<button type="button" class="card-btn" id="modal-cancel" style="width:100%;">닫기</button>' +
+      '</div>'
+    );
+    overlay.querySelector('#ci-feedback').addEventListener('click', function () { closeModal(overlay); try { openMemberMsgCenter(); } catch (e) {} });
+    overlay.querySelector('#ci-share').addEventListener('click', function () { closeModal(overlay); try { handleShare(); } catch (e) {} });
+    overlay.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(overlay); });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(overlay); });
+  }
+  function maybeShowCheckin() {
+    if (!currentUser) return;                                  /* 로그인 회원만 */
+    var me = findMyEntry(currentState); if (!me) return;
+    if (document.querySelector('.modal-overlay')) { setTimeout(maybeShowCheckin, 4000); return; } /* 다른 모달(공지 등)과 겹치지 않게 잠시 후 재시도 */
+    var p = checkinPeriod();
+    var seen = ''; try { seen = localStorage.getItem('fb-checkin') || ''; } catch (e) {}
+    if (seen === p.id) return;                                 /* 이번 주기엔 이미 봄 */
+    try { localStorage.setItem('fb-checkin', p.id); } catch (e) {}
+    if (me.submittedAt && new Date(me.submittedAt).getTime() >= p.anchorMs) return; /* 이번 주기 이후 가입한 신규는 생략 */
+    showCheckinModal();
+  }
+
   var ANNOUNCE_KEY = 'announce-v23'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
   function announceVer() { return String((currentState && currentState.announce && currentState.announce.ver) || ANNOUNCE_KEY); }
   function showAnnouncement(force) {
@@ -9107,6 +9145,7 @@
     setupPullRefresh();
     armBackGuard(); /* 뒤로가기 완충 상태 1개 확보 (모달 열림 중 앱이 닫히지 않도록) */
     setTimeout(showAnnouncement, 800);
+    setTimeout(maybeShowCheckin, 2600); /* 주 1회 만족도·공유 체크인 (공지와 겹치면 알아서 뒤로 미룸) */
   }
   /* 아이폰 홈화면 앱(standalone)은 네이티브 "당겨서 새로고침"이 없음 → 직접 구현 */
   function setupPullRefresh() {
