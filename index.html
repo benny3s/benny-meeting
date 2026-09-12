@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-299';
+  var APP_VERSION = '2026-09-12-300';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -922,8 +922,8 @@
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
   var _mmFoldOpen = {};  /* 주선자 탭: 카드별 접힘 상태 (리페인트 후 유지용, 기본 열림) */
   var adminEditMode = false; /* 관리자 섹션 편집(순서·기본 열림) 모드 */
-  var DEFAULT_SEC_ORDER = ['usage', 'pending', 'held', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'done', 'cap', 'seen', 'log'];
-  var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', held: '📌 보류 중', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', done: '✅ 요청완료', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록' };
+  var DEFAULT_SEC_ORDER = ['usage', 'pending', 'held', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'cap', 'seen', 'log'];
+  var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', held: '📌 보류 중', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청', adminmsg: '💬 관리자 메시지', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록' };
   /* 섹션 열림 상태는 "세션 메모리에만" 저장 → 리페인트(버튼 클릭 등) 동안엔 유지되지만,
      새로고침하면 초기화되어 모두 접힌 상태로 시작 (이전에 열었던 걸 기억하지 않음) */
   var _adminSecOpen = {}, _adminSecOrder = null;
@@ -983,6 +983,7 @@
   var adminLogFilterActor = '';                       /* 활동 기록 고유번호/닉네임 필터 (검색창, 부분일치) */
   var adminLogFilterTime = '';                        /* 활동 기록 시간 필터 */
   var adminLogFilterNick = '';                        /* 접속칸 클릭 시 정확히 그 닉네임만 (완전일치) */
+  var adminReqSort = 'req_desc';                       /* 요청(요청함+완료 통합) 정렬: req_desc|req_asc|dec_desc|dec_asc|gap_desc|gap_asc */
   var currentState = null;
   var photoDataUrls = [];
   var formPhotosReady = true; /* 수정 시 원본 사진 로드 완료 여부 */
@@ -4974,13 +4975,42 @@
       );
     };
     var isDone = function (r) { var st = reqStatus(r); return st === 'approved' || st === 'rejected'; };
-    var activeReqs = reqs.filter(function (r) { return !isDone(r); }).sort(function (a, b) { return (b.submittedAt || '').localeCompare(a.submittedAt || ''); }); /* 최신 위로 */
-    var doneReqs = reqs.filter(isDone).sort(function (a, b) { return (b.decidedAt || b.submittedAt || '').localeCompare(a.decidedAt || a.submittedAt || ''); });
-    var activeItems = activeReqs.map(adminReqRow).join('');
-    var doneItems = doneReqs.map(adminReqRow).join('');
-    var doneSection = doneReqs.length
-      ? adminFold('✅ 요청완료', doneReqs.length, doneItems, false, 'done')
-      : '';
+    /* 요청함+요청완료 통합 · 정렬(adminReqSort): 요청시간·승인(처리)시간·처리간격 각 오름/내림 */
+    function _sub(r) { return r.submittedAt ? Date.parse(r.submittedAt) : 0; }
+    function _dec(r) { return r.decidedAt ? Date.parse(r.decidedAt) : null; }
+    function _gap(r) { var d = _dec(r); return (d !== null && r.submittedAt) ? (d - Date.parse(r.submittedAt)) : null; }
+    function reqSortCmp(a, b) {
+      var k = adminReqSort;
+      if (k === 'req_asc') return _sub(a) - _sub(b);
+      if (k === 'dec_desc' || k === 'dec_asc') {
+        var da = _dec(a), db = _dec(b);
+        if (da === null && db === null) return _sub(b) - _sub(a);
+        if (da === null) return 1; if (db === null) return -1; /* 미처리는 항상 아래로 */
+        return k === 'dec_asc' ? (da - db) : (db - da);
+      }
+      if (k === 'gap_desc' || k === 'gap_asc') {
+        var ga = _gap(a), gb = _gap(b);
+        if (ga === null && gb === null) return _sub(b) - _sub(a);
+        if (ga === null) return 1; if (gb === null) return -1;
+        return k === 'gap_asc' ? (ga - gb) : (gb - ga);
+      }
+      return _sub(b) - _sub(a); /* req_desc 기본 */
+    }
+    var allReqs = reqs.slice().sort(reqSortCmp);
+    var allReqItems = allReqs.map(adminReqRow).join('');
+    var activeCount = reqs.filter(function (r) { return !isDone(r); }).length;
+    var reqSortOpts = [
+      ['req_desc', '요청시간 ↓ (최신 먼저)'], ['req_asc', '요청시간 ↑ (오래된 먼저)'],
+      ['dec_desc', '승인시간 ↓ (최신 먼저)'], ['dec_asc', '승인시간 ↑ (오래된 먼저)'],
+      ['gap_desc', '처리간격 ↓ (오래 걸린 것)'], ['gap_asc', '처리간격 ↑ (빨리 처리된 것)']
+    ];
+    var reqSortSelect =
+      '<div style="display:flex;align-items:center;gap:8px;margin:2px 0 12px;flex-wrap:wrap;">' +
+        '<span style="font-weight:700;font-size:0.86rem;">정렬</span>' +
+        '<select id="admin-req-sort" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font-family:inherit;font-size:0.85rem;">' +
+          reqSortOpts.map(function (o) { return '<option value="' + o[0] + '"' + (adminReqSort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
+        '</select>' +
+      '</div>';
 
     /* 회원 명단 (트리): 로그인 계정(주선자/일반)이 최상위, 그 아래 관리 프로필(본인/친구) */
     /* e(이 사람)가 볼 수 있는 사진/번호 수 (e가 "보는 주체") */
@@ -5223,13 +5253,14 @@
       '<p class="sub">나와 대화를 주고받은 회원이에요 (전체 공지만 받은 사람은 제외). 안 읽은 대화는 <b>위에 강조·자동 펼침</b>돼요. [💬 대화]로 답장, [👤 프로필]로 바로 이동. (✕ 개별 / 전체 삭제)</p>' +
       (msgEntryIds.length ? adminMsgItems : '<p class="sub">아직 주고받은 대화가 없어요.</p>'), false, 'adminmsg');
 
-    var activeReqSection = adminFold('📬 요청함', activeReqs.length,
-      '<p class="sub">아직 처리하지 않은 사진 요청·대화 신청이에요.</p>' +
-      (activeReqs.length ? activeItems : '<p class="sub">처리할 요청이 없어요.</p>'), false, 'active');
+    var activeReqSection = adminFold('📬 요청', reqs.length,
+      '<p class="sub">사진 요청·대화 신청 전체예요 (대기·보류·완료 통합).' + (activeCount ? ' <b style="color:var(--accent);">미처리 ' + activeCount + '건.</b>' : ' 미처리 없음.') + '</p>' +
+      reqSortSelect +
+      (reqs.length ? allReqItems : '<p class="sub">아직 요청이 없어요.</p>'), false, 'active');
     var secHtml = {
       usage: usageStatsHtml(state), pending: pendingSection, held: heldSection, editrev: editRevSection,
       deaclist: deacListSection, dellog: delLogSection,
-      active: activeReqSection, adminmsg: adminMsgSection, done: doneSection,
+      active: activeReqSection, adminmsg: adminMsgSection,
       cap: capSection, seen: seenSection, log: logSection
     };
     var order = adminSecOrder();
@@ -8132,6 +8163,7 @@
   }
 
   document.body.addEventListener('change', function (e) {
+    if (e.target.id === 'admin-req-sort') { adminReqSort = e.target.value; paint(currentState); return; }
     var testCb = e.target.closest && e.target.closest('[data-testtoggle]');
     if (testCb) { handleSetTest(testCb.getAttribute('data-testtoggle'), testCb.checked); return; }
     var permCb = e.target.closest && e.target.closest('[data-permtoggle]');
