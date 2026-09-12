@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-307';
+  var APP_VERSION = '2026-09-12-308';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3477,9 +3477,14 @@
             '<div class="pf-ai-row"><span class="pf-ai-label">🔔 알람 설정</span><span class="pf-ai-val" id="detail-notif-' + escapeHtml(entry.id) + '">확인 중…</span></div>' +
           '</div>';
       } else {
-        var subSeen = entry.lastSelfLoginAt ? new Date(entry.lastSelfLoginAt).toLocaleString('ko-KR') : (entry.lastSeenAt ? new Date(entry.lastSeenAt).toLocaleString('ko-KR') : '기록 없음');
+        var _mgr = entry.managedBy ? (state.entries || []).find(function (x) { return x.id === entry.managedBy; }) : null;
+        var subSeen, subSeenNote = '';
+        if (entry.lastSelfLoginAt) { subSeen = new Date(entry.lastSelfLoginAt).toLocaleString('ko-KR') + ' (본인 임시로그인)'; }
+        else if (_mgr && _mgr.lastSeenAt) { subSeen = new Date(_mgr.lastSeenAt).toLocaleString('ko-KR'); subSeenNote = ' (주선자 접속 기준)'; }
+        else if (entry.lastSeenAt) { subSeen = new Date(entry.lastSeenAt).toLocaleString('ko-KR'); }
+        else { subSeen = '기록 없음'; }
         adminInfoHtml = '<div class="pf-admininfo">' +
-          '<div class="pf-ai-row"><span class="pf-ai-label">🕘 최근 접속</span><span class="pf-ai-val">' + escapeHtml(subSeen) + '</span></div>' +
+          '<div class="pf-ai-row"><span class="pf-ai-label">🕘 최근 접속</span><span class="pf-ai-val">' + escapeHtml(subSeen) + escapeHtml(subSeenNote) + '</span></div>' +
           '<div class="pf-ai-row"><span class="pf-ai-val" style="color:var(--muted);">🤝 주선자가 대리 관리하는 계정 (직접 로그인 PIN 없음)</span></div>' +
           '</div>';
       }
@@ -6996,7 +7001,7 @@
     var req = (state.dateRequests || []).find(function (r) { return r.id === id; });
     if (!req) return;
     var reqType = req.type || 'contact';
-    modalMessage('요청 승인 (관리자)', '신청자에게 전달할 답장을 남길 수 있어요.', '승인', 'approve').then(function (replyMsg) {
+    modalMessage('요청 승인 (관리자)', '신청자에게 전달할 답장을 꼭 남겨주세요 (최소 10자).', '승인', 'approve', '예: 좋은 인연 되길 바라요! 편하게 대화 나눠보세요 :)', false, null, 10).then(function (replyMsg) {
       if (replyMsg === null) return;
       if (reqType === 'photo') {
         db.runTransaction(function (tx) {
@@ -7057,7 +7062,7 @@
   }
 
   function handleHoldRequest(id) {
-    modalMessage('요청 보류 (관리자)', '신청자에게 전달할 사유를 남겨주세요. 나중에 다시 승인/거절할 수 있어요.', '보류하기', 'primary', '예: 사진/정보 확인이 필요해요.', true).then(function (holdMsg) {
+    modalMessage('요청 보류 (관리자)', '신청자에게 전달할 사유를 꼭 남겨주세요 (최소 10자). 나중에 다시 승인/거절할 수 있어요.', '보류하기', 'primary', '예: 사진/정보 확인이 필요해요.', true, null, 10).then(function (holdMsg) {
       if (holdMsg === null || holdMsg === undefined) return;
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
@@ -7083,7 +7088,7 @@
   }
 
   function handleRejectRequest(id) {
-    modalMessage('요청 거절 (관리자)', '신청자에게 전달할 메시지를 남길 수 있어요.', '거절하기', 'danger').then(function (rejectMsg) {
+    modalMessage('요청 거절 (관리자)', '신청자에게 전달할 사유를 꼭 남겨주세요 (최소 10자).', '거절하기', 'danger', '예: 신중히 검토했지만 이번엔 어렵겠어요. 양해 부탁드려요.', false, null, 10).then(function (rejectMsg) {
       if (rejectMsg === null || rejectMsg === undefined) return;
       return db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
