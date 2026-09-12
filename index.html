@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-313';
+  var APP_VERSION = '2026-09-12-314';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -922,8 +922,8 @@
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
   var _mmFoldOpen = {};  /* 주선자 탭: 카드별 접힘 상태 (리페인트 후 유지용, 기본 열림) */
   var adminEditMode = false; /* 관리자 섹션 편집(순서·기본 열림) 모드 */
-  var DEFAULT_SEC_ORDER = ['usage', 'pending', 'held', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'cap', 'seen', 'log'];
-  var SEC_NAMES = { usage: '📊 사용량 현황', pending: '⏳ 승인 대기', held: '📌 보류 중', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록' };
+  var DEFAULT_SEC_ORDER = ['usage', 'signup', 'pending', 'held', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'cap', 'seen', 'log'];
+  var SEC_NAMES = { usage: '📊 사용량 통계', signup: '📈 가입 추이', pending: '⏳ 승인 대기', held: '📌 보류 중', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록' };
   /* 섹션 열림 상태는 "세션 메모리에만" 저장 → 리페인트(버튼 클릭 등) 동안엔 유지되지만,
      새로고침하면 초기화되어 모두 접힌 상태로 시작 (이전에 열었던 걸 기억하지 않음) */
   var _adminSecOpen = {}, _adminSecOrder = null;
@@ -988,6 +988,7 @@
   var adminReqAge = 'all';                             /* 요청 나이 필터(색상 기준): all|today|yesterday|few|old */
   var adminReqPendingStale = false;                    /* 대기 필터 2단계: 요청 후 상대가 로그인 안 한 대기건만 */
   var adminReqSearch = '';                             /* 요청함 검색어(요청자·상대 닉네임/고유번호) */
+  var adminSignupPeriod = 'all';                       /* 가입 추이 그래프 기간: all|30|7 */
   var currentState = null;
   var photoDataUrls = [];
   var formPhotosReady = true; /* 수정 시 원본 사진 로드 완료 여부 */
@@ -4714,11 +4715,67 @@
         '<thead><tr><th style="text-align:left;">날짜</th><th>누적 회원</th><th>가입</th><th>📷사진</th><th>💌대화</th></tr></thead>' +
         '<tbody>' + trendRows + '</tbody>' +
       '</table></div>';
-    return '<details class="admin-fold" data-sec="usage"' + secOpenAttr('usage', false) + '><summary>📊 사용량 현황</summary>' +
+    return '<details class="admin-fold" data-sec="usage"' + secOpenAttr('usage', false) + '><summary>📊 사용량 통계</summary>' +
       '<div class="admin-fold-body">' + summary +
       '<p class="stats-sub" style="margin:10px 0 4px;">일자별 추이 (최신순 · 누적 회원=그 날까지 가입한 현재 회원, 가입=신규 프로필, 신청=보낸 날 기준)</p>' + trend +
       '<p class="stats-sub" style="margin-top:6px;">※ 탈퇴한 회원은 집계에 없어 누적은 현재 회원 기준이에요. 승인/탈퇴 시점은 별도로 기록되지 않아요.</p>' +
       '</div></details>';
+  }
+
+  /* 가입 추이 그래프 (관리자탭): 회원·주선자·전체(테스트 제외) 누적선. 데이터=entries.submittedAt (활동기록과 무관) */
+  function signupTrendHtml(state) {
+    function kd(iso) { return new Date(new Date(iso).getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
+    var all = (state.entries || []).concat(state.pendingEntries || []);
+    var rows = all.filter(function (e) { return e.submittedAt && !e.testAccount; }).map(function (e) { return { day: kd(e.submittedAt), mm: !!e.isMatchmaker }; });
+    var body;
+    if (!rows.length) {
+      body = '<p class="sub">아직 가입 데이터가 없어요.</p>';
+      return '<details class="admin-fold" data-sec="signup"' + secOpenAttr('signup', false) + '><summary>📈 가입 추이</summary><div class="admin-fold-body">' + body + '</div></details>';
+    }
+    var memD = {}, mmD = {};
+    rows.forEach(function (r) { if (r.mm) mmD[r.day] = (mmD[r.day] || 0) + 1; else memD[r.day] = (memD[r.day] || 0) + 1; });
+    var first = rows.map(function (r) { return r.day; }).sort()[0];
+    var todayK = kd(new Date().toISOString());
+    var series = [];
+    (function () { var d = new Date(first + 'T00:00:00Z'), end = new Date(todayK + 'T00:00:00Z'); while (d <= end) { series.push(d.toISOString().slice(0, 10)); d.setUTCDate(d.getUTCDate() + 1); } })();
+    var cM = 0, cX = 0, full = series.map(function (day) { cM += (memD[day] || 0); cX += (mmD[day] || 0); return { day: day, member: cM, mm: cX, total: cM + cX }; });
+    var last = full[full.length - 1];
+    var win = full;
+    if (adminSignupPeriod === '7') win = full.slice(-7);
+    else if (adminSignupPeriod === '30') win = full.slice(-30);
+    /* SVG 좌표 계산 */
+    var W = 560, H = 240, padL = 34, padR = 14, padT = 14, padB = 30, n = win.length;
+    var plotW = W - padL - padR, plotH = H - padT - padB;
+    var top = 0; win.forEach(function (p) { if (p.total > top) top = p.total; });
+    var niceTop = Math.max(5, Math.ceil(top / 5) * 5);
+    function X(i) { return n > 1 ? (padL + i * (plotW / (n - 1))) : (padL + plotW / 2); }
+    function Y(v) { return (padT + (1 - v / niceTop) * plotH).toFixed(1); }
+    function dl(d) { var p = d.split('-'); return parseInt(p[1], 10) + '/' + parseInt(p[2], 10); }
+    var svg = ['<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="가입 누적 추이 선그래프">'];
+    [0, 0.5, 1].forEach(function (f) { var v = Math.round(niceTop * f), yy = Y(v); svg.push('<line x1="' + padL + '" y1="' + yy + '" x2="' + (W - padR) + '" y2="' + yy + '" stroke="#EADFD3"/><text x="' + (padL - 6) + '" y="' + (Number(yy) + 3) + '" text-anchor="end" font-size="9" fill="#a99e95">' + v + '</text>'); });
+    var lstep = Math.ceil(n / 8);
+    win.forEach(function (p, i) { if (i % lstep === 0 || i === n - 1) svg.push('<text x="' + X(i).toFixed(1) + '" y="' + (H - padB + 15) + '" text-anchor="middle" font-size="9" fill="#a99e95">' + dl(p.day) + '</text>'); });
+    function poly(key, color, w, dash) {
+      var pts = win.map(function (p, i) { return X(i).toFixed(1) + ',' + Y(p[key]); }).join(' ');
+      svg.push('<polyline fill="none" stroke="' + color + '" stroke-width="' + w + '"' + (dash ? ' stroke-dasharray="6 4"' : '') + ' stroke-linejoin="round" stroke-linecap="round" points="' + pts + '"/>');
+      var li = n - 1; svg.push('<circle cx="' + X(li).toFixed(1) + '" cy="' + Y(win[li][key]) + '" r="' + (w >= 3 ? 3.5 : 3) + '" fill="' + color + '"/>');
+    }
+    poly('member', '#C08A34', 2, false);
+    poly('mm', '#2E8B57', 2, true);
+    poly('total', '#B23A48', 3, false);
+    svg.push('</svg>');
+    function card(lbl, val, color) { return '<div style="flex:1;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:7px 10px;"><div style="font-size:0.72rem;color:var(--muted);">' + lbl + '</div><div style="font-size:1.25rem;font-weight:800;color:' + color + ';">' + val + '</div></div>'; }
+    var _spOpts = [['all', '전체'], ['30', '30일'], ['7', '7일']];
+    var periodRow = '<div style="display:flex;align-items:center;gap:6px;margin:0 0 10px;flex-wrap:wrap;"><span style="font-weight:700;font-size:0.86rem;">기간</span>' +
+      _spOpts.map(function (o) { return '<button type="button" class="card-btn' + (adminSignupPeriod === o[0] ? ' primary' : '') + '" data-action="signup-period" data-key="' + o[0] + '" style="flex:none;padding:5px 12px;font-size:0.82rem;">' + o[1] + '</button>'; }).join('') + '</div>';
+    var legend = '<div style="display:flex;gap:14px;margin:2px 0 6px;font-size:0.76rem;color:var(--muted);flex-wrap:wrap;">' +
+      '<span style="display:flex;align-items:center;gap:5px;"><span style="width:16px;border-top:3px solid #B23A48;"></span>전체</span>' +
+      '<span style="display:flex;align-items:center;gap:5px;"><span style="width:16px;border-top:3px solid #C08A34;"></span>회원</span>' +
+      '<span style="display:flex;align-items:center;gap:5px;"><span style="width:16px;border-top:3px dashed #2E8B57;"></span>주선자</span></div>';
+    body = '<p class="sub" style="margin:0 0 8px;">시작일부터 오늘까지 · 테스트 제외 · 누적</p>' +
+      '<div style="display:flex;gap:8px;margin-bottom:10px;">' + card('전체', last.total, 'var(--accent)') + card('회원', last.member, 'var(--gold)') + card('주선자', last.mm, '#2E8B57') + '</div>' +
+      periodRow + legend + svg.join('');
+    return '<details class="admin-fold" data-sec="signup"' + secOpenAttr('signup', false) + '><summary>📈 가입 추이</summary><div class="admin-fold-body">' + body + '</div></details>';
   }
 
   function renderAdmin(state) {
@@ -5361,7 +5418,7 @@
       (listReqs.length ? allReqItems : reqEmpty) +
       '<p class="sub" id="req-search-empty" hidden>검색 결과가 없어요.</p>', false, 'active');
     var secHtml = {
-      usage: usageStatsHtml(state), pending: pendingSection, held: heldSection, editrev: editRevSection,
+      usage: usageStatsHtml(state), signup: signupTrendHtml(state), pending: pendingSection, held: heldSection, editrev: editRevSection,
       deaclist: deacListSection, dellog: delLogSection,
       active: activeReqSection, adminmsg: adminMsgSection,
       cap: capSection, seen: seenSection, log: logSection
@@ -8219,6 +8276,7 @@
         paint(currentState); return;
       }
       else if (action === 'req-age') { adminReqAge = actionBtn.getAttribute('data-key') || 'all'; paint(currentState); return; }
+      else if (action === 'signup-period') { adminSignupPeriod = actionBtn.getAttribute('data-key') || 'all'; paint(currentState); return; }
       else if (action === 'fold-all') { toggleFoldAll(); return; }
       else if (action === 'broadcast') { handleBroadcast(); return; }
       else if (action === 'admin-msg-delall') {
