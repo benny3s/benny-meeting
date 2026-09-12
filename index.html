@@ -890,7 +890,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-293';
+  var APP_VERSION = '2026-09-12-294';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -5501,10 +5501,10 @@
           '<p class="masthead-sub">아는 사람이 건넨 🔗링크로 연결되는, 신뢰 기반 커뮤니티예요.</p></div>' +
       '</div>' +
       '<div class="admin-bar">' +
-        /* 1줄: 공지·사용법 / URL 복사 */
+        /* 1줄: 인사말·공지사항 / 친구에게 공유 */
         '<div class="admin-bar-row">' +
-          '<button type="button" class="admin-link" id="show-notice" style="background:#1a73e8;border-color:#1a73e8;color:#fff;opacity:1;font-weight:700;">&#128227; 인사말·공지사항·사용법</button>' +
-          '<button type="button" class="admin-link" id="copy-url">&#128279; URL 복사</button>' +
+          '<button type="button" class="admin-link" id="show-notice" style="background:#1a73e8;border-color:#1a73e8;color:#fff;opacity:1;font-weight:700;">&#128227; 인사말·공지사항</button>' +
+          '<button type="button" class="admin-link" id="copy-url" style="background:#1a73e8;border-color:#1a73e8;color:#fff;opacity:1;font-weight:700;">&#128279; 친구에게 공유</button>' +
         '</div>' +
         /* 2줄: 관리자 커피 사주기 / Q&A */
         '<div class="admin-bar-row">' +
@@ -7836,7 +7836,7 @@
       return;
     }
     if (e.target.closest('#copy-url')) {
-      handleCopyUrl();
+      handleShare();
       return;
     }
     if (e.target.closest('#notif-toggle')) {
@@ -8808,34 +8808,52 @@
       }
     } catch (e) {}
   }
-  function handleCopyUrl() {
+  function handleShare() {
     var url = location.origin + location.pathname.replace(/index\.html$/, '');
-    function manual() {
-      var overlay = openModal(
-        '<h3>🔗 사이트 주소</h3>' +
-        '<p class="modal-msg">아래 주소를 눌러 전체 선택 후 복사하세요.</p>' +
-        '<input type="text" class="modal-input" id="copy-url-field" readonly value="' + escapeHtml(url) + '">' +
-        '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">확인</button></div>'
-      );
-      var f = overlay.querySelector('#copy-url-field');
-      setTimeout(function () { try { f.focus(); f.select(); } catch (e) {} }, 50);
-      overlay.querySelector('#modal-ok').addEventListener('click', function () { closeModal(overlay); });
-      overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(overlay); });
-    }
-    function ok() { modalNotice('복사 완료', '사이트 주소가 복사됐어요! 친구에게 붙여넣기 하면 돼요.'); }
-    function tryExec() {
+    var shareText = '아는 사람이 건넨 🔗링크로 연결되는 신뢰 기반 소개 커뮤니티, 베니브릿지예요 😊 진지하게 좋은 인연 찾고 계신 분께 전해주세요.';
+    var overlay = openModal(
+      '<h3>🔗 친구에게 공유</h3>' +
+      '<p class="modal-msg" style="text-align:left;line-height:1.7;">' +
+        '베니브릿지는 <b>아는 사람이 건넨 🔗링크</b>로 연결되는 신뢰 기반 커뮤니티예요.<br>' +
+        '진지하게 좋은 인연을 찾는 <b>믿을 만한 지인</b>에게 아래 링크를 전해주세요.<br>' +
+        '<span style="color:var(--muted);font-size:0.9em;">온라인에 익명으로 널리 뿌리는 건 지양해 주세요 🙏</span>' +
+      '</p>' +
+      '<input type="text" class="modal-input" id="share-url-field" readonly value="' + escapeHtml(url) + '" style="margin-bottom:10px;">' +
+      '<div class="modal-actions" style="flex-direction:column;gap:8px;align-items:stretch;">' +
+        '<button type="button" class="card-btn primary" id="share-native" style="width:100%;background:#1a73e8;border-color:#1a73e8;color:#fff;font-weight:700;">📤 공유하기</button>' +
+        '<button type="button" class="card-btn" id="share-copy" style="width:100%;">🔗 URL 복사</button>' +
+        '<button type="button" class="card-btn" id="modal-cancel" style="width:100%;">닫기</button>' +
+      '</div>'
+    );
+    function copyOk() { modalNotice('복사 완료', '사이트 주소가 복사됐어요! 친구에게 붙여넣기 하면 돼요.'); }
+    function execCopy() {
       try {
         var ta = document.createElement('textarea');
         ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
         document.body.appendChild(ta); ta.select();
         var done = document.execCommand('copy');
         document.body.removeChild(ta);
-        if (done) ok(); else manual();
-      } catch (e) { manual(); }
+        if (done) { copyOk(); return; }
+      } catch (e) {}
+      var fld = overlay.querySelector('#share-url-field');
+      if (fld) { try { fld.focus(); fld.select(); } catch (e2) {} }
+      modalNotice('안내', '주소를 길게 눌러(또는 Ctrl+C) 복사해주세요.');
     }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(ok).catch(tryExec);
-    } else { tryExec(); }
+    function doCopy() {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(copyOk).catch(execCopy);
+      } else { execCopy(); }
+    }
+    overlay.querySelector('#share-native').addEventListener('click', function () {
+      if (navigator.share) {
+        navigator.share({ title: '베니브릿지', text: shareText, url: url }).catch(function () {});
+      } else {
+        doCopy(); /* 공유 미지원(주로 PC) → 링크 복사로 대체 */
+      }
+    });
+    overlay.querySelector('#share-copy').addEventListener('click', doCopy);
+    overlay.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(overlay); });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(overlay); });
   }
 
   function handleAddToHome() {
