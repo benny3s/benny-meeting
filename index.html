@@ -890,7 +890,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-286';
+  var APP_VERSION = '2026-09-12-287';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -8210,10 +8210,13 @@
   }
 
   var ANNOUNCE_KEY = 'announce-v23'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
+  function announceVer() { return String((currentState && currentState.announce && currentState.announce.ver) || ANNOUNCE_KEY); }
   function showAnnouncement(force) {
+    var ver = announceVer();
     if (!force) {
       try {
-        if (localStorage.getItem(ANNOUNCE_KEY)) return;
+        /* 버전(관리자 수정 시 갱신)과 다르면 한 번 더 표시 */
+        if (localStorage.getItem('announce-seen') === ver) return;
       } catch (e) {}
     }
     var box = 'background:var(--gold-soft);border:1px solid var(--gold);border-radius:10px;padding:10px 12px;margin-bottom:12px;';
@@ -8268,6 +8271,16 @@
         '</ul>' +
         '<p style="color:var(--muted);font-size:0.82rem;margin-top:10px;">궁금하거나 불안한 점이 있으면 언제든 상단 &#128172; Q&amp;A 로 물어봐 주세요!</p>' +
       '</div></div>';
+    /* 관리자 수정 문구(override)가 있으면 기본 안내 대신 그 내용을 표시 */
+    var ann = (currentState && currentState.announce) || {};
+    var ovPanel = function (tab, def) {
+      var t = ann[tab];
+      if (t && ('' + t).trim()) return '<div data-annpanel="' + tab + '"' + (tab === 'greet' ? '' : ' hidden') + '><div style="' + box + 'margin-bottom:0;white-space:pre-wrap;">' + escapeHtml(t) + '</div></div>';
+      return def;
+    };
+    greetPanel = ovPanel('greet', greetPanel);
+    usePanel = ovPanel('use', usePanel);
+    secPanel = ovPanel('sec', secPanel);
     var overlay = openModal(
       '<div class="role-toggle" style="margin-bottom:12px;">' +
         '<button type="button" class="role-btn active" data-anntab="greet">&#128075; 인사말</button>' +
@@ -8275,7 +8288,10 @@
         '<button type="button" class="role-btn" data-anntab="sec">&#128274; 보안</button>' +
       '</div>' +
       '<div class="modal-msg" style="text-align:left;line-height:1.7;font-size:0.86rem;">' + greetPanel + usePanel + secPanel + '</div>' +
-      '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok">확인했어요</button></div>'
+      '<div class="modal-actions">' +
+        (isAdminUnlocked ? '<button type="button" class="card-btn" id="ann-edit">✏️ 수정</button>' : '') +
+        '<button type="button" class="card-btn primary" id="modal-ok">확인했어요</button>' +
+      '</div>'
     );
     overlay.classList.add('wide-modal');
     overlay.addEventListener('click', function (e) {
@@ -8290,10 +8306,50 @@
     });
     function finish() {
       closeModal(overlay);
-      try { localStorage.setItem(ANNOUNCE_KEY, '1'); } catch (e) {}
+      try { localStorage.setItem('announce-seen', ver); } catch (e) {}
     }
     overlay.querySelector('#modal-ok').addEventListener('click', finish);
+    var editBtn = overlay.querySelector('#ann-edit');
+    if (editBtn) editBtn.addEventListener('click', function () {
+      var activeTab = (overlay.querySelector('[data-anntab].active') || {}).getAttribute ? overlay.querySelector('[data-anntab].active').getAttribute('data-anntab') : 'greet';
+      var panelEl = overlay.querySelector('[data-annpanel="' + activeTab + '"]');
+      var cur = (ann[activeTab] && ('' + ann[activeTab]).trim()) ? ann[activeTab] : (panelEl ? (panelEl.innerText || '').trim() : '');
+      closeModal(overlay);
+      openAnnounceEdit(activeTab, cur);
+    });
     overlay.addEventListener('click', function (e) { if (e.target === overlay) finish(); });
+  }
+  /* 관리자: 공지 탭(인사말/사용법/보안) 문구 수정 → app/state.announce 에 저장(모두에게 반영) */
+  function openAnnounceEdit(tab, cur) {
+    if (!isAdminUnlocked) return;
+    var titles = { greet: '인사말', use: '사용법', sec: '보안' };
+    var ov = openModal(
+      '<h3>✏️ ' + escapeHtml(titles[tab] || '공지') + ' 수정</h3>' +
+      '<p class="modal-msg" style="font-size:0.82rem;color:var(--muted);text-align:left;">저장하면 기본 안내 대신 이 내용이 <b>모든 회원</b>에게 표시되고, 다음 접속 때 한 번 다시 떠요. 내용을 <b>비우고 저장</b>하면 기본 안내로 되돌아가요.</p>' +
+      '<textarea class="modal-input" id="ann-edit-text" rows="12" maxlength="4000" style="width:100%;box-sizing:border-box;line-height:1.6;">' + escapeHtml(cur || '') + '</textarea>' +
+      '<div class="modal-actions"><button type="button" class="card-btn" id="modal-cancel">취소</button><button type="button" class="card-btn primary" id="ann-save">저장</button></div>'
+    );
+    ov.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(ov); showAnnouncement(true); });
+    ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(ov); });
+    ov.querySelector('#ann-save').addEventListener('click', function () {
+      var text = (ov.querySelector('#ann-edit-text').value || '').trim();
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var a = s.announce || {};
+          if (text) a[tab] = text; else delete a[tab];
+          a.ver = String(Date.now()); /* 버전 갱신 → 모든 회원에게 한 번 다시 표시 */
+          tx.update(stateRef, { announce: a });
+        });
+      }).then(function () {
+        appendLog('admin', '관리자', '공지 수정 · ' + (titles[tab] || tab) + (text ? '' : ' (기본값 복원)'));
+        return refreshNow();
+      }).then(function () {
+        closeModal(ov);
+        try { localStorage.setItem('announce-seen', announceVer()); } catch (e) {} /* 편집한 관리자는 다시 안 뜨게 */
+        modalNotice('저장됨', '공지 문구를 저장했어요. 회원들에게 다음 접속 때 반영돼요.');
+      }).catch(function (err) { modalNotice('오류', '저장 실패: ' + (err.message || err)); });
+    });
   }
 
   /* ---- 홈 화면 바로가기 (PWA) ---- */
