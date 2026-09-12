@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-311';
+  var APP_VERSION = '2026-09-12-312';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -984,7 +984,6 @@
   var adminLogFilterTime = '';                        /* 활동 기록 시간 필터 */
   var adminLogFilterNick = '';                        /* 접속칸 클릭 시 정확히 그 닉네임만 (완전일치) */
   var adminReqSort = 'req_desc';                       /* 요청(요청함+완료 통합) 정렬: req_desc|req_asc|dec_desc|dec_asc|gap_desc|gap_asc */
-  var showHiddenReqs = false;                          /* 요청 섹션: 관리자 화면에서 숨긴 요청 보기 토글 */
   var adminReqStatus = 'all';                          /* 요청 상태 필터: all|pending|held|approved|rejected */
   var adminReqAge = 'all';                             /* 요청 나이 필터(색상 기준): all|today|yesterday|few|old */
   var adminReqPendingStale = false;                    /* 대기 필터 2단계: 요청 후 상대가 로그인 안 한 대기건만 */
@@ -4967,11 +4966,8 @@
         '<button type="button" class="card-btn approve" data-action="approve-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">승인</button>' +
         '<button type="button" class="card-btn" data-action="hold-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">보류</button>' +
         '<button type="button" class="card-btn danger" data-action="reject-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">거절</button>';
-      /* 관리자 정리: 평소엔 "숨기기"(관리자 화면에서만) · 스팸은 "완전 삭제"(양쪽 기록 제거) */
-      var manageBtns = (r.adminHidden
-        ? '<button type="button" class="card-btn" data-action="req-unhide" data-id="' + escapeHtml(r.id) + '" style="flex:none;">↩︎ 복원</button>'
-        : '<button type="button" class="card-btn" data-action="req-hide" data-id="' + escapeHtml(r.id) + '" style="flex:none;">🙈 숨기기</button>') +
-        '<button type="button" class="card-btn danger" data-action="delete-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">🗑 완전삭제</button>';
+      /* 스팸 등 정리는 "완전 삭제"(확인 팝업 있음)만 제공 — 숨기기 기능은 제거됨 */
+      var manageBtns = '<button type="button" class="card-btn danger" data-action="delete-request" data-id="' + escapeHtml(r.id) + '" style="flex:none;">🗑 완전삭제</button>';
       var actionBtns;
       if (st === 'approved') {
         actionBtns = manageBtns;
@@ -5027,11 +5023,10 @@
       }
       return _sub(b) - _sub(a); /* req_desc 기본 */
     }
-    /* 관리자 화면에서 숨긴 요청 분리 (당사자 기록엔 남아있음) */
-    var visibleReqs = reqs.filter(function (r) { return !r.adminHidden; });
-    var hiddenReqs = reqs.filter(function (r) { return r.adminHidden; });
+    /* 숨김 기능 제거 — 모든 요청을 그대로 표시 (과거에 숨겨졌던 것도 자동으로 다시 나타남) */
+    var visibleReqs = reqs;
     var _rsKey0 = adminReqSort.split('_')[0];
-    var _reqPool = (showHiddenReqs ? hiddenReqs : visibleReqs);
+    var _reqPool = reqs;
     function reqStatKey(r) { var st = reqStatus(r); if (st === 'approved' || st === 'user_approved') return 'approved'; if (st === 'rejected') return 'rejected'; if (st === 'held') return 'held'; return 'pending'; }
     var _todayK = kstDay(new Date().toISOString());
     function reqAgeKey(r) { var subK = r.submittedAt ? kstDay(r.submittedAt) : ''; if (!subK) return 'old'; var dd = Math.round((Date.parse(_todayK) - Date.parse(subK)) / 86400000); return dd <= 0 ? 'today' : (dd === 1 ? 'yesterday' : (dd <= 4 ? 'few' : 'old')); }
@@ -5111,11 +5106,6 @@
         '<span style="font-weight:700;font-size:0.86rem;">정렬</span>' +
         reqSortBtn('req', '요청시간') + reqSortBtn('dec', '승인시간') +
       '</div>';
-    var hiddenRow = (hiddenReqs.length || showHiddenReqs)
-      ? '<div style="display:flex;margin:2px 0 4px;">' +
-          '<button type="button" class="card-btn' + (showHiddenReqs ? ' primary' : '') + '" data-action="toggle-hidden-reqs" style="flex:none;padding:5px 12px;font-size:0.82rem;">' + (showHiddenReqs ? '↩︎ 일반 요청' : '🙈 숨긴 요청 ' + hiddenReqs.length) + '</button>' +
-        '</div>'
-      : '';
 
     /* 회원 명단 (트리): 로그인 계정(주선자/일반)이 최상위, 그 아래 관리 프로필(본인/친구) */
     /* e(이 사람)가 볼 수 있는 사진/번호 수 (e가 "보는 주체") */
@@ -5358,16 +5348,13 @@
       '<p class="sub">나와 대화를 주고받은 회원이에요 (전체 공지만 받은 사람은 제외). 안 읽은 대화는 <b>위에 강조·자동 펼침</b>돼요. [💬 대화]로 답장, [👤 프로필]로 바로 이동. (✕ 개별 / 전체 삭제)</p>' +
       (msgEntryIds.length ? adminMsgItems : '<p class="sub">아직 주고받은 대화가 없어요.</p>'), false, 'adminmsg');
 
-    var reqHiddenNote = showHiddenReqs
-      ? '<p class="sub" style="margin-top:0;">🙈 <b>숨긴 요청</b> — 관리자 화면에서만 숨겨졌고, <b>당사자 기록엔 그대로 남아있어요.</b> [↩︎ 복원]으로 되돌리거나 [🗑 완전삭제]로 양쪽에서 지울 수 있어요.</p>'
-      : '';
     var reqEmpty = pendingStale
       ? '<p class="sub">요청 후 미접속인 대기자가 없어요 🙆</p>'
       : ((adminReqStatus !== 'all' || adminReqAge !== 'all')
         ? '<p class="sub">조건에 맞는 요청이 없어요.</p>'
-        : (showHiddenReqs ? '<p class="sub">숨긴 요청이 없어요.</p>' : '<p class="sub">아직 요청이 없어요.</p>'));
+        : '<p class="sub">아직 요청이 없어요.</p>');
     var activeReqSection = adminFold('📬 요청함', visibleReqs.length,
-      reqStatusRow + reqAgeRow + reqSortSelect + hiddenRow + reqPendingHint + reqHiddenNote +
+      reqStatusRow + reqAgeRow + reqSortSelect + reqPendingHint +
       (listReqs.length ? allReqItems : reqEmpty), false, 'active');
     var secHtml = {
       usage: usageStatsHtml(state), pending: pendingSection, held: heldSection, editrev: editRevSection,
@@ -5529,7 +5516,6 @@
     var entries = (state.entries || []).filter(function (e) { return listMemberVisible(e); });
     var pendingCount = (state.pendingEntries || []).filter(function (e) { return !e.heldReason; }).length; /* 보류(heldReason)는 "대기"에서 제외 → 별도 "보류 중" 섹션 */
     var reqCount = (state.dateRequests || []).filter(function (r) {
-      if (r.adminHidden) return false; /* 관리자 화면에서 숨긴 요청은 탭 배지에서도 제외 */
       var st = reqStatus(r); return st !== 'approved' && st !== 'rejected';
     }).length;
     var deleteReqCount = (state.entries || []).filter(function (e) { return e.deleteRequested; }).length;
@@ -7595,25 +7581,6 @@
   }
 
   /* 관리자 삭제 = 완전 삭제 (모두에게서 제거) */
-  /* 관리자 화면에서만 숨김(당사자 기록엔 유지) — 스팸이 아닌 일반 정리용 */
-  function handleHideRequest(id) {
-    db.runTransaction(function (tx) {
-      return tx.get(stateRef).then(function (doc) {
-        var s = doc.data();
-        var reqs = (s.dateRequests || []).map(function (r) { if (r.id === id) { var c = JSON.parse(JSON.stringify(r)); c.adminHidden = true; return c; } return r; });
-        tx.update(stateRef, { dateRequests: reqs });
-      });
-    }).then(function () { return refreshNow(); }).catch(function (err) { modalNotice('오류', '숨기기 실패: ' + (err.message || err)); });
-  }
-  function handleUnhideRequest(id) {
-    db.runTransaction(function (tx) {
-      return tx.get(stateRef).then(function (doc) {
-        var s = doc.data();
-        var reqs = (s.dateRequests || []).map(function (r) { if (r.id === id) { var c = JSON.parse(JSON.stringify(r)); delete c.adminHidden; return c; } return r; });
-        tx.update(stateRef, { dateRequests: reqs });
-      });
-    }).then(function () { return refreshNow(); }).catch(function (err) { modalNotice('오류', '복원 실패: ' + (err.message || err)); });
-  }
   function handleDeleteRequest(id) {
     modalConfirm('요청 삭제', '이 요청을 완전히 삭제할까요? 당사자들의 기록에서도 사라져요.', '완전 삭제').then(function (ok) {
       if (!ok) return;
@@ -8232,9 +8199,6 @@
         paint(currentState); return;
       }
       else if (action === 'req-age') { adminReqAge = actionBtn.getAttribute('data-key') || 'all'; paint(currentState); return; }
-      else if (action === 'toggle-hidden-reqs') { showHiddenReqs = !showHiddenReqs; adminReqStatus = 'all'; adminReqAge = 'all'; adminReqPendingStale = false; paint(currentState); return; }
-      else if (action === 'req-hide') { handleHideRequest(id); return; }
-      else if (action === 'req-unhide') { handleUnhideRequest(id); return; }
       else if (action === 'fold-all') { toggleFoldAll(); return; }
       else if (action === 'broadcast') { handleBroadcast(); return; }
       else if (action === 'admin-msg-delall') {
