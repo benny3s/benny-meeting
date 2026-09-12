@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-316';
+  var APP_VERSION = '2026-09-12-317';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -6615,9 +6615,9 @@
       return tx.get(stateRef).then(function (doc) { var s = doc.data(); var c = s.checkin || {}; Object.keys(patch).forEach(function (k) { c[k] = patch[k]; }); tx.update(stateRef, { checkin: c }); });
     }).then(function () { return refreshNow(); });
   }
-  function setOneOffPopup(text) {
+  function setOneOffPopup(title, text) {
     return db.runTransaction(function (tx) {
-      return tx.get(stateRef).then(function (doc) { tx.update(stateRef, { popup: { text: text, ver: String(Date.now()) } }); });
+      return tx.get(stateRef).then(function (doc) { tx.update(stateRef, { popup: { title: title || '', text: text, ver: String(Date.now()) } }); });
     }).then(function () { return refreshNow(); });
   }
   /* 📢 공지/예약 허브 */
@@ -6632,10 +6632,11 @@
       '<div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px;">' +
         '<div style="font-weight:700;margin-bottom:4px;">📅 주간 예약 팝업 (반복)</div>' +
         '<p class="modal-msg" style="text-align:left;font-size:0.8rem;color:var(--muted);margin:0 0 6px;">설정한 요일·시각(KST)에 로그인 회원에게 <b>1회 팝업</b>으로 떠요. "의견 남기기·친구에게 공유" 버튼 포함.</p>' +
+        '<input type="text" id="bh-weekly-title" maxlength="60" value="' + escapeHtml(cfg.title) + '" placeholder="팝업 제목" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-weight:700;margin-bottom:6px;">' +
         '<textarea class="modal-input" id="bh-weekly-text" rows="4" maxlength="1000" style="width:100%;box-sizing:border-box;">' + escapeHtml(cfg.text) + '</textarea>' +
         '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0;">' +
           '<span style="font-size:0.85rem;">매주</span>' + wdSel +
-          '<input type="number" id="bh-hour" min="0" max="23" value="' + cfg.hour + '" style="width:60px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-family:inherit;"><span style="font-size:0.85rem;">시</span>' +
+          '<input type="number" id="bh-hour" min="0" max="23" step="1" inputmode="numeric" value="' + cfg.hour + '" style="width:60px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-family:inherit;"><span style="font-size:0.85rem;">시</span>' +
           '<label style="font-size:0.85rem;display:flex;align-items:center;gap:4px;margin-left:auto;"><input type="checkbox" id="bh-enabled"' + (cfg.enabled ? ' checked' : '') + '> 사용</label>' +
         '</div>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
@@ -6646,10 +6647,12 @@
       '</div>' +
       '<div style="border:1px solid var(--line);border-radius:10px;padding:12px;">' +
         '<div style="font-weight:700;margin-bottom:4px;">📢 즉시 공지 (1회성)</div>' +
-        '<p class="modal-msg" style="text-align:left;font-size:0.8rem;color:var(--muted);margin:0 0 6px;">지금 전체에게 한 번. <b>팝업</b>=다음 접속 때 화면에 뜸 · <b>메시지함</b>=관리자 메시지에 쌓임.</p>' +
+        '<p class="modal-msg" style="text-align:left;font-size:0.8rem;color:var(--muted);margin:0 0 6px;">지금 전체에게 한 번. <b>팝업</b>=다음 접속 때 화면에 뜸(확인 버튼만) · <b>메시지함</b>=관리자 메시지에 쌓임.</p>' +
+        '<input type="text" id="bh-once-title" maxlength="60" value="📢 공지" placeholder="팝업 제목" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-weight:700;margin-bottom:6px;">' +
         '<textarea class="modal-input" id="bh-once-text" rows="3" maxlength="1000" placeholder="예: 이번 주 새 멤버가 많아요! 명단을 둘러보세요 :)" style="width:100%;box-sizing:border-box;"></textarea>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">' +
           '<button type="button" class="card-btn primary" id="bh-once-popup" style="flex:none;">📢 팝업으로 보내기</button>' +
+          '<button type="button" class="card-btn" id="bh-once-preview" style="flex:none;">미리보기(나에게)</button>' +
           '<button type="button" class="card-btn" id="bh-once-msg" style="flex:none;">💬 메시지함으로 보내기</button>' +
         '</div>' +
       '</div>' +
@@ -6657,6 +6660,7 @@
     );
     function rd() {
       return {
+        title: (overlay.querySelector('#bh-weekly-title').value || '').trim(),
         text: (overlay.querySelector('#bh-weekly-text').value || '').trim(),
         weekday: parseInt(overlay.querySelector('#bh-weekday').value, 10) || 0,
         hour: Math.max(0, Math.min(23, parseInt(overlay.querySelector('#bh-hour').value, 10) || 0)),
@@ -6665,23 +6669,25 @@
     }
     overlay.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(overlay); });
     overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(overlay); });
-    overlay.querySelector('#bh-preview').addEventListener('click', function () { showCheckinModal(overlay.querySelector('#bh-weekly-text').value || ''); });
+    overlay.querySelector('#bh-preview').addEventListener('click', function () { showCheckinModal(overlay.querySelector('#bh-weekly-title').value || '', overlay.querySelector('#bh-weekly-text').value || ''); });
     overlay.querySelector('#bh-save').addEventListener('click', function () {
       var v = rd(); if (!v.text) return modalNotice('안내', '팝업 문구를 입력해주세요.');
-      saveCheckinCfg({ text: v.text, weekday: v.weekday, hour: v.hour, enabled: v.enabled }).then(function () { modalNotice('저장 완료', '주간 예약 팝업 설정을 저장했어요.'); });
+      saveCheckinCfg({ title: v.title, text: v.text, weekday: v.weekday, hour: v.hour, enabled: v.enabled }).then(function () { modalNotice('저장 완료', '주간 예약 팝업 설정을 저장했어요.'); });
     });
     overlay.querySelector('#bh-sendnow').addEventListener('click', function () {
       var v = rd(); if (!v.text) return modalNotice('안내', '팝업 문구를 입력해주세요.');
       modalConfirm('지금 발송', '이 팝업을 모든 로그인 회원에게 다음 접속 때 1회 표시할까요? (예약과 별도로 지금 한 번 더)', '발송', 'primary').then(function (ok) {
         if (!ok) return;
-        saveCheckinCfg({ text: v.text, weekday: v.weekday, hour: v.hour, enabled: v.enabled, ver: String(Date.now()) }).then(function () { closeModal(overlay); modalNotice('발송 예약됨', '회원들이 다음 접속 때 이 팝업을 한 번 보게 돼요.'); });
+        saveCheckinCfg({ title: v.title, text: v.text, weekday: v.weekday, hour: v.hour, enabled: v.enabled, ver: String(Date.now()) }).then(function () { closeModal(overlay); modalNotice('발송 예약됨', '회원들이 다음 접속 때 이 팝업을 한 번 보게 돼요.'); });
       });
     });
+    overlay.querySelector('#bh-once-preview').addEventListener('click', function () { showOneOffPopup(overlay.querySelector('#bh-once-title').value || '', overlay.querySelector('#bh-once-text').value || ''); });
     overlay.querySelector('#bh-once-popup').addEventListener('click', function () {
       var t = (overlay.querySelector('#bh-once-text').value || '').trim(); if (!t) return modalNotice('안내', '공지 내용을 입력해주세요.');
+      var tt = (overlay.querySelector('#bh-once-title').value || '').trim();
       modalConfirm('팝업으로 보내기', '이 내용을 전체 로그인 회원에게 다음 접속 때 팝업으로 1회 띄울까요?', '보내기', 'primary').then(function (ok) {
         if (!ok) return;
-        setOneOffPopup(t).then(function () { closeModal(overlay); modalNotice('발송 예약됨', '회원들이 다음 접속 때 팝업으로 보게 돼요.'); });
+        setOneOffPopup(tt, t).then(function () { closeModal(overlay); modalNotice('발송 예약됨', '회원들이 다음 접속 때 팝업으로 보게 돼요.'); });
       });
     });
     overlay.querySelector('#bh-once-msg').addEventListener('click', function () {
@@ -8633,10 +8639,12 @@
   }
 
   /* 주간 예약 팝업(만족도·공유) 설정 — 관리자가 전체공지 허브에서 문구·요일·시각 수정. 기본값 fallback */
+  var CHECKIN_DEFAULT_TITLE = '베니브릿지, 요즘 어떠세요? 😊';
   var CHECKIN_DEFAULT_TEXT = '사용하시면서 좋았던 점·불편한 점이 있으면 편하게 알려주세요. 여러분 의견으로 더 나아져요.\n주변에 진지하게 좋은 인연을 찾는 지인이 있다면 링크도 전해주시면 큰 힘이 돼요 🙏';
   function checkinCfg() {
     var c = (currentState && currentState.checkin) || {};
     return {
+      title: (c.title && ('' + c.title).trim()) ? c.title : CHECKIN_DEFAULT_TITLE,
       text: (c.text && ('' + c.text).trim()) ? c.text : CHECKIN_DEFAULT_TEXT,
       weekday: (typeof c.weekday === 'number') ? c.weekday : 1, /* 0=일 … 1=월 … 6=토 */
       hour: (typeof c.hour === 'number') ? c.hour : 6,
@@ -8654,10 +8662,12 @@
     if (nowKst.getTime() < a.getTime()) a.setUTCDate(a.getUTCDate() - 7); /* 예약 시각 이전이면 지난 주기 */
     return { id: a.toISOString().slice(0, 10), anchorMs: a.getTime() - 9 * 3600 * 1000, ver: cfg.ver };
   }
-  function showCheckinModal(overrideText) {
-    var txt = (overrideText != null) ? overrideText : checkinCfg().text;
+  function showCheckinModal(overrideTitle, overrideText) {
+    var cfg = checkinCfg();
+    var title = (overrideTitle != null) ? overrideTitle : cfg.title;
+    var txt = (overrideText != null) ? overrideText : cfg.text;
     var overlay = openModal(
-      '<h3>베니브릿지, 요즘 어떠세요? 😊</h3>' +
+      '<h3>' + escapeHtml(title || CHECKIN_DEFAULT_TITLE) + '</h3>' +
       '<p class="modal-msg" style="text-align:left;line-height:1.7;white-space:pre-wrap;">' + escapeHtml(txt) + '</p>' +
       '<div class="modal-actions" style="flex-direction:column;gap:8px;align-items:stretch;">' +
         '<button type="button" class="card-btn" id="ci-feedback" style="width:100%;background:#FEE500;border-color:#FEE500;color:#3C1E1E;font-weight:700;">&#128172; 의견 남기기</button>' +
@@ -8683,7 +8693,16 @@
     if (me.submittedAt && new Date(me.submittedAt).getTime() >= p.anchorMs) return; /* 이번 주기 이후 가입 신규 생략 */
     showCheckinModal();
   }
-  /* 1회성 공지 팝업 (state.popup = {text, ver}) — 전체공지 허브에서 "팝업으로 보내기" */
+  /* 1회성 공지 팝업 (state.popup = {title, text, ver}) — 전체공지 허브에서 "팝업으로 보내기" */
+  function showOneOffPopup(title, text) {
+    var overlay = openModal(
+      '<h3>' + escapeHtml(title || '📢 공지') + '</h3>' +
+      '<p class="modal-msg" style="text-align:left;line-height:1.7;white-space:pre-wrap;">' + escapeHtml(text) + '</p>' +
+      '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok" style="width:100%;">확인</button></div>'
+    );
+    overlay.querySelector('#modal-ok').addEventListener('click', function () { closeModal(overlay); });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(overlay); });
+  }
   function maybeShowOneOffPopup() {
     if (!currentUser) return;
     var pop = (currentState && currentState.popup) || null;
@@ -8692,13 +8711,7 @@
     var seen = ''; try { seen = localStorage.getItem('popup-seen') || ''; } catch (e) {}
     if (seen === pop.ver) return;
     try { localStorage.setItem('popup-seen', pop.ver); } catch (e) {}
-    var overlay = openModal(
-      '<h3>📢 공지</h3>' +
-      '<p class="modal-msg" style="text-align:left;line-height:1.7;white-space:pre-wrap;">' + escapeHtml(pop.text) + '</p>' +
-      '<div class="modal-actions"><button type="button" class="card-btn primary" id="modal-ok" style="width:100%;">확인</button></div>'
-    );
-    overlay.querySelector('#modal-ok').addEventListener('click', function () { closeModal(overlay); });
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(overlay); });
+    showOneOffPopup(pop.title, pop.text);
   }
 
   var ANNOUNCE_KEY = 'announce-v23'; /* 공지 내용 바뀌면 숫자를 올려 모두에게 한 번 다시 표시 */
