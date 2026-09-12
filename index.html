@@ -890,7 +890,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-285';
+  var APP_VERSION = '2026-09-12-286';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4547,7 +4547,7 @@
             ? '<button type="button" class="card-btn" id="cancel-mm-req" style="flex:none;">⏳ 주선자 승인 대기 (취소)</button>'
             : '<button type="button" class="card-btn" id="request-mm" style="flex:none;">🤝 주선자 요청</button>');
       headBtns = '<button type="button" class="card-btn primary" data-action="card-detail" data-id="' + escapeHtml(me.id) + '" style="flex:none;">👤 내 프로필 보기</button>' +
-        reqBtn + '<button type="button" class="card-btn" id="start-proxy" style="flex:none;">🤝 친구 대신 소개하기</button>';
+        reqBtn + '<button type="button" class="card-btn" id="start-proxy" style="flex:none;">🤝 주선자 계정으로 전환</button>';
     }
     return (
       '<div class="admin-panel">' +
@@ -4562,10 +4562,6 @@
         sections +
         connectionsSummaryHtml(state, me) +
         (isSubProfile ? '' : msgSection) +
-        ((!isSubProfile && !isMatchmakerEntry(myAuthEntry(state)) && me.id === currentUser.id)
-          ? '<div class="mine-section" style="margin-top:14px;"><button type="button" class="card-btn" id="convert-mm" style="flex:none;">🤝 주선자 계정으로 전환</button>' +
-              '<p class="sub" style="margin:6px 0 0;">여러 친구를 소개하거나, 다른 회원의 주선자 요청을 받고 싶다면 전환하세요. 내 소개팅 프로필은 그대로 유지돼요.</p></div>'
-          : '') +
       '</div>'
     );
   }
