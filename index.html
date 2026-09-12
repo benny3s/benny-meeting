@@ -890,7 +890,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-288';
+  var APP_VERSION = '2026-09-12-289';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4319,10 +4319,10 @@
         : 'opacity:.38;');
       var chatAttr = chat ? (' data-action="dm-chat" data-id="' + escapeHtml(x.id) + '"') : ' disabled';
       var chatBtn = '<button type="button" class="card-btn" ' + chatAttr + ' style="' + chatStyle + '">💬 대화' + (chat && unread ? ' <span class="count blink">' + unread + '</span>' : '') + '</button>';
-      var chatRevokeStyle = 'flex:none;padding:4px 9px;font-size:0.78rem;' + (chat ? '' : 'opacity:.38;');
+      var chatRevokeStyle = 'flex:none;padding:4px 9px;font-size:0.78rem;' + (chat ? 'background:#ffe3ef;color:#c2185b;border-color:#f6c1d6;' : 'opacity:.38;');
       var chatRevokeAttr = chat ? (' data-action="revoke-contact-link" data-id="' + escapeHtml(x.id) + '"') : ' disabled';
-      var chatRevokeBtn = '<button type="button" class="card-btn danger" ' + chatRevokeAttr + ' style="' + chatRevokeStyle + '">대화 회수</button>';
-      return '<div style="padding:9px 0;border-bottom:1px dashed var(--line);">' +
+      var chatRevokeBtn = '<button type="button" class="card-btn" ' + chatRevokeAttr + ' style="' + chatRevokeStyle + '">대화 회수</button>';
+      return '<div style="border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:8px;background:var(--paper);">' +
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">' +
           '<span style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.78rem;">' + escapeHtml(formatUid(x) || '—') + '</span>' +
           '<button type="button" data-action="card-detail" data-id="' + escapeHtml(x.id) + '" style="display:inline-flex;align-items:center;gap:4px;border:1px solid var(--gold);background:var(--gold-soft);color:var(--ink);border-radius:999px;padding:4px 12px;font-size:0.92rem;font-weight:700;cursor:pointer;font-family:inherit;">👤 ' + escapeHtml(x.nickname) + ' <span style="font-weight:400;font-size:0.78rem;color:var(--muted);">프로필</span></button>' +
