@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-300';
+  var APP_VERSION = '2026-09-12-301';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4957,17 +4957,19 @@
       var dayDiff = subK ? Math.round((Date.parse(todayK) - Date.parse(subK)) / 86400000) : 0;
       var ageCls = dayDiff <= 0 ? ' req-today' : (dayDiff === 1 ? ' req-yesterday' : (dayDiff <= 4 ? ' req-old' : ' req-stale'));
       var foldCls = 'req-fold' + ageCls;
-      /* 요청함(대기/보류)은 요청 시각 그대로 · 요청완료(승인/거절)는 처리(승인/거절) 시각 표시 */
-      var footWhen = ((st === 'approved' || st === 'rejected') && r.decidedAt)
-        ? (st === 'approved' ? '✅ 승인 ' : '⛔ 거절 ') + new Date(r.decidedAt).toLocaleString('ko-KR')
-        : new Date(r.submittedAt).toLocaleString('ko-KR');
+      /* 요청 시각과 처리(승인/거절/보류) 시각을 세로로 나란히 표시 */
+      var reqTime = r.submittedAt ? new Date(r.submittedAt).toLocaleString('ko-KR') : '-';
+      var decLabel = st === 'approved' ? '✅ 승인' : (st === 'rejected' ? '⛔ 거절' : (r.held ? '📌 보류' : ''));
+      var decTime = r.decidedAt ? new Date(r.decidedAt).toLocaleString('ko-KR') : '';
+      var whenBlock = '<span class="when">📮 요청 ' + reqTime + '</span>' +
+        (decTime && decLabel ? '<span class="when">' + decLabel + ' ' + decTime + '</span>' : '');
       return (
         '<details class="' + foldCls + '">' +
           summary +
           '<div class="req-fold-body">' +
             body +
             '<div class="req-foot">' +
-              '<span class="when">' + footWhen + '</span>' +
+              whenBlock +
               '<div class="req-foot-btns">' + actionBtns + '</div>' +
             '</div>' +
           '</div>' +
