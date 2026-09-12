@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-314';
+  var APP_VERSION = '2026-09-12-315';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -922,8 +922,8 @@
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
   var _mmFoldOpen = {};  /* 주선자 탭: 카드별 접힘 상태 (리페인트 후 유지용, 기본 열림) */
   var adminEditMode = false; /* 관리자 섹션 편집(순서·기본 열림) 모드 */
-  var DEFAULT_SEC_ORDER = ['usage', 'signup', 'pending', 'held', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'cap', 'seen', 'log'];
-  var SEC_NAMES = { usage: '📊 사용량 통계', signup: '📈 가입 추이', pending: '⏳ 승인 대기', held: '📌 보류 중', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록' };
+  var DEFAULT_SEC_ORDER = ['usage', 'pending', 'held', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'cap', 'seen', 'log'];
+  var SEC_NAMES = { usage: '📊 사용량 통계', pending: '⏳ 승인 대기', held: '📌 보류 중', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록' };
   /* 섹션 열림 상태는 "세션 메모리에만" 저장 → 리페인트(버튼 클릭 등) 동안엔 유지되지만,
      새로고침하면 초기화되어 모두 접힌 상태로 시작 (이전에 열었던 걸 기억하지 않음) */
   var _adminSecOpen = {}, _adminSecOrder = null;
@@ -2779,7 +2779,7 @@
   }
 
   /* ---- activity log ---- */
-  var LOG_LIMIT = 600;
+  var LOG_LIMIT = 1500;
   function appendLog(type, actor, detail) {
     var entry = { id: genId(), at: new Date().toISOString(), type: type, actor: actor || '', detail: detail || '' };
     stateRef.get().then(function (doc) {
@@ -4719,18 +4719,18 @@
       '<div class="admin-fold-body">' + summary +
       '<p class="stats-sub" style="margin:10px 0 4px;">일자별 추이 (최신순 · 누적 회원=그 날까지 가입한 현재 회원, 가입=신규 프로필, 신청=보낸 날 기준)</p>' + trend +
       '<p class="stats-sub" style="margin-top:6px;">※ 탈퇴한 회원은 집계에 없어 누적은 현재 회원 기준이에요. 승인/탈퇴 시점은 별도로 기록되지 않아요.</p>' +
+      '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);"><div style="font-weight:700;font-size:0.95rem;margin-bottom:8px;">📈 가입 추이</div>' + signupTrendBody(state) + '</div>' +
       '</div></details>';
   }
 
-  /* 가입 추이 그래프 (관리자탭): 회원·주선자·전체(테스트 제외) 누적선. 데이터=entries.submittedAt (활동기록과 무관) */
-  function signupTrendHtml(state) {
+  /* 가입 추이 그래프 (사용량 통계 안에 삽입): 회원·주선자·전체(테스트 제외) 누적선. 데이터=entries.submittedAt (활동기록과 무관) */
+  function signupTrendBody(state) {
     function kd(iso) { return new Date(new Date(iso).getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
     var all = (state.entries || []).concat(state.pendingEntries || []);
     var rows = all.filter(function (e) { return e.submittedAt && !e.testAccount; }).map(function (e) { return { day: kd(e.submittedAt), mm: !!e.isMatchmaker }; });
     var body;
     if (!rows.length) {
-      body = '<p class="sub">아직 가입 데이터가 없어요.</p>';
-      return '<details class="admin-fold" data-sec="signup"' + secOpenAttr('signup', false) + '><summary>📈 가입 추이</summary><div class="admin-fold-body">' + body + '</div></details>';
+      return '<p class="sub">아직 가입 데이터가 없어요.</p>';
     }
     var memD = {}, mmD = {};
     rows.forEach(function (r) { if (r.mm) mmD[r.day] = (mmD[r.day] || 0) + 1; else memD[r.day] = (memD[r.day] || 0) + 1; });
@@ -4775,7 +4775,7 @@
     body = '<p class="sub" style="margin:0 0 8px;">시작일부터 오늘까지 · 테스트 제외 · 누적</p>' +
       '<div style="display:flex;gap:8px;margin-bottom:10px;">' + card('전체', last.total, 'var(--accent)') + card('회원', last.member, 'var(--gold)') + card('주선자', last.mm, '#2E8B57') + '</div>' +
       periodRow + legend + svg.join('');
-    return '<details class="admin-fold" data-sec="signup"' + secOpenAttr('signup', false) + '><summary>📈 가입 추이</summary><div class="admin-fold-body">' + body + '</div></details>';
+    return body;
   }
 
   function renderAdmin(state) {
@@ -5418,7 +5418,7 @@
       (listReqs.length ? allReqItems : reqEmpty) +
       '<p class="sub" id="req-search-empty" hidden>검색 결과가 없어요.</p>', false, 'active');
     var secHtml = {
-      usage: usageStatsHtml(state), signup: signupTrendHtml(state), pending: pendingSection, held: heldSection, editrev: editRevSection,
+      usage: usageStatsHtml(state), pending: pendingSection, held: heldSection, editrev: editRevSection,
       deaclist: deacListSection, dellog: delLogSection,
       active: activeReqSection, adminmsg: adminMsgSection,
       cap: capSection, seen: seenSection, log: logSection
