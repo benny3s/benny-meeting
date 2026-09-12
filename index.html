@@ -890,7 +890,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-294';
+  var APP_VERSION = '2026-09-12-295';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -7533,6 +7533,8 @@
         '<div class="detail-row"><div class="detail-label">닉네임</div><div class="detail-value">' + escapeHtml(entry.nickname) + '</div></div>' +
         '<div class="detail-row"><div class="detail-label">실명</div><div class="detail-value" id="detail-realname">복호화 중...</div></div>' +
         '<div class="detail-row"><div class="detail-label">연락처</div><div class="detail-value" id="detail-contact">복호화 중...</div></div>' +
+        '<div class="detail-row"><div class="detail-label">알게 된 경로</div><div class="detail-value" id="detail-referrer">' + (entry.referrerEnc ? '복호화 중...' : '(없음 — 기존 주선자)') + '</div></div>' +
+        (entry.submittedAt ? '<div class="detail-row"><div class="detail-label">접수</div><div class="detail-value">' + escapeHtml(new Date(entry.submittedAt).toLocaleString('ko-KR')) + '</div></div>' : '') +
         '</div>';
       modalNotice(escapeHtml(entry.nickname) + ' (주선자) 상세', '').then(function () {});
       var mbox = document.querySelector('.modal-box');
@@ -7546,6 +7548,11 @@
         decryptWithAdmin(adminPrivateKey, entry.contactEnc).then(function (c) {
           var el = document.getElementById('detail-contact'); if (el) el.textContent = c;
         }).catch(function () { var el = document.getElementById('detail-contact'); if (el) el.textContent = '(복호화 실패)'; });
+      }
+      if (adminPrivateKey && entry.referrerEnc) {
+        decryptWithAdmin(adminPrivateKey, entry.referrerEnc).then(function (ref) {
+          var el = document.getElementById('detail-referrer'); if (el) el.textContent = ref;
+        }).catch(function () { var el = document.getElementById('detail-referrer'); if (el) el.textContent = '(복호화 실패)'; });
       }
       return;
     }
@@ -8014,8 +8021,8 @@
       else if (action === 'admin-msg') openAdminChat(id);
       else if (action === 'admin-msg-reply') openAdminChat(id);
       else if (action === 'guest-phone') handleGuestPhone(id);
-      else if (action === 'msg-del') { if (isAdminUnlocked) deleteAdminMessage(id); }
-      else if (action === 'mymsg-del') { deleteMyMessage(id); }
+      else if (action === 'msg-del') { if (isAdminUnlocked) modalConfirm('메시지 삭제', '이 메시지를 삭제할까요? 되돌릴 수 없어요.', '삭제', 'danger').then(function (ok) { if (ok) deleteAdminMessage(id); }); }
+      else if (action === 'mymsg-del') { modalConfirm('메시지 삭제', '이 메시지를 삭제할까요? 되돌릴 수 없어요.', '삭제', 'danger').then(function (ok) { if (ok) deleteMyMessage(id); }); }
       else if (action === 'access-filter-open') { openAccessFilterPicker(actionBtn.getAttribute('data-scope') || 'list'); return; }
       else if (action === 'mm-scope') { mmScopeFilter = actionBtn.getAttribute('data-scope') || 'all'; paint(currentState); return; }
       else if (action === 'fold-all') { toggleFoldAll(); return; }
