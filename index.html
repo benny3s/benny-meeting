@@ -97,6 +97,7 @@
   .masthead h1 { font-size: clamp(1.5rem, 4vw, 2.1rem); letter-spacing: 0.01em; }
   .masthead p { margin: 6px 0 0; color: var(--paper); opacity: 0.72; font-size: 0.92rem; }
   .masthead-sub { margin: 6px 0 0; color: var(--paper); opacity: 0.72; font-size: 0.92rem; line-height: 1.5; }
+  .masthead-note { margin: 4px 0 0; color: var(--gold); opacity: 0.92; font-size: 0.82rem; line-height: 1.45; }
   .admin-bar { max-width: 880px; margin: 14px auto 0; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
   .admin-bar-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .notice-bar {
@@ -889,7 +890,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-278';
+  var APP_VERSION = '2026-09-12-279';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -5427,7 +5428,8 @@
       '<div class="masthead"><div class="masthead-inner">' +
         '<div class="masthead-icon">' + ICON_LOGO + '</div>' +
         '<div><h1 id="masthead-title" title="새로고침" style="cursor:pointer;">베니브릿지</h1>' +
-          '<p class="masthead-sub">관리자 주변 사람들 중심으로, 좋은 인연을 맺어주는 작은 공간이에요.</p></div>' +
+          '<p class="masthead-sub">아는 사람이 직접 건넨 🔗링크로만 연결되는, 신뢰 기반 커뮤니티예요.</p>' +
+          '<p class="masthead-note">믿을 만한 지인에게 링크를 전해주세요. (온라인 익명 배포 지양)</p></div>' +
       '</div>' +
       '<div class="admin-bar">' +
         /* 1줄: 공지·사용법 / URL 복사 */
