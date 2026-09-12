@@ -690,9 +690,9 @@
   .mine-status-box .sub { margin-bottom: 0; }
 
   .my-uid {
-    display: inline-block; margin: 6px 0 4px; padding: 4px 12px; border-radius: 999px;
-    background: var(--gold-soft); color: var(--gold); font-weight: 700;
-    font-variant-numeric: tabular-nums; font-size: 0.9rem;
+    display: inline-block; margin: 6px 0 4px;
+    color: var(--muted); font-weight: 500;
+    font-variant-numeric: tabular-nums; font-size: 0.82rem;
   }
 
   /* ---------- 관리자 활동 로그 ---------- */
@@ -890,7 +890,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-284';
+  var APP_VERSION = '2026-09-12-285';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2450,10 +2450,10 @@
           '<button type="button" class="role-btn" data-lmode="mm">🤝 주선자</button>' +
         '</div>' +
         '<p class="modal-msg" id="login-mode-msg"></p>' +
-        '<input type="text" class="modal-input" id="modal-login-search" placeholder="🔍 고유번호 또는 닉네임 검색" readonly autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" name="benny-q" data-lpignore="true" data-1p-ignore="true" data-form-type="other">' +
+        '<input type="text" class="modal-input" id="modal-login-search" placeholder="🔍 고유번호 또는 닉네임 검색" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" name="benny-q" data-lpignore="true" data-1p-ignore="true" data-form-type="other">' +
         '<div class="login-list" id="modal-login-list"></div>' +
         '<div style="position:relative;margin-top:10px;">' +
-          '<input type="password" inputmode="numeric" class="modal-input" id="modal-login-pin" data-numeric placeholder="개인 PIN" style="margin-top:0;padding-right:46px;" autocomplete="off">' +
+          '<input type="text" inputmode="numeric" class="modal-input" id="modal-login-pin" data-numeric placeholder="개인 PIN" style="margin-top:0;padding-right:46px;-webkit-text-security:disc;text-security:disc;" autocomplete="off" name="benny-pin">' +
           '<button type="button" id="login-pin-eye" aria-label="PIN 표시/숨기기" title="표시/숨기기" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.15rem;padding:6px;line-height:1;">👀</button>' +
         '</div>' +
         '<div class="modal-actions">' +
@@ -2464,10 +2464,6 @@
       );
       overlay.classList.add('login-modal');
       var searchInput = overlay.querySelector('#modal-login-search');
-      /* 크롬 비밀번호 관리자가 이 칸을 '아이디'로 오인하지 않게: 포커스 전엔 readonly, 포커스 시 해제 */
-      var unlockSearch = function () { searchInput.removeAttribute('readonly'); };
-      searchInput.addEventListener('focus', unlockSearch);
-      searchInput.addEventListener('pointerdown', unlockSearch);
       var listEl = overlay.querySelector('#modal-login-list');
       var pinInput = overlay.querySelector('#modal-login-pin');
       var msgEl = overlay.querySelector('#login-mode-msg');
@@ -2504,7 +2500,7 @@
         if (e.target.closest('#login-pin-eye')) {
           var pinI = overlay.querySelector('#modal-login-pin');
           var eyeB = e.target.closest('#login-pin-eye');
-          if (pinI) { var reveal = pinI.type === 'password'; pinI.type = reveal ? 'text' : 'password'; eyeB.textContent = reveal ? '🙈' : '👀'; pinI.focus(); }
+          if (pinI) { var masked = pinI.style.webkitTextSecurity !== 'none'; pinI.style.webkitTextSecurity = masked ? 'none' : 'disc'; pinI.style.textSecurity = masked ? 'none' : 'disc'; eyeB.textContent = masked ? '🙈' : '👀'; pinI.focus(); }
           return;
         }
         var lb = e.target.closest('[data-lmode]');
@@ -8434,21 +8430,25 @@
   var KAKAO_CHANNEL_URL = 'http://pf.kakao.com/_axijrX';
   var KAKAO_CHAT_URL = 'http://pf.kakao.com/_axijrX/chat';
   function handleBuyCoffee() {
+    var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+    /* '관리자 커피 사주기' 버튼과 동일한 골드 강조 디자인 */
+    var goldBtn = 'background:var(--gold-soft);border-color:var(--gold);color:var(--gold);opacity:1;font-weight:700;';
     var ov = openModal(
       '<h3>&#9749; 관리자에게 커피 한 잔</h3>' +
       '<p class="modal-msg" style="text-align:center;">서버 운영과 기능 개선에 큰 힘이 돼요. 감사합니다! 🙏</p>' +
       '<div style="text-align:center;margin:6px 0 10px;"><img src="coffee-qr.png" alt="카카오페이 후원 QR" style="width:230px;max-width:80%;border-radius:12px;"></div>' +
-      '<p class="modal-msg" style="text-align:center;font-size:0.84rem;">휴대폰 카메라로 <b>QR을 스캔</b>하거나, 아래 <b>카카오페이 열기</b>를 눌러 후원할 수 있어요. <span style="color:var(--muted);">(링크 열기는 휴대폰에서 동작해요)</span></p>' +
+      '<p class="modal-msg" style="text-align:center;font-size:0.84rem;">' + (isMobile ? '아래 <b>카카오페이 열기</b>를 누르거나, 휴대폰으로 <b>QR을 스캔</b>해 후원할 수 있어요.' : '휴대폰 카메라로 <b>QR을 스캔</b>하면 카카오페이로 후원할 수 있어요.') + '</p>' +
       '<div class="modal-actions" style="flex-direction:column;gap:8px;align-items:stretch;">' +
-        '<button type="button" class="card-btn" id="coffee-open" style="background:#FEE500;border-color:#FEE500;color:#3C1E1E;font-weight:700;">☕ 카카오페이 열기</button>' +
-        '<button type="button" class="card-btn" id="coffee-copy">🔗 링크 복사</button>' +
+        (isMobile ? '<button type="button" class="card-btn" id="coffee-open" style="' + goldBtn + '">☕ 카카오페이 열기</button>' : '') +
+        '<button type="button" class="card-btn" id="coffee-copy" style="' + goldBtn + '">🔗 링크 복사</button>' +
         '<button type="button" class="card-btn" id="modal-cancel">닫기</button>' +
       '</div>'
     );
     ov.querySelector('#coffee-copy').addEventListener('click', function () {
       try { navigator.clipboard.writeText(COFFEE_URL); modalNotice('복사됨', '후원 링크를 복사했어요.'); } catch (e) { modalNotice('안내', COFFEE_URL); }
     });
-    ov.querySelector('#coffee-open').addEventListener('click', function () {
+    var openBtn = ov.querySelector('#coffee-open');
+    if (openBtn) openBtn.addEventListener('click', function () {
       try { window.open(COFFEE_URL, '_blank'); } catch (e) { location.href = COFFEE_URL; }
     });
     ov.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(ov); });
