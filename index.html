@@ -890,7 +890,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-292';
+  var APP_VERSION = '2026-09-12-293';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2892,7 +2892,7 @@
   /* 관리자↔회원 메시지를 대화방(말풍선)으로 렌더 — 관리자=오른쪽(accent) · 회원=왼쪽(회색). withDel이면 개별 삭제 ✕ */
   function adminChatBubble(m, withDel) {
     var mine = m.from === 'admin';
-    var who = mine ? '👑 관리자' : (m.guestName ? '🙋 ' + escapeHtml(m.guestName) + ' · 비회원' : '🙋 회원');
+    var who = (mine ? '👑 관리자' : (m.guestName ? '🙋 ' + escapeHtml(m.guestName) + ' · 비회원' : '🙋 회원')) + (m.broadcast ? ' · 📢 공지' : '');
     var delBtn = withDel ? ' <button type="button" data-action="msg-del" data-id="' + escapeHtml(m.id) + '" title="삭제" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:0.82rem;padding:0;">&#10005;</button>' : '';
     return '<div style="display:flex;flex-direction:column;align-items:' + (mine ? 'flex-end' : 'flex-start') + ';margin:6px 0;">' +
       '<div style="font-size:0.66rem;font-weight:700;color:var(--muted);margin-bottom:2px;' + (mine ? 'text-align:right;' : '') + '">' + who + ' · ' + fmtDate(m.at) + delBtn + '</div>' +
@@ -5153,25 +5153,34 @@
         : '<p class="sub">아직 기록이 없어요.</p>') +
       '</div></details>';
 
-    /* 관리자 메시지 (회원별 스레드) */
+    /* 관리자 메시지 (회원별 1:1 대화) */
     var msgByEntry = {};
     (state.messages || []).forEach(function (m) {
       if (m.hiddenByAdmin) return;
       (msgByEntry[m.entryId] = msgByEntry[m.entryId] || []).push(m);
     });
-    var msgEntryIds = Object.keys(msgByEntry).sort(function (a, b) {
-      var la = msgByEntry[a][msgByEntry[a].length - 1].at || '';
-      var lb = msgByEntry[b][msgByEntry[b].length - 1].at || '';
-      return lb.localeCompare(la);
+    function amUnreadOf(eid) { return msgByEntry[eid].filter(function (m) { return m.from === 'user' && !m.readByAdmin; }).length; }
+    function amLastAtOf(eid) { var a = msgByEntry[eid]; return a.length ? (a[a.length - 1].at || '') : ''; }
+    /* 전체 공지(broadcast)만 받고 개인 대화(개인 메시지·회원 답장)가 없는 사람은 목록에서 제외 → 실제 나눈 대화만 */
+    var msgEntryIds = Object.keys(msgByEntry).filter(function (eid) {
+      return msgByEntry[eid].some(function (m) { return !m.broadcast; });
+    });
+    /* 정렬: 안 읽음(내가 아직 안 본 회원 메시지) 먼저 → 그다음 최근 대화 순 */
+    msgEntryIds.sort(function (a, b) {
+      var ua = amUnreadOf(a) > 0 ? 1 : 0, ub = amUnreadOf(b) > 0 ? 1 : 0;
+      if (ua !== ub) return ub - ua;
+      return amLastAtOf(b).localeCompare(amLastAtOf(a));
     });
     var adminMsgItems = msgEntryIds.map(function (eid) {
       var msgs = msgByEntry[eid].slice().sort(function (a, b) { return (a.at || '').localeCompare(b.at || ''); });
       var lines = msgs.map(function (m) { return adminChatBubble(m, true); }).join('');
       var last = msgs[msgs.length - 1];
-      var preview = (last.from === 'admin' ? '나: ' : '') + (last.text || '');
-      var unreadHere = msgs.filter(function (m) { return m.from === 'user' && !m.readByAdmin; }).length;
-      var unreadBadge = unreadHere ? '<span style="display:inline-block;margin-left:6px;background:var(--accent);color:#fff;border-radius:999px;padding:1px 8px;font-size:0.72rem;vertical-align:middle;">NEW ' + unreadHere + '</span>' : '';
-      return '<details class="admin-msg-item" data-eid="' + escapeHtml(eid) + '" style="border:1px solid ' + (unreadHere ? 'var(--accent)' : 'var(--line)') + ';border-radius:12px;margin-top:10px;background:var(--paper);">' +
+      var preview = (last.from === 'admin' ? '나: ' : '') + (last.broadcast ? '📢 ' : '') + (last.text || '');
+      var unreadHere = amUnreadOf(eid);
+      var unreadBadge = unreadHere ? ' <span class="blink-soft" style="display:inline-block;margin-left:6px;background:var(--accent);color:#fff;border-radius:999px;padding:1px 9px;font-size:0.72rem;font-weight:700;vertical-align:middle;">🔔 새 ' + unreadHere + '</span>' : '';
+      var isGuest = eid.indexOf('guest-') === 0;
+      var profileBtn = isGuest ? '' : '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(eid) + '" style="flex:none;">👤 프로필</button>';
+      return '<details class="admin-msg-item"' + (unreadHere ? ' open' : '') + ' data-eid="' + escapeHtml(eid) + '" style="border:' + (unreadHere ? '2px solid var(--accent)' : '1px solid var(--line)') + ';border-radius:12px;margin-top:10px;background:' + (unreadHere ? 'var(--accent-soft)' : 'var(--paper)') + ';">' +
         '<summary style="cursor:pointer;padding:12px 14px;">' +
           '<b>' + escapeHtml(uidOf(eid)) + ' ' + escapeHtml(nameOf(eid)) + '</b>' +
           '<span class="pending-count">' + msgs.length + '</span>' + unreadBadge +
@@ -5180,19 +5189,21 @@
         '<div style="padding:2px 14px 14px;border-top:1px solid var(--line);">' +
           '<div style="margin-top:8px;">' + lines + '</div>' +
           '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">' +
-            (eid.indexOf('guest-') === 0
+            (isGuest
               ? (msgs.filter(function (m) { return m.guestPhoneEnc; })[0]
                   ? '<button type="button" class="card-btn primary" data-action="guest-phone" data-id="' + escapeHtml(msgs.filter(function (m) { return m.guestPhoneEnc; })[0].id) + '" style="flex:none;">📞 연락처 확인</button>' : '')
               : '<button type="button" class="card-btn primary" data-action="admin-msg-reply" data-id="' + escapeHtml(eid) + '" style="flex:none;">💬 대화</button>') +
+            profileBtn +
             '<button type="button" class="card-btn danger" data-action="admin-msg-delall" data-id="' + escapeHtml(eid) + '" style="flex:none;">전체 삭제</button>' +
           '</div>' +
         '</div>' +
       '</details>';
     }).join('');
     var adminMsgUnreadTotal = (state.messages || []).filter(function (m) { return m.from === 'user' && !m.hiddenByAdmin && !m.readByAdmin; }).length;
-    var adminMsgSection = adminFold('💬 관리자 메시지', msgEntryIds.length,
-      '<p class="sub">회원별 대화예요. 눌러서 내역을 펼치거나 [💬 대화]로 대화방을 열어 답장해요. (✕ 개별 삭제 / 전체 삭제)</p>' +
-      (msgEntryIds.length ? adminMsgItems : '<p class="sub">아직 메시지가 없어요.</p>'), false, 'adminmsg');
+    var adminMsgTitle = '💬 관리자 메시지' + (adminMsgUnreadTotal ? ' <span class="blink-soft" style="background:var(--accent);color:#fff;border-radius:999px;padding:1px 9px;font-size:0.74rem;font-weight:700;margin-left:6px;">🔔 새 ' + adminMsgUnreadTotal + '</span>' : '');
+    var adminMsgSection = adminFold(adminMsgTitle, msgEntryIds.length,
+      '<p class="sub">나와 대화를 주고받은 회원이에요 (전체 공지만 받은 사람은 제외). 안 읽은 대화는 <b>위에 강조·자동 펼침</b>돼요. [💬 대화]로 답장, [👤 프로필]로 바로 이동. (✕ 개별 / 전체 삭제)</p>' +
+      (msgEntryIds.length ? adminMsgItems : '<p class="sub">아직 주고받은 대화가 없어요.</p>'), false, 'adminmsg');
 
     var activeReqSection = adminFold('📬 요청함', activeReqs.length,
       '<p class="sub">아직 처리하지 않은 사진 요청·대화 신청이에요.</p>' +
