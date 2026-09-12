@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-308';
+  var APP_VERSION = '2026-09-12-309';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1703,8 +1703,10 @@
   var selfPop = false;     /* 우리가 정리용으로 부른 history.back() */
   var pendingBack = 0;     /* 닫기로 예약됐지만 아직 실행 안 한 back() 수 (같은 클릭의 열기와 상쇄용) */
   function pushOverlay(el, dismiss) {
+    var wasEmpty = overlayStack.length === 0;
     overlayStack.push({ el: el, dismiss: dismiss });
     document.body.classList.add('modal-open'); /* 배경 스크롤 잠금 */
+    if (wasEmpty) armBackGuard(); /* 이 모달 세션 아래에 완충 가드 확보 (이미 있으면 재사용) */
     /* 같은 클릭에서 방금 닫힌 모달의 back()이 예약돼 있으면, 이 열기와 상쇄 → 히스토리 어긋남/사이트 이탈 방지 */
     if (pendingBack > 0) { pendingBack--; return; }
     try { history.pushState({ meetOverlay: overlayStack.length }, ''); } catch (e) {}
@@ -1716,7 +1718,7 @@
     }
     if (idx < 0) return;
     overlayStack.splice(idx, 1);
-    if (!overlayStack.length) document.body.classList.remove('modal-open'); /* 스크롤 잠금 해제 */
+    if (!overlayStack.length) { document.body.classList.remove('modal-open'); backGuardArmed = false; } /* 스크롤 잠금 해제 · 다음 모달 세션에 가드 재확보 */
     if (!handlingPop) {
       /* back()을 마이크로태스크로 미룸: 같은 클릭에서 곧바로 새 모달이 열리면(pushOverlay) 상쇄됨 */
       pendingBack++;
@@ -1729,6 +1731,15 @@
       });
     }
   }
+  /* 뒤로가기 안전장치: 앱 시작 시 히스토리에 "가드" 상태 하나를 쌓아둠(armBackGuard).
+     모달이 열려 있는 동안 히스토리가 어쩌다 어긋나도, 이 가드가 뒤로가기 한 번을 흡수해
+     앱이 닫히는 대신 모달만 닫히도록 완충한다. (첫 화면에선 뒤로가기 두 번이면 정상 종료) */
+  var backGuardArmed = false;
+  function armBackGuard() {
+    if (backGuardArmed) return;
+    backGuardArmed = true;
+    try { history.pushState({ meetGuard: true }, ''); } catch (e) {}
+  }
   window.addEventListener('popstate', function () {
     if (selfPop) { selfPop = false; return; }
     if (!overlayStack.length) return;
@@ -1736,6 +1747,9 @@
     var top = overlayStack[overlayStack.length - 1];
     try { top.dismiss(); } catch (e) {}
     handlingPop = false;
+    /* 아직 열린 모달이 남아 있으면, 그 모달을 보호하도록 상태를 다시 하나 쌓는다
+       (모두 닫혔으면 시작 시 쌓아둔 가드가 완충 역할을 하므로 다시 쌓지 않음) */
+    if (overlayStack.length) { try { history.pushState({ meetOverlay: overlayStack.length }, ''); } catch (e) {} }
   });
 
   /* ---- modals ---- */
@@ -9091,6 +9105,7 @@
     setupPWA();
     init();
     setupPullRefresh();
+    armBackGuard(); /* 뒤로가기 완충 상태 1개 확보 (모달 열림 중 앱이 닫히지 않도록) */
     setTimeout(showAnnouncement, 800);
   }
   /* 아이폰 홈화면 앱(standalone)은 네이티브 "당겨서 새로고침"이 없음 → 직접 구현 */
