@@ -890,7 +890,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-280';
+  var APP_VERSION = '2026-09-12-281';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -959,6 +959,7 @@
   var adminSeenSort = { col: 'uid', dir: 'desc' };   /* 최근 접속·권한 표 (기본: 고유번호 내림차순) */
   var adminSeenType = 'all';                          /* 회원 명단 계정 유형 필터: all|general|mm|managed */
   var seenSearch = '';                                /* 회원 명단 검색어(고유번호·닉네임) */
+  var mmSearch = '';                                  /* 주선자 탭 검색어(주선자·친구 닉네임/고유번호) */
   var adminLogSort = { col: 'time', dir: 'desc' };   /* 활동 기록 표 (기본: 시간 내림차순) */
   var adminLogFilterActor = '';                       /* 활동 기록 고유번호/닉네임 필터 (검색창, 부분일치) */
   var adminLogFilterTime = '';                        /* 활동 기록 시간 필터 */
@@ -5274,7 +5275,8 @@
         return '<button type="button" class="pf-switch-chip" data-action="card-detail" data-id="' + escapeHtml(f.id) + '">🤝 ' + escapeHtml(f.nickname) + statChip(f) + (pinOn ? ' 🔑' : '') + '</button>';
       }).join('');
       if (!own.length && !subs.length) childHtml = '<span class="ps-none">아직 소개한 친구가 없어요.</span>';
-      return '<details class="admin-fold" data-mm="' + escapeHtml(mm.id) + '"' + (_mmFoldOpen[mm.id] === false ? '' : ' open') + '>' +
+      var mmBlob = ((formatUid(mm) || '') + ' ' + mm.nickname + ' ' + friends.map(function (f) { return f.nickname; }).join(' ')).toLowerCase();
+      return '<details class="admin-fold" data-mm="' + escapeHtml(mm.id) + '" data-mmsearch="' + escapeHtml(mmBlob) + '"' + (_mmFoldOpen[mm.id] === false ? '' : ' open') + '>' +
           '<summary>🤝 ' + escapeHtml(mm.nickname) + ' ' + recentActivityChip(mm) + '<span class="pending-count">프로필 ' + friends.length + '</span></summary>' +
           '<div class="admin-fold-body">' +
             '<div class="ps-tree">' + ownerRow + '<div class="ps-children">' + childHtml + '</div></div>' +
@@ -5291,6 +5293,7 @@
           '<button type="button" class="filter-btn" data-action="mm-scope" data-scope="friend" aria-pressed="' + (mmScopeFilter === 'friend') + '">🤝 친구</button>' +
           accessFilterBtn('mm') +
         '</div>' +
+        '<input type="text" id="mm-search" value="' + escapeHtml(mmSearch) + '" placeholder="🔍 주선자·친구 닉네임 · 고유번호 검색" style="width:100%;box-sizing:border-box;margin:0 0 10px;padding:8px 12px;border:1px solid var(--line);border-radius:999px;font-size:0.92rem;font-family:inherit;">' +
         pendNote +
         (mms.length ? cards : '<p class="sub">' + (accessFilter === 'all' && mmScopeFilter === 'all' ? '등록된 주선자가 없어요.' : '해당 조건의 주선자가 없어요.') + '</p>') +
       '</div>';
@@ -5515,11 +5518,22 @@
       rows[i].style.display = tokens.every(function (t) { return blob.indexOf(t) >= 0; }) ? '' : 'none';
     }
   }
+  /* 주선자 탭 검색: 카드만 즉석 숨김/표시 (재렌더 없이) */
+  function applyMmSearch() {
+    var q = (mmSearch || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    var tokens = q ? q.split(' ') : [];
+    var cards = document.querySelectorAll('#tab-panel details.admin-fold[data-mmsearch]');
+    for (var i = 0; i < cards.length; i++) {
+      var blob = cards[i].getAttribute('data-mmsearch') || '';
+      cards[i].style.display = tokens.every(function (t) { return blob.indexOf(t) >= 0; }) ? '' : 'none';
+    }
+  }
   function paint(state) {
     currentState = state;
     document.getElementById('app').innerHTML = renderApp(state);
     try { applyListSearch(); } catch (e) {} /* 검색어가 있으면 재적용 */
     try { applySeenSearch(); } catch (e) {} /* 회원 명단 검색 재적용 */
+    try { applyMmSearch(); } catch (e) {} /* 주선자 탭 검색 재적용 */
     try {
       var items = document.querySelectorAll('.admin-msg-item');
       for (var i = 0; i < items.length; i++) {
@@ -7950,6 +7964,7 @@
   document.body.addEventListener('input', function (e) {
     if (e.target.id === 'list-search') { listSearch = e.target.value; applyListSearch(); return; } /* paint 없이 즉시 필터 → 포커스·한글조합 유지 */
     if (e.target.id === 'seen-search') { seenSearch = e.target.value; applySeenSearch(); return; } /* 회원 명단 검색: paint 없이 즉시 */
+    if (e.target.id === 'mm-search') { mmSearch = e.target.value; applyMmSearch(); return; } /* 주선자 탭 검색: paint 없이 즉시 */
     if (e.target.hasAttribute && e.target.hasAttribute('data-numeric')) stripNonDigits(e.target);
     if (e.target.closest && e.target.closest('#entry-form')) saveDraft();
     if (e.target.id === 'f-intro' || e.target.id === 'f-idealtype' || e.target.id === 'f-dealbreaker') updateCharCounts();
