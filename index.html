@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-12-317';
+  var APP_VERSION = '2026-09-13-318';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -6991,6 +6991,7 @@
         : (isViaMm ? '예) 안녕하세요! 제가 친구를 대신해 대화 신청드려요. 두 분이 잘 맞을 것 같아 조심스레 소개드려요 :)' : '예) 안녕하세요! 저랑 공통점이 있어서 꼭 한 번 대화해보고 싶어요 :)');
       var noteOverlay = openModal(
         '<h3>' + icon + ' ' + escapeHtml(target.nickname) + '님에게 ' + actionText + '</h3>' +
+        (isViaMm ? '<p class="modal-msg" style="background:var(--gold-soft);border:1px solid var(--gold);border-radius:8px;color:var(--gold);padding:7px 10px;margin:0 0 8px;">🤝 <b>' + escapeHtml(fromEntry.nickname) + '</b>님을 대신해 주선자로 요청하는 중이에요. 받는 분께 <b>주선자가 대신</b>임이 안내돼요.</p>' : '') +
         '<p class="modal-msg">' + (isPhoto ? '수락하면 <b>서로 사진이 공개</b>돼요. ' : '수락하면 <b>앱 안에서 채팅</b>으로 대화할 수 있어요 (대화 후 번호/카톡 교환 추천해요). ') + '간단한 인사·요청 이유를 꼭 남겨주세요 <b>(최소 10자)</b>.</p>' +
         (isPhoto ? '' : '<p class="modal-msg" style="font-size:0.82rem;color:var(--muted);margin:-2px 0 6px;">대화 내용은 안전·분쟁 대비를 위해 서버에 보관되지만, 관리자 화면에는 공개되지 않아요.</p>') +
         '<p class="modal-msg" style="color:var(--gold);font-size:0.82rem;margin:-2px 0 6px;">오늘 ' + actionText + ' 남은 횟수: <b>' + remainToday + '/' + typeLimit + '</b></p>' +
@@ -7512,6 +7513,7 @@
       ? escapeHtml(fromName) + '님의 사진 요청을 수락할까요? 수락하면 서로 사진을 볼 수 있어요.'
       : escapeHtml(fromName) + '님의 대화 신청을 수락할까요? 수락하면 앱 안에서 채팅으로 대화할 수 있어요 (번호는 공개되지 않아요).') +
       ' 상대에게 전할 인사를 꼭 남겨주세요 (최소 10자).';
+    if (respViaMm) msg = '🤝 주선자로 ' + me.nickname + '님을 대신해 응답하는 중이에요 (상대에게 안내돼요). ' + msg;
     modalMessage('요청 수락', msg, '수락', 'primary', '예: 반가워요! 잘 부탁드려요 :)', false, null, 10).then(function (replyMsg) {
       if (replyMsg === null) return;
       return db.runTransaction(function (tx) {
@@ -7555,7 +7557,7 @@
     var respViaMm = !!(me.managedBy && me.managedBy === currentUser.id && !me.ownerSelf && isMatchmakerEntry(myAuthEntry(state)));
     var from = (state.entries || []).find(function (e) { return e.id === req.fromId; });
     var fromName = from ? from.nickname : '상대방';
-    modalMessage('요청 거절', escapeHtml(fromName) + '님의 ' + (isPhoto ? '사진' : '번호') + ' 요청을 거절할까요? 사유를 꼭 남겨주세요 (최소 10자). 상대가 정보를 담아 다시 요청할 수 있어요.', '거절하기', 'danger', '예: 직장·직업이 궁금해요. 알려주시면 다시 볼게요! / 종교가 달라서요', false, null, 10).then(function (rejectMsg) {
+    modalMessage('요청 거절', (respViaMm ? '🤝 주선자로 ' + me.nickname + '님을 대신해 응답하는 중이에요 (상대에게 안내돼요). ' : '') + escapeHtml(fromName) + '님의 ' + (isPhoto ? '사진' : '번호') + ' 요청을 거절할까요? 사유를 꼭 남겨주세요 (최소 10자). 상대가 정보를 담아 다시 요청할 수 있어요.', '거절하기', 'danger', '예: 직장·직업이 궁금해요. 알려주시면 다시 볼게요! / 종교가 달라서요', false, null, 10).then(function (rejectMsg) {
       if (rejectMsg === null || rejectMsg === undefined) return;
       return db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
@@ -7596,7 +7598,7 @@
     var respViaMm = !!(me.managedBy && me.managedBy === currentUser.id && !me.ownerSelf && isMatchmakerEntry(myAuthEntry(state)));
     var from = (state.entries || []).find(function (e) { return e.id === req.fromId; });
     var fromName = from ? from.nickname : '상대방';
-    modalMessage('요청 보류', escapeHtml(fromName) + '님의 요청을 보류할까요? 더 알고 싶은 점(사유)을 꼭 남겨주세요 (최소 10자). 상대가 정보를 담아 다시 요청할 수 있어요.', '보류하기', 'primary', '예: 직장·직업이 궁금해요. 알려주시면 결정할게요! / 키가 어떻게 되세요?', true, null, 10).then(function (holdMsg) {
+    modalMessage('요청 보류', (respViaMm ? '🤝 주선자로 ' + me.nickname + '님을 대신해 응답하는 중이에요 (상대에게 안내돼요). ' : '') + escapeHtml(fromName) + '님의 요청을 보류할까요? 더 알고 싶은 점(사유)을 꼭 남겨주세요 (최소 10자). 상대가 정보를 담아 다시 요청할 수 있어요.', '보류하기', 'primary', '예: 직장·직업이 궁금해요. 알려주시면 결정할게요! / 키가 어떻게 되세요?', true, null, 10).then(function (holdMsg) {
       if (holdMsg === null || holdMsg === undefined) return;
       return db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
