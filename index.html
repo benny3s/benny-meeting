@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-14-321';
+  var APP_VERSION = '2026-09-14-322';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3339,6 +3339,19 @@
     }
     return seenAt || entry.submittedAt || null;
   }
+  /* 나이 구간 판정 — 명단 접속칩과 요청함이 같은 기준을 쓰도록 공용화.
+     달력 날짜가 아니라 "지금으로부터 경과 시간"(24h/48h/108h)이라, 어제 23시 요청이 26시간 만에
+     "이틀 전"으로 밀리는 문제가 없음. 반환: today | yesterday | few | old */
+  function elapsedBucket(iso) {
+    if (!iso) return 'old';
+    var diff = Date.now() - new Date(iso).getTime();
+    if (isNaN(diff) || diff < 0) return 'today';
+    var H = 3600000;
+    if (diff < 24 * H) return 'today';
+    if (diff < 48 * H) return 'yesterday';
+    if (diff < 108 * H) return 'few';
+    return 'old';
+  }
   function recentActivityChip(entry) {
     if (!entry) return '';
     var seenAt = lastActiveAt(entry);
@@ -5085,12 +5098,10 @@
       } else {
         actionBtns = decideBtns + manageBtns;
       }
-      /* 요청 나이(KST 하루 기준): 오늘=진한녹색 · 어제=연한녹색 · 2~4일=연회색 · 5일+=진회색. 명단 접속칩과 동일 · 요청함·요청완료 공통 */
-      var todayK = kstDay(new Date().toISOString());
-      var subK = r.submittedAt ? kstDay(r.submittedAt) : '';
-      var dayDiff = subK ? Math.round((Date.parse(todayK) - Date.parse(subK)) / 86400000) : 0;
-      var ageCls = dayDiff <= 0 ? ' req-today' : (dayDiff === 1 ? ' req-yesterday' : (dayDiff <= 4 ? ' req-old' : ' req-stale'));
-      var foldCls = 'req-fold' + ageCls;
+      /* 요청 나이: 24시간 이내=진한녹색 · 48시간 이내=연한녹색 · 108시간 이내=연회색 · 그 이상=진회색.
+         명단 접속칩과 완전히 동일한 경과시간 기준(elapsedBucket) */
+      var _ageCls = { today: ' req-today', yesterday: ' req-yesterday', few: ' req-old', old: ' req-stale' };
+      var foldCls = 'req-fold' + (_ageCls[elapsedBucket(r.submittedAt)] || ' req-stale');
       /* 요청 시각과 처리(승인/거절/보류) 시각을 세로로 나란히 표시 */
       var reqTime = r.submittedAt ? new Date(r.submittedAt).toLocaleString('ko-KR') : '-';
       var decLabel = st === 'approved' ? '✅ 승인' : (st === 'rejected' ? '⛔ 거절' : (r.held ? '📌 보류' : ''));
@@ -5138,8 +5149,7 @@
     var _rsKey0 = adminReqSort.split('_')[0];
     var _reqPool = reqs;
     function reqStatKey(r) { var st = reqStatus(r); if (st === 'approved' || st === 'user_approved') return 'approved'; if (st === 'rejected') return 'rejected'; if (st === 'held') return 'held'; return 'pending'; }
-    var _todayK = kstDay(new Date().toISOString());
-    function reqAgeKey(r) { var subK = r.submittedAt ? kstDay(r.submittedAt) : ''; if (!subK) return 'old'; var dd = Math.round((Date.parse(_todayK) - Date.parse(subK)) / 86400000); return dd <= 0 ? 'today' : (dd === 1 ? 'yesterday' : (dd <= 4 ? 'few' : 'old')); }
+    function reqAgeKey(r) { return elapsedBucket(r.submittedAt); } /* 색상과 동일한 경과시간 기준 */
     /* 대기 2단계: 요청 후 상대(수신자)가 아직 로그인 안 함 → 관리자가 직접 안내 대상 */
     var _entById = {};
     (state.entries || []).forEach(function (e) { _entById[e.id] = e; });
