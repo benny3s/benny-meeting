@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-14-320';
+  var APP_VERSION = '2026-09-14-321';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -6716,13 +6716,15 @@
     overlay.querySelector('#bh-preview').addEventListener('click', function () { showCheckinModal(overlay.querySelector('#bh-weekly-title').value || '', overlay.querySelector('#bh-weekly-text').value || ''); });
     overlay.querySelector('#bh-save').addEventListener('click', function () {
       var v = rd(); if (!v.text) return modalNotice('안내', '팝업 문구를 입력해주세요.');
-      saveCheckinCfg({ title: v.title, text: v.text, weekday: v.weekday, hour: v.hour, enabled: v.enabled }).then(function () { modalNotice('저장 완료', '주간 예약 팝업 설정을 저장했어요.'); });
+      saveCheckinCfg({ title: v.title, text: v.text, weekday: v.weekday, hour: v.hour, enabled: v.enabled, since: Date.now() }).then(function () {
+        modalNotice('저장 완료', '저장했어요. 이제부터 <b>다음 ' + ['일', '월', '화', '수', '목', '금', '토'][v.weekday] + '요일 ' + v.hour + '시</b>부터 회원들에게 떠요. (이전 주기엔 안 떠요)');
+      });
     });
     overlay.querySelector('#bh-sendnow').addEventListener('click', function () {
       var v = rd(); if (!v.text) return modalNotice('안내', '팝업 문구를 입력해주세요.');
       modalConfirm('지금 발송', '이 팝업을 모든 로그인 회원에게 다음 접속 때 1회 표시할까요? (예약과 별도로 지금 한 번 더)', '발송', 'primary').then(function (ok) {
         if (!ok) return;
-        saveCheckinCfg({ title: v.title, text: v.text, weekday: v.weekday, hour: v.hour, enabled: v.enabled, ver: String(Date.now()) }).then(function () { closeModal(overlay); modalNotice('발송 예약됨', '회원들이 다음 접속 때 이 팝업을 한 번 보게 돼요.'); });
+        saveCheckinCfg({ title: v.title, text: v.text, weekday: v.weekday, hour: v.hour, enabled: v.enabled, since: Date.now(), forceVer: String(Date.now()) }).then(function () { closeModal(overlay); modalNotice('발송 예약됨', '회원들이 다음 접속 때 이 팝업을 한 번 보게 돼요.'); });
       });
     });
     overlay.querySelector('#bh-once-preview').addEventListener('click', function () { showOneOffPopup(overlay.querySelector('#bh-once-title').value || '', overlay.querySelector('#bh-once-text').value || ''); });
@@ -8696,6 +8698,8 @@
       weekday: (typeof c.weekday === 'number') ? c.weekday : 1, /* 0=일 … 1=월 … 6=토 */
       hour: (typeof c.hour === 'number') ? c.hour : 6,
       ver: c.ver || 'v1',
+      since: (typeof c.since === 'number') ? c.since : 0, /* 설정 저장 시각 — 이 이후의 예약 시각부터만 발화 */
+      forceVer: c.forceVer || '',                          /* "지금 발송" 1회용 (예약과 무관) */
       enabled: c.enabled !== false
     };
   }
@@ -8722,21 +8726,33 @@
         '<button type="button" class="card-btn" id="modal-cancel" style="width:100%;">닫기</button>' +
       '</div>'
     );
-    overlay.querySelector('#ci-feedback').addEventListener('click', function () { closeModal(overlay); try { openMemberMsgCenter(); } catch (e) {} });
-    overlay.querySelector('#ci-share').addEventListener('click', function () { closeModal(overlay); try { handleShare(); } catch (e) {} });
+    /* 이 팝업은 닫지 않고 위에 띄움 → 의견도 남기고 공유도 할 수 있게 (닫기를 눌러야 사라짐) */
+    overlay.querySelector('#ci-feedback').addEventListener('click', function () { try { openMemberMsgCenter(); } catch (e) {} });
+    overlay.querySelector('#ci-share').addEventListener('click', function () { try { handleShare(); } catch (e) {} });
     overlay.querySelector('#modal-cancel').addEventListener('click', function () { closeModal(overlay); });
     overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(overlay); });
   }
   function maybeShowCheckin() {
     if (!currentUser) return;                                  /* 로그인 회원만 */
     var me = findMyEntry(currentState); if (!me) return;
-    if (!checkinCfg().enabled) return;                         /* 예약 팝업 꺼짐 */
+    var cfg = checkinCfg();
+    if (!cfg.enabled) return;                                  /* 예약 팝업 꺼짐 */
     if (document.querySelector('.modal-overlay')) { setTimeout(maybeShowCheckin, 4000); return; }
+    /* 1) 관리자가 "지금 발송"한 경우 — 예약과 무관하게 1회 표시 */
+    if (cfg.forceVer) {
+      var fseen = ''; try { fseen = localStorage.getItem('fb-checkin-force') || ''; } catch (e) {}
+      if (fseen !== cfg.forceVer) {
+        try { localStorage.setItem('fb-checkin-force', cfg.forceVer); } catch (e) {}
+        showCheckinModal();
+        return;
+      }
+    }
+    /* 2) 예약 발화 — 설정을 저장한 시점 이후에 도래한 예약 시각부터만 (이전 주기는 건너뜀) */
     var p = checkinPeriod();
-    var key = p.id + '|' + p.ver;
+    if (cfg.since && p.anchorMs < cfg.since) return;
     var seen = ''; try { seen = localStorage.getItem('fb-checkin') || ''; } catch (e) {}
-    if (seen === key) return;                                  /* 이번 주기+버전 이미 봄 */
-    try { localStorage.setItem('fb-checkin', key); } catch (e) {}
+    if (seen === p.id) return;                                 /* 이번 주기 이미 봄 */
+    try { localStorage.setItem('fb-checkin', p.id); } catch (e) {}
     if (me.submittedAt && new Date(me.submittedAt).getTime() >= p.anchorMs) return; /* 이번 주기 이후 가입 신규 생략 */
     showCheckinModal();
   }
