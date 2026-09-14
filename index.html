@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-14-324';
+  var APP_VERSION = '2026-09-14-325';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -924,8 +924,8 @@
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
   var _mmFoldOpen = {};  /* 주선자 탭: 카드별 접힘 상태 (리페인트 후 유지용, 기본 열림) */
   var adminEditMode = false; /* 관리자 섹션 편집(순서·기본 열림) 모드 */
-  var DEFAULT_SEC_ORDER = ['usage', 'pending', 'held', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'cap', 'seen', 'log'];
-  var SEC_NAMES = { usage: '📊 사용량 통계', pending: '⏳ 승인 대기', held: '📌 보류 중', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록' };
+  var DEFAULT_SEC_ORDER = ['usage', 'connlog', 'pending', 'held', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'cap', 'seen', 'log'];
+  var SEC_NAMES = { usage: '📊 사용량 통계', connlog: '🔗 인연 이력', pending: '⏳ 승인 대기', held: '📌 보류 중', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록' };
   /* 섹션 열림 상태는 "세션 메모리에만" 저장 → 리페인트(버튼 클릭 등) 동안엔 유지되지만,
      새로고침하면 초기화되어 모두 접힌 상태로 시작 (이전에 열었던 걸 기억하지 않음) */
   var _adminSecOpen = {}, _adminSecOrder = null;
@@ -3359,6 +3359,22 @@
     var ever = (s && typeof s.connEver === 'number') ? s.connEver : prev;
     return ever + 1;
   }
+  /* 인연 이력(connLog): 대화 승인마다 한 줄 append, 해제·삭제해도 지우지 않고 revokedAt만 표시 */
+  function connLogAdd(s, fromId, toId) {
+    var log = (s && Array.isArray(s.connLog)) ? s.connLog.slice() : [];
+    log.push({ id: genId(), a: fromId, b: toId, at: new Date().toISOString() });
+    if (log.length > 2000) log = log.slice(log.length - 2000);
+    return log;
+  }
+  function connLogRevoke(s, id1, id2) {
+    if (!s || !Array.isArray(s.connLog)) return undefined;
+    var now = new Date().toISOString();
+    return s.connLog.map(function (e) {
+      if (e.revokedAt) return e;
+      if ((e.a === id1 && e.b === id2) || (e.a === id2 && e.b === id1)) { var c = Object.assign({}, e); c.revokedAt = now; return c; }
+      return e;
+    });
+  }
   /* 관리자: 누적 인연 수 직접 보정 (과거 해제분 포함 등) */
   function handleEditConnEver() {
     var connNow = (currentState.dateRequests || []).filter(function (r) { return (r.type || 'contact') === 'contact' && r.approved; }).length;
@@ -3590,6 +3606,7 @@
         '<div class="pf-body">' +
           '<h3 class="pf-name">' + escapeHtml(displayName) + '</h3>' +
           '<div class="pf-chips">' +
+            ((currentUser && (function () { var _m = findMyEntry(state); return _m && _m.id === entry.id; })()) ? '<span class="chip" style="background:var(--accent-soft);color:var(--accent);border-color:var(--accent);font-weight:700;">🙋 내 프로필</span>' : '') +
             '<span class="chip chip--gender-' + escapeHtml(entry.gender) + '">' + genderLabel(entry.gender) + '</span>' +
             '<span class="chip">' + escapeHtml(ageStr) + '</span>' +
             (entry.height ? '<span class="chip">' + escapeHtml(entry.height) + 'cm</span>' : '') +
@@ -3636,7 +3653,6 @@
     var teaser = !isAdminUnlocked && !myAuthEntry(state); /* 비로그인·관리자 아님·승인 대기(미승인) → 신원 가린 티저 뷰 */
     var isPermFilter = (listFilter === 'photo' || listFilter === 'contact');
     var filtered = entries.filter(function (e) {
-      if (me && !isAdminUnlocked && e.id === me.id) return false; /* 내 프로필은 명단에서 제외 (최근 접속순이면 항상 맨 위로 오는 문제 + 자기 자신 요청 불가) */
       if (myHiddenIds.indexOf(e.id) >= 0) return false; /* 지인 필터(마주치기 방지)로 숨김 */
       if (isAdminUnlocked && accessFilter !== 'all' && accessBucket(e) !== accessFilter) return false; /* 관리자 접속 필터 */
       if (listFilter === 'male' || listFilter === 'female') return e.gender === listFilter;
@@ -4430,7 +4446,9 @@
             var between = (r.fromId === me.id && r.toId === otherId) || (r.fromId === otherId && r.toId === me.id);
             return !between;
           });
-          tx.update(stateRef, { dateRequests: reqs });
+          var _p = { dateRequests: reqs };
+          var _cl = connLogRevoke(s, me.id, otherId); if (_cl) _p.connLog = _cl;
+          tx.update(stateRef, _p);
         });
       }).then(function () {
         appendLog('request', me.nickname, '대화 연결 해제 → ' + otherNick);
@@ -4459,7 +4477,9 @@
             if (c.fromRevealed) c.fromRevealed = false;
             return c;
           });
-          tx.update(stateRef, { dateRequests: reqs });
+          var _p = { dateRequests: reqs };
+          var _cl = connLogRevoke(s, me.id, otherId); if (_cl) _p.connLog = _cl;
+          tx.update(stateRef, _p);
         });
       }).then(function () {
         appendLog('request', me.nickname, '연결 회수 → ' + nick);
@@ -4803,6 +4823,36 @@
       '<p class="stats-sub" style="margin-top:6px;">※ 탈퇴한 회원은 집계에 없어 누적은 현재 회원 기준이에요. 승인/탈퇴 시점은 별도로 기록되지 않아요.</p>' +
       '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);"><div style="font-weight:700;font-size:0.95rem;margin-bottom:8px;">📈 가입 추이</div>' + signupTrendBody(state) + '</div>' +
       '</div></details>';
+  }
+  /* 🔗 인연 이력: 대화 승인 기록(누가↔누구, 승인 시각, 연결중/해제됨). connLog 기반 */
+  function connLogHtml(state) {
+    var nick = function (id) { var e = (state.entries || []).concat(state.pendingEntries || []).find(function (x) { return x.id === id; }); return e ? (formatUid(e) ? formatUid(e) + ' ' : '') + (e.nickname || '') : '(삭제된 회원)'; };
+    var log = (state.connLog || []).slice().sort(function (a, b) { return (b.at || '').localeCompare(a.at || ''); });
+    var active = log.filter(function (e) { return !e.revokedAt; }).length;
+    var revoked = log.length - active;
+    var rows = log.map(function (e) {
+      var on = !e.revokedAt;
+      var status = on
+        ? '<span class="chip" style="background:#e9f6ee;color:#2e8b52;border-color:#cfe9d7;">💬 연결 중</span>'
+        : '<span class="chip" style="background:#f1f3f4;color:#888;">🔌 해제됨</span>';
+      return '<details class="req-fold' + (on ? ' req-yesterday' : ' req-old') + '">' +
+        '<summary>' + status +
+          '<span class="req-sum-who">' + escapeHtml(nick(e.a)) + ' ↔ ' + escapeHtml(nick(e.b)) + '</span>' +
+          '<span class="req-sum-when">' + (e.at ? new Date(e.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '') + '</span>' +
+        '</summary>' +
+        '<div class="req-fold-body"><div class="req-foot">' +
+          '<span class="when">💬 승인 ' + (e.at ? new Date(e.at).toLocaleString('ko-KR') : '-') + '</span>' +
+          (e.revokedAt ? '<span class="when">🔌 해제 ' + new Date(e.revokedAt).toLocaleString('ko-KR') + '</span>' : '') +
+          '<div class="req-foot-btns">' +
+            '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(e.a) + '" style="flex:none;">👤 ' + escapeHtml(nick(e.a).split(' ').slice(1).join(' ') || nick(e.a)) + '</button>' +
+            '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(e.b) + '" style="flex:none;">👤 ' + escapeHtml(nick(e.b).split(' ').slice(1).join(' ') || nick(e.b)) + '</button>' +
+          '</div>' +
+        '</div></div>' +
+      '</details>';
+    }).join('');
+    var body = '<p class="sub">대화 승인으로 맺어진 인연 기록이에요. <b>연결 중 ' + active + '</b> · 해제됨 ' + revoked + ' (해제·삭제해도 기록은 남아요)</p>' +
+      (log.length ? rows : '<p class="sub">아직 기록된 인연이 없어요. (이 기능 도입 이후의 대화 승인부터 쌓여요)</p>');
+    return '<details class="admin-fold" data-sec="connlog"' + secOpenAttr('connlog', false) + '><summary>🔗 인연 이력<span class="pending-count">' + active + '</span></summary><div class="admin-fold-body">' + body + '</div></details>';
   }
 
   /* 가입 추이 그래프 (사용량 통계 안에 삽입): 회원·주선자·전체(테스트 제외) 누적선. 데이터=entries.submittedAt (활동기록과 무관) */
@@ -5510,7 +5560,7 @@
       (listReqs.length ? allReqItems : reqEmpty) +
       '<p class="sub" id="req-search-empty" hidden>검색 결과가 없어요.</p>', false, 'active');
     var secHtml = {
-      usage: usageStatsHtml(state), pending: pendingSection, held: heldSection, editrev: editRevSection,
+      usage: usageStatsHtml(state), connlog: connLogHtml(state), pending: pendingSection, held: heldSection, editrev: editRevSection,
       deaclist: deacListSection, dellog: delLogSection,
       active: activeReqSection, adminmsg: adminMsgSection,
       cap: capSection, seen: seenSection, log: logSection
@@ -7315,7 +7365,7 @@
               }
               return r;
             });
-            tx.update(stateRef, { dateRequests: reqs, connEver: connEverNext(s) }); /* 누적 인연 +1 */
+            tx.update(stateRef, { dateRequests: reqs, connEver: connEverNext(s), connLog: connLogAdd(s, req.fromId, req.toId) }); /* 누적 인연 +1 · 이력 기록 */
           });
         });
       }).then(function () {
@@ -7464,7 +7514,9 @@
             return r;
           });
         }
-        tx.update(stateRef, { dateRequests: reqs });
+        var _p2 = { dateRequests: reqs };
+        if (kind !== 'photo' && !grant) { var _cl = connLogRevoke(s, viewerId, targetId); if (_cl) _p2.connLog = _cl; }
+        tx.update(stateRef, _p2);
       });
     }).then(function () {
       appendLog('admin', '관리자', (kind === 'photo' ? '사진' : '번호') + ' 권한 ' + (grant ? '부여' : '회수') + ' · ' + nickForEntry(currentState, viewerId) + (grant ? ' → ' : ' ✕ ') + nickForEntry(currentState, targetId));
@@ -7619,7 +7671,7 @@
             return c;
           });
           var _patch = { dateRequests: reqs };
-          if (!isPhoto) _patch.connEver = connEverNext(s); /* 누적 인연 +1 (해제·삭제해도 줄지 않음) */
+          if (!isPhoto) { _patch.connEver = connEverNext(s); _patch.connLog = connLogAdd(s, req.fromId, req.toId); } /* 누적 인연 +1 · 이력 기록 */
           tx.update(stateRef, _patch);
         });
       }).then(function () {
@@ -7854,8 +7906,11 @@
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
           var s = doc.data();
+          var target = (s.dateRequests || []).find(function (r) { return r.id === id; });
           var reqs = (s.dateRequests || []).filter(function (r) { return r.id !== id; });
-          tx.update(stateRef, { dateRequests: reqs });
+          var _p = { dateRequests: reqs };
+          if (target && (target.type || 'contact') === 'contact' && target.approved) { var _cl = connLogRevoke(s, target.fromId, target.toId); if (_cl) _p.connLog = _cl; } /* 승인됐던 대화 삭제 → 이력엔 해제로 표시 */
+          tx.update(stateRef, _p);
         });
       }).then(function () {
         appendLog('admin', '관리자', '요청 삭제');
