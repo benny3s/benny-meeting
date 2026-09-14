@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-14-328';
+  var APP_VERSION = '2026-09-14-329';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3386,6 +3386,27 @@
     }
     return log;
   }
+  /* 관리자: 연결 이력에서 해제됨 기록 1건을 id로 직접 삭제(누적 연결 감소). 잘못 복구된 과거 해제분 정리용 */
+  function handleDeleteConnLog(entryId) {
+    var s0 = currentState || {};
+    var e0 = (s0.connLog || []).find(function (x) { return x.id === entryId; });
+    var who = '';
+    if (e0) { var nk = function (id) { var e = (s0.entries || []).concat(s0.pendingEntries || []).find(function (x) { return x.id === id; }); return e ? (e.nickname || '') : '(삭제된 회원)'; }; who = nk(e0.a) + ' ↔ ' + nk(e0.b) + '\n'; }
+    modalConfirm('연결 이력 삭제', who + '이 연결 기록을 이력에서 완전히 지울까요? 누적 연결에서도 빠져요. (되돌릴 수 없어요)', '삭제', 'danger').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var log = (s.connLog || []).filter(function (x) { return x.id !== entryId; });
+          tx.update(stateRef, { connLog: log });
+        });
+      }).then(function () {
+        appendLog('admin', '관리자', '연결 이력 삭제' + (who ? ' (' + who.trim() + ')' : ''));
+        return refreshNow();
+      }).then(function () { modalNotice('삭제 완료', '연결 기록을 지웠어요. 누적 연결이 갱신됐어요.'); })
+        .catch(function (err) { modalNotice('오류', '삭제 실패: ' + (err.message || err)); });
+    });
+  }
   function recentActivityChip(entry) {
     if (!entry) return '';
     var seenAt = lastActiveAt(entry);
@@ -4838,12 +4859,13 @@
           '<div class="req-foot-btns">' +
             '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(e.a) + '" style="flex:none;">👤 ' + escapeHtml(nick(e.a).split(' ').slice(1).join(' ') || nick(e.a)) + '</button>' +
             '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(e.b) + '" style="flex:none;">👤 ' + escapeHtml(nick(e.b).split(' ').slice(1).join(' ') || nick(e.b)) + '</button>' +
+            (on ? '' : '<button type="button" class="card-btn danger" data-action="connlog-del" data-id="' + escapeHtml(e.id) + '" style="flex:none;">🗑 기록 삭제</button>') +
           '</div>' +
         '</div></div>' +
       '</details>';
     }).join('');
     var body =
-      '<p class="sub">대화 승인으로 맺어진 연결 기록이에요(=공개 배너의 <b>누적 연결</b>). <b>연결 중 ' + active + '</b> · 해제됨 ' + revoked + '<br>연결을 <b>해제</b>하면 여기 <b>해제됨</b>으로 남고 누적 숫자는 유지돼요. 누적에서 빼려면 <b>요청함</b>에서 그 대화 요청을 <b>완전삭제</b>하세요.</p>' +
+      '<p class="sub">대화 승인으로 맺어진 연결 기록이에요(=공개 배너의 <b>누적 연결</b>). <b>연결 중 ' + active + '</b> · 해제됨 ' + revoked + '<br>연결을 <b>해제</b>하면 여기 <b>해제됨</b>으로 남고 누적 숫자는 유지돼요. 누적에서 빼려면 <b>요청함</b>에서 그 대화 요청을 <b>완전삭제</b>하거나, 요청함에 없는 과거 해제분은 <b>해제됨 항목의 [🗑 기록 삭제]</b>로 여기서 바로 빼세요.</p>' +
       (log.length ? rows : '<p class="sub">아직 기록된 연결이 없어요. (이 기능 도입 이후의 대화 승인부터 쌓여요)</p>');
     return '<details class="admin-fold" data-sec="connlog"' + secOpenAttr('connlog', false) + '><summary>🔗 연결 이력<span class="pending-count">' + log.length + '</span></summary><div class="admin-fold-body">' + body + '</div></details>';
   }
@@ -8502,6 +8524,7 @@
       }
       else if (action === 'log-clear') { adminLogFilterActor = ''; adminLogFilterTime = ''; adminLogFilterNick = ''; paint(currentState); }
       else if (action === 'log-del') { if (isAdminUnlocked) handleDeleteLog(id); }
+      else if (action === 'connlog-del') { if (isAdminUnlocked) handleDeleteConnLog(id); return; }
       else if (action === 'log-sort') { toggleSort(adminLogSort, actionBtn.getAttribute('data-col'), 'desc'); paint(currentState); }
       else if (action === 'cancel-sent') handleCancelSent(id);
       else if (action === 'reapply') handleReapplyRequest(id);
