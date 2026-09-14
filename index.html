@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-14-332';
+  var APP_VERSION = '2026-09-14-333';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1952,6 +1952,28 @@
   function findMyPending(state) {
     if (!currentUser) return null;
     return (state.pendingEntries || []).find(function (e) { return e.id === currentUser.id; }) || null;
+  }
+  /* 대기(승인 전) 신청자 본인이 신청을 취소·철회 — pendingEntries에서 본인 것 삭제 후 로그아웃 */
+  function handleWithdrawPending(id) {
+    var mp = findMyPending(currentState);
+    if (!mp || mp.id !== id) { modalNotice('안내', '취소할 신청서를 찾을 수 없어요.'); return; }
+    modalConfirm('신청 취소', '정말 신청을 취소할까요? 제출한 신청서(프로필·사진 포함)가 삭제되고, 다시 신청하려면 처음부터 작성해야 해요.', '신청 취소', 'danger').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var pend = (s.pendingEntries || []).filter(function (e) { return e.id !== id; });
+          tx.update(stateRef, { pendingEntries: pend });
+        });
+      }).then(function () {
+        appendLog('withdraw', mp.nickname || '신청자', '신청 취소(본인 철회)');
+        try { db.collection('photos').doc(id).delete(); } catch (e) {} /* 사진 정리(있으면) */
+        return refreshNow();
+      }).then(function () {
+        logoutUser();
+        modalNotice('취소 완료', '신청이 취소됐어요. 이용해 주셔서 감사해요 🙏');
+      }).catch(function (err) { modalNotice('오류', '취소 실패: ' + ((err && err.message) || err)); });
+    });
   }
   /* ---- 주선자(대리 등록) 헬퍼 ---- */
   function isProxyEntry(e) { return !!(e && e.managedBy); }
@@ -4628,6 +4650,7 @@
     var myPending = findMyPending(state);
     if (!me && myPending) {
       var editBtn = '<button type="button" class="submit-btn" data-action="edit" data-id="' + escapeHtml(myPending.id) + '" style="width:100%;box-sizing:border-box;margin-top:12px;">✏️ 신청서 수정해서 다시 제출</button>';
+      var cancelBtn = '<button type="button" class="card-btn danger" data-action="withdraw-pending" data-id="' + escapeHtml(myPending.id) + '" style="width:100%;box-sizing:border-box;margin-top:8px;">🗑 신청 취소(철회)</button>';
       var waitBox;
       if (myPending.heldReason) {
         waitBox = '<div class="mine-status-box">' +
@@ -4635,7 +4658,7 @@
             '<h3>신청 보류 안내 (프로필 보완이 필요해요)</h3>' +
             '<div class="mine-note" style="text-align:left;white-space:pre-wrap;margin:8px 0;">' + escapeHtml(myPending.heldReason) + '</div>' +
             '<p class="sub">관리자가 위 사유로 <b>보완을 요청</b>했어요. 프로필을 수정하고, 다시 제출할 때 <b>변경 내용을 메시지로 남겨</b> 주세요. (승인되면 명단에 올라가요)</p>' +
-            editBtn +
+            editBtn + cancelBtn +
           '</div>';
       } else {
         waitBox = '<div class="mine-status-box">' +
@@ -4643,7 +4666,7 @@
             '<h3>승인 대기 중이에요</h3>' +
             '<p class="sub">관리자(베니)가 신청서를 확인하고 있어요. 승인되면 명단에 등록되고, 사진 요청·대화 신청을 주고받을 수 있어요.</p>' +
             '<p class="sub" style="margin-top:8px;">신청일: ' + fmtDate(myPending.submittedAt) + '</p>' +
-            editBtn +
+            editBtn + cancelBtn +
           '</div>';
       }
       return '<div class="admin-panel"><h2>메시지함</h2>' + waitBox + '</div>';
@@ -8583,6 +8606,7 @@
       else if (action === 'card-detail') handleCardDetail(id);
       else if (action === 'detail-pending') handleDetailPending(id);
       else if (action === 'edit') handleEdit(id);
+      else if (action === 'withdraw-pending') handleWithdrawPending(id);
       else if (action === 'cancel-request') handleCancelRequest(id);
       else if (action === 'user-approve') handleUserApproveRequest(id);
       else if (action === 'user-hold') handleUserHoldRequest(id);
