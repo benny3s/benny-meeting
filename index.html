@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-14-334';
+  var APP_VERSION = '2026-09-14-335';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4021,7 +4021,7 @@
             '<span class="hint">어떻게 알게 됐는지 적어주세요 (소개자·경로 등). ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
           '<div class="field"><label for="f-admin-rel">관리자(베니)와 직접 아는 사이인가요? <span class="opt">(선택)</span></label>' +
             '<input type="text" id="f-admin-rel" name="adminRel" maxlength="40" placeholder="예: 베니 지인의 지인">' +
-            '<span class="hint">아는 만큼만 적어주세요 — 신뢰 확인에 참고돼요. ' + ICON_LOCK + '</span></div>' +
+            '<span class="hint">아는 만큼만 적어주세요 — 관리자 참고 목적이에요.' + ICON_LOCK + '</span></div>' +
           '<div class="field"><label for="f-pin">개인 PIN <span class="req">필수</span></label>' +
             '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,10}" maxlength="10" placeholder="숫자 4~10자리" required autocomplete="off" style="-webkit-text-security:disc;text-security:disc;">' +
             '<input type="text" inputmode="numeric" id="f-pin2" name="pin2" data-numeric pattern="[0-9]{4,10}" maxlength="10" placeholder="PIN 다시 입력" required autocomplete="off" style="-webkit-text-security:disc;text-security:disc;margin-top:6px;">' +
@@ -4297,7 +4297,7 @@
                   '<span class="hint">어떻게 알게 됐는지 적어주세요 (소개자·경로 등). ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
                   (isEdit ? '' : '<div class="field"><label for="f-admin-rel">관리자(베니)와 직접 아는 사이인가요? <span class="opt">(선택)</span></label>' +
                   '<input type="text" id="f-admin-rel" name="adminRel" maxlength="40" placeholder="예: 베니 지인의 지인">' +
-                  '<span class="hint">아는 만큼만 적어주세요 — 신뢰 확인에 참고돼요. ' + ICON_LOCK + '</span></div>')) +
+                  '<span class="hint">아는 만큼만 적어주세요 — 관리자 참고 목적이에요.' + ICON_LOCK + '</span></div>')) +
             '<div class="field"><label>사진 ' + (isEdit ? '<span class="opt">(최대 3장)</span>' : '<span class="req">필수</span> <span class="opt">1~3장</span>') + '</label>' +
               '<span class="hint"><b class="ex">얼굴이 보이는 사진</b>을 1장 이상 등록해 주세요. 사진은 흐리게 표시되고, 📷 사진 요청을 승인한 사람에게만 원본이 보여요.</span>' +
               '<div class="photo-upload-area" id="photo-upload-area"></div>' +
