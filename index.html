@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-14-325';
+  var APP_VERSION = '2026-09-14-326';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4852,7 +4852,7 @@
     }).join('');
     var body = '<p class="sub">대화 승인으로 맺어진 인연 기록이에요. <b>연결 중 ' + active + '</b> · 해제됨 ' + revoked + ' (해제·삭제해도 기록은 남아요)</p>' +
       (log.length ? rows : '<p class="sub">아직 기록된 인연이 없어요. (이 기능 도입 이후의 대화 승인부터 쌓여요)</p>');
-    return '<details class="admin-fold" data-sec="connlog"' + secOpenAttr('connlog', false) + '><summary>🔗 인연 이력<span class="pending-count">' + active + '</span></summary><div class="admin-fold-body">' + body + '</div></details>';
+    return '<details class="admin-fold" data-sec="connlog"' + secOpenAttr('connlog', false) + '><summary>🔗 인연 이력<span class="pending-count">' + log.length + '</span></summary><div class="admin-fold-body">' + body + '</div></details>';
   }
 
   /* 가입 추이 그래프 (사용량 통계 안에 삽입): 회원·주선자·전체(테스트 제외) 누적선. 데이터=entries.submittedAt (활동기록과 무관) */
