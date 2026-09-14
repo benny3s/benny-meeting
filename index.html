@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-14-327';
+  var APP_VERSION = '2026-09-14-328';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -988,6 +988,7 @@
   var adminReqSort = 'req_desc';                       /* 요청(요청함+완료 통합) 정렬: req_desc|req_asc|dec_desc|dec_asc|gap_desc|gap_asc */
   var adminReqStatus = 'all';                          /* 요청 상태 필터: all|pending|held|approved|rejected */
   var adminReqAge = 'all';                             /* 요청 나이 필터(색상 기준): all|today|yesterday|few|old */
+  var adminReqType = 'all';                            /* 요청 종류 필터: all|photo|contact */
   var adminReqPendingStale = false;                    /* 대기 필터 2단계: 요청 후 상대가 로그인 안 한 대기건만 */
   var adminReqSearch = '';                             /* 요청함 검색어(요청자·상대 닉네임/고유번호) */
   var adminSignupPeriod = 'all';                       /* 가입 추이 그래프 기간: all|30|7|custom */
@@ -3375,23 +3376,15 @@
       return e;
     });
   }
-  /* 관리자: 누적 연결 수 직접 보정 (과거 해제분 포함 등) — 연결 이력 섹션에서 호출 */
-  function handleEditConnEver() {
-    var connNow = (currentState.dateRequests || []).filter(function (r) { return (r.type || 'contact') === 'contact' && r.approved; }).length;
-    var cur = Math.max((typeof currentState.connEver === 'number' ? currentState.connEver : 0), connNow);
-    modalMessage('🔗 누적 연결 수정', '공개 배너에 표시되는 누적 연결(대화 연결) 수예요. 현재 연결 중은 ' + connNow + '쌍이고, 과거에 해제된 것도 실제 맺어진 연결이라 포함할 수 있어요. 새 값을 숫자로 입력하세요.', '저장', 'primary', String(cur), false, String(cur)).then(function (v) {
-      if (v === null || v === undefined) return;
-      var n = parseInt((v || '').replace(/[^0-9]/g, ''), 10);
-      if (isNaN(n) || n < 0) return modalNotice('입력 오류', '0 이상의 숫자를 입력해주세요.');
-      if (n < connNow) return modalNotice('안내', '현재 연결 중인 ' + connNow + '쌍보다 작게는 설정할 수 없어요.');
-      db.runTransaction(function (tx) {
-        return tx.get(stateRef).then(function (doc) { tx.update(stateRef, { connEver: n }); });
-      }).then(function () {
-        appendLog('admin', '관리자', '누적 연결 보정 → ' + n + '쌍');
-        return refreshNow();
-      }).then(function () { modalNotice('저장 완료', '누적 연결을 ' + n + '쌍으로 설정했어요.'); })
-        .catch(function (err) { modalNotice('오류', '저장 실패: ' + (err.message || err)); });
-    });
+  /* 요청함에서 대화 요청 완전삭제 시 → 연결 이력에서 해당 쌍 1건 제거(누적 연결 감소). 매칭 없으면 원본 그대로 */
+  function connLogRemove(s, id1, id2) {
+    if (!s || !Array.isArray(s.connLog)) return undefined;
+    var log = s.connLog.slice();
+    for (var i = 0; i < log.length; i++) {
+      var e = log[i];
+      if ((e.a === id1 && e.b === id2) || (e.a === id2 && e.b === id1)) { log.splice(i, 1); return log; }
+    }
+    return log;
   }
   function recentActivityChip(entry) {
     if (!entry) return '';
@@ -4777,7 +4770,7 @@
     }
     var photo = reqStat('photo'), talk = reqStat('contact');
     var connNow = reqs.filter(function (r) { return (r.type || 'contact') === 'contact' && r.approved; }).length;
-    var connEverShown = Math.max((typeof state.connEver === 'number' ? state.connEver : 0), connNow);
+    var connEverShown = Array.isArray(state.connLog) ? state.connLog.length : Math.max((typeof state.connEver === 'number' ? state.connEver : 0), connNow);
     var row = function (lbl, val, sub) {
       return '<tr><td class="lbl">' + lbl + '</td><td><b>' + val + '</b>' + (sub ? ' <span class="stats-sub">' + sub + '</span>' : '') + '</td></tr>';
     };
@@ -4791,7 +4784,7 @@
         row('📷 사진 요청', photo.total, '대기 ' + photo.wait + '·승인 ' + photo.ap + '·거절 ' + photo.rj) +
         row('💌 대화 신청', talk.total, '대기 ' + talk.wait + '·승인 ' + talk.ap + '·거절 ' + talk.rj) +
         '<tr><td class="lbl">🔗 누적 연결</td><td><b>' + connEverShown + '</b>쌍' +
-          ' <span class="stats-sub">현재 연결 ' + connNow + ' · 해제·삭제해도 누적은 유지 · 수정은 연결 이력에서</span></td></tr>' +
+          ' <span class="stats-sub">현재 연결 ' + connNow + ' · 해제해도 유지 · 요청함에서 대화 요청 완전삭제 시 감소</span></td></tr>' +
       '</table>';
     /* 일자별 추이 (KST) — 첫 활동일부터 오늘까지 전체. 최신 날짜가 위로 오게 정렬, 세로 스크롤(약 7일 노출) */
     var candDays = cand.map(function (e) { return e.submittedAt ? kstDay(e.submittedAt) : ''; }).filter(Boolean);
@@ -4837,10 +4830,10 @@
       return '<details class="req-fold' + (on ? ' req-yesterday' : ' req-old') + '">' +
         '<summary>' + status +
           '<span class="req-sum-who">' + escapeHtml(nick(e.a)) + ' ↔ ' + escapeHtml(nick(e.b)) + '</span>' +
-          '<span class="req-sum-when">' + (e.at ? new Date(e.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '') + '</span>' +
+          '<span class="req-sum-when">' + (e.at ? new Date(e.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + (e.approxAt ? ' (추정)' : '') : '') + '</span>' +
         '</summary>' +
         '<div class="req-fold-body"><div class="req-foot">' +
-          '<span class="when">💬 승인 ' + (e.at ? new Date(e.at).toLocaleString('ko-KR') : '-') + '</span>' +
+          '<span class="when">💬 승인 ' + (e.at ? new Date(e.at).toLocaleString('ko-KR') : '-') + (e.approxAt ? ' (추정 — 승인 로그가 없어 해제일 기준으로 역산)' : '') + '</span>' +
           (e.revokedAt ? '<span class="when">🔌 해제 ' + new Date(e.revokedAt).toLocaleString('ko-KR') + '</span>' : '') +
           '<div class="req-foot-btns">' +
             '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(e.a) + '" style="flex:none;">👤 ' + escapeHtml(nick(e.a).split(' ').slice(1).join(' ') || nick(e.a)) + '</button>' +
@@ -4849,14 +4842,8 @@
         '</div></div>' +
       '</details>';
     }).join('');
-    var connEverShown = Math.max((typeof state.connEver === 'number' ? state.connEver : 0), active);
-    var manage = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;padding:8px 10px;background:var(--soft,#f6f7f9);border-radius:8px;">' +
-      '<span style="font-weight:700;">🔗 누적 연결 <b>' + connEverShown + '</b>쌍</span>' +
-      '<button type="button" class="card-btn" data-action="conn-edit" style="flex:none;padding:3px 12px;">수정</button>' +
-      '<span class="sub" style="flex:1 1 100%;margin:2px 0 0;">공개 배너에 표시되는 숫자예요. 과거 해제분 등을 포함해 직접 보정할 수 있어요.</span>' +
-    '</div>';
-    var body = manage +
-      '<p class="sub">대화 승인으로 맺어진 연결 기록이에요. <b>연결 중 ' + active + '</b> · 해제됨 ' + revoked + ' (해제·삭제해도 기록은 남아요)</p>' +
+    var body =
+      '<p class="sub">대화 승인으로 맺어진 연결 기록이에요(=공개 배너의 <b>누적 연결</b>). <b>연결 중 ' + active + '</b> · 해제됨 ' + revoked + '<br>연결을 <b>해제</b>하면 여기 <b>해제됨</b>으로 남고 누적 숫자는 유지돼요. 누적에서 빼려면 <b>요청함</b>에서 그 대화 요청을 <b>완전삭제</b>하세요.</p>' +
       (log.length ? rows : '<p class="sub">아직 기록된 연결이 없어요. (이 기능 도입 이후의 대화 승인부터 쌓여요)</p>');
     return '<details class="admin-fold" data-sec="connlog"' + secOpenAttr('connlog', false) + '><summary>🔗 연결 이력<span class="pending-count">' + log.length + '</span></summary><div class="admin-fold-body">' + body + '</div></details>';
   }
@@ -5254,15 +5241,18 @@
       return true;
     }
     function reqPassAge(r) { return adminReqAge === 'all' || reqAgeKey(r) === adminReqAge; }
-    /* 개수는 "다른 필터"를 반영해 갱신 (상태 개수 ← 현재 나이필터 적용 · 나이 개수 ← 현재 상태필터 적용) */
+    function reqPassType(r) { return adminReqType === 'all' || (r.type || 'contact') === adminReqType; }
+    /* 개수는 "나머지 필터"를 반영해 갱신 (각 그룹 개수 ← 다른 두 필터 적용) */
     var statCounts = { all: 0, pending: 0, held: 0, approved: 0, rejected: 0 };
     var ageCounts = { all: 0, today: 0, yesterday: 0, few: 0, old: 0 };
+    var typeCounts = { all: 0, photo: 0, contact: 0 };
     var pendingStaleCount = 0;
     _reqPool.forEach(function (r) {
-      if (reqPassAge(r)) { statCounts.all++; statCounts[reqStatKey(r)]++; if (reqStatKey(r) === 'pending' && recipientStale(r)) pendingStaleCount++; }
-      if (reqPassStatus(r)) { ageCounts.all++; ageCounts[reqAgeKey(r)]++; }
+      if (reqPassAge(r) && reqPassType(r)) { statCounts.all++; statCounts[reqStatKey(r)]++; if (reqStatKey(r) === 'pending' && recipientStale(r)) pendingStaleCount++; }
+      if (reqPassStatus(r) && reqPassType(r)) { ageCounts.all++; ageCounts[reqAgeKey(r)]++; }
+      if (reqPassStatus(r) && reqPassAge(r)) { typeCounts.all++; typeCounts[(r.type || 'contact')]++; }
     });
-    var _reqBase = _reqPool.filter(function (r) { return reqPassStatus(r) && reqPassAge(r); });
+    var _reqBase = _reqPool.filter(function (r) { return reqPassStatus(r) && reqPassAge(r) && reqPassType(r); });
     /* 승인시간 정렬은 "처리 시각"이 있는 요청만 의미 있음 → 미처리(대기)는 제외 */
     if (_rsKey0 === 'dec' || _rsKey0 === 'gap') _reqBase = _reqBase.filter(function (r) { return r.decidedAt; });
     var listReqs = _reqBase.sort(reqSortCmp);
@@ -5284,6 +5274,20 @@
       '<div style="display:flex;align-items:center;gap:6px;margin:2px 0 8px;flex-wrap:wrap;">' +
         '<span style="font-weight:700;font-size:0.86rem;">상태</span>' +
         _statusOpts.map(function (o) { return reqStatusBtn(o[0], o[1]); }).join('') +
+      '</div>';
+    var _typeOpts = [
+      ['all', '전체', ''],
+      ['photo', '📷 사진', 'background:#e8f0fe;border-color:#c3d7fb;color:#1a73e8;'],
+      ['contact', '💌 대화', 'background:#fce8e6;border-color:#f6c9c4;color:#d93025;']
+    ];
+    function reqTypeBtn(k, label, color) {
+      var active = adminReqType === k;
+      return '<button type="button" class="card-btn" data-action="req-type" data-key="' + k + '" style="flex:none;padding:5px 11px;font-size:0.82rem;' + color + (active ? 'box-shadow:0 0 0 2px var(--ink);font-weight:800;' : '') + '">' + label + ' ' + typeCounts[k] + '</button>';
+    }
+    var reqTypeRow =
+      '<div style="display:flex;align-items:center;gap:6px;margin:2px 0 8px;flex-wrap:wrap;">' +
+        '<span style="font-weight:700;font-size:0.86rem;">종류</span>' +
+        _typeOpts.map(function (o) { return reqTypeBtn(o[0], o[1], o[2]); }).join('') +
       '</div>';
     var _ageOpts = [
       ['all', '전체', ''],
@@ -5558,11 +5562,11 @@
 
     var reqEmpty = pendingStale
       ? '<p class="sub">요청 후 미접속인 대기자가 없어요 🙆</p>'
-      : ((adminReqStatus !== 'all' || adminReqAge !== 'all')
+      : ((adminReqStatus !== 'all' || adminReqAge !== 'all' || adminReqType !== 'all')
         ? '<p class="sub">조건에 맞는 요청이 없어요.</p>'
         : '<p class="sub">아직 요청이 없어요.</p>');
     var activeReqSection = adminFold('📬 요청함', visibleReqs.length,
-      reqStatusRow + reqAgeRow + reqSortSelect + reqSearchBox + reqPendingHint +
+      reqTypeRow + reqStatusRow + reqAgeRow + reqSortSelect + reqSearchBox + reqPendingHint +
       (listReqs.length ? allReqItems : reqEmpty) +
       '<p class="sub" id="req-search-empty" hidden>검색 결과가 없어요.</p>', false, 'active');
     var secHtml = {
@@ -5733,9 +5737,9 @@
     var liveMembers = (state.entries || []).filter(function (e) { return !e.isMatchmaker && !e.testAccount && !e.deactivated; });
     var weekAgo = Date.now() - 7 * 86400000;
     var newThisWeek = liveMembers.filter(function (e) { return e.submittedAt && new Date(e.submittedAt).getTime() >= weekAgo; }).length;
-    /* 누적 연결: 저장된 누적 카운터와 현재 승인 수 중 큰 값 → 연결 해제·삭제로 줄지 않음 */
+    /* 누적 연결 = 연결 이력(connLog) 총 개수(해제됨 포함) → 배너와 이력이 항상 일치. 해제해도 유지, 요청함에서 대화 요청 완전삭제 시에만 감소. connLog 없으면 구식 폴백 */
     var connNow = (state.dateRequests || []).filter(function (r) { return (r.type || 'contact') === 'contact' && r.approved; }).length;
-    var connCount = Math.max((typeof state.connEver === 'number' ? state.connEver : 0), connNow);
+    var connCount = Array.isArray(state.connLog) ? state.connLog.length : Math.max((typeof state.connEver === 'number' ? state.connEver : 0), connNow);
     var liveBits = [];
     if (newThisWeek > 0) liveBits.push('이번 주 새 멤버 <b>' + newThisWeek + '</b>명');
     if (connCount > 0) liveBits.push('누적 연결 <b>' + connCount + '</b>쌍');
@@ -7915,7 +7919,7 @@
           var target = (s.dateRequests || []).find(function (r) { return r.id === id; });
           var reqs = (s.dateRequests || []).filter(function (r) { return r.id !== id; });
           var _p = { dateRequests: reqs };
-          if (target && (target.type || 'contact') === 'contact' && target.approved) { var _cl = connLogRevoke(s, target.fromId, target.toId); if (_cl) _p.connLog = _cl; } /* 승인됐던 대화 삭제 → 이력엔 해제로 표시 */
+          if (target && (target.type || 'contact') === 'contact') { var _cl = connLogRemove(s, target.fromId, target.toId); if (_cl) _p.connLog = _cl; } /* 대화 요청 완전삭제 → 연결 이력에서도 제거 → 누적 연결 감소 (해제는 유지, 삭제만 감소) */
           tx.update(stateRef, _p);
         });
       }).then(function () {
@@ -8527,9 +8531,9 @@
         paint(currentState); return;
       }
       else if (action === 'req-age') { adminReqAge = actionBtn.getAttribute('data-key') || 'all'; paint(currentState); return; }
+      else if (action === 'req-type') { adminReqType = actionBtn.getAttribute('data-key') || 'all'; paint(currentState); return; }
       else if (action === 'signup-period') { var _sk = actionBtn.getAttribute('data-key') || 'all'; adminSignupPeriod = _sk; if (_sk !== 'custom') { adminSignupStart = ''; adminSignupEnd = ''; } paint(currentState); return; }
       else if (action === 'list-order') { if (isAdminUnlocked) { listOrder = (listOrder === 'serial') ? 'recent' : 'serial'; paint(currentState); } return; }
-      else if (action === 'conn-edit') { if (isAdminUnlocked) handleEditConnEver(); return; }
       else if (action === 'fold-all') { toggleFoldAll(); return; }
       else if (action === 'broadcast') { handleBroadcast(); return; }
       else if (action === 'admin-msg-delall') {
