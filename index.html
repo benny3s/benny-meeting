@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-14-323';
+  var APP_VERSION = '2026-09-14-324';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3359,6 +3359,24 @@
     var ever = (s && typeof s.connEver === 'number') ? s.connEver : prev;
     return ever + 1;
   }
+  /* 관리자: 누적 인연 수 직접 보정 (과거 해제분 포함 등) */
+  function handleEditConnEver() {
+    var connNow = (currentState.dateRequests || []).filter(function (r) { return (r.type || 'contact') === 'contact' && r.approved; }).length;
+    var cur = Math.max((typeof currentState.connEver === 'number' ? currentState.connEver : 0), connNow);
+    modalMessage('🔗 누적 인연 수정', '공개 배너에 표시되는 누적 인연(대화 연결) 수예요. 현재 연결 중은 ' + connNow + '쌍이고, 과거에 해제된 것도 실제 맺어진 인연이라 포함할 수 있어요. 새 값을 숫자로 입력하세요.', '저장', 'primary', String(cur), false, String(cur)).then(function (v) {
+      if (v === null || v === undefined) return;
+      var n = parseInt((v || '').replace(/[^0-9]/g, ''), 10);
+      if (isNaN(n) || n < 0) return modalNotice('입력 오류', '0 이상의 숫자를 입력해주세요.');
+      if (n < connNow) return modalNotice('안내', '현재 연결 중인 ' + connNow + '쌍보다 작게는 설정할 수 없어요.');
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) { tx.update(stateRef, { connEver: n }); });
+      }).then(function () {
+        appendLog('admin', '관리자', '누적 인연 보정 → ' + n + '쌍');
+        return refreshNow();
+      }).then(function () { modalNotice('저장 완료', '누적 인연을 ' + n + '쌍으로 설정했어요.'); })
+        .catch(function (err) { modalNotice('오류', '저장 실패: ' + (err.message || err)); });
+    });
+  }
   function recentActivityChip(entry) {
     if (!entry) return '';
     var seenAt = lastActiveAt(entry);
@@ -3618,6 +3636,7 @@
     var teaser = !isAdminUnlocked && !myAuthEntry(state); /* 비로그인·관리자 아님·승인 대기(미승인) → 신원 가린 티저 뷰 */
     var isPermFilter = (listFilter === 'photo' || listFilter === 'contact');
     var filtered = entries.filter(function (e) {
+      if (me && !isAdminUnlocked && e.id === me.id) return false; /* 내 프로필은 명단에서 제외 (최근 접속순이면 항상 맨 위로 오는 문제 + 자기 자신 요청 불가) */
       if (myHiddenIds.indexOf(e.id) >= 0) return false; /* 지인 필터(마주치기 방지)로 숨김 */
       if (isAdminUnlocked && accessFilter !== 'all' && accessBucket(e) !== accessFilter) return false; /* 관리자 접속 필터 */
       if (listFilter === 'male' || listFilter === 'female') return e.gender === listFilter;
@@ -4737,6 +4756,8 @@
       return { total: list.length, ap: ap, rj: rj, wait: wait };
     }
     var photo = reqStat('photo'), talk = reqStat('contact');
+    var connNow = reqs.filter(function (r) { return (r.type || 'contact') === 'contact' && r.approved; }).length;
+    var connEverShown = Math.max((typeof state.connEver === 'number' ? state.connEver : 0), connNow);
     var row = function (lbl, val, sub) {
       return '<tr><td class="lbl">' + lbl + '</td><td><b>' + val + '</b>' + (sub ? ' <span class="stats-sub">' + sub + '</span>' : '') + '</td></tr>';
     };
@@ -4749,6 +4770,9 @@
         row('삭제요청 대기', delReq, '') +
         row('📷 사진 요청', photo.total, '대기 ' + photo.wait + '·승인 ' + photo.ap + '·거절 ' + photo.rj) +
         row('💌 대화 신청', talk.total, '대기 ' + talk.wait + '·승인 ' + talk.ap + '·거절 ' + talk.rj) +
+        '<tr><td class="lbl">🔗 누적 인연</td><td><b>' + connEverShown + '</b>쌍 ' +
+          '<button type="button" class="card-btn" data-action="conn-edit" style="flex:none;padding:2px 10px;margin-left:6px;">수정</button>' +
+          ' <span class="stats-sub">현재 연결 ' + connNow + ' · 해제·삭제해도 누적은 유지</span></td></tr>' +
       '</table>';
     /* 일자별 추이 (KST) — 첫 활동일부터 오늘까지 전체. 최신 날짜가 위로 오게 정렬, 세로 스크롤(약 7일 노출) */
     var candDays = cand.map(function (e) { return e.submittedAt ? kstDay(e.submittedAt) : ''; }).filter(Boolean);
@@ -8444,6 +8468,7 @@
       else if (action === 'req-age') { adminReqAge = actionBtn.getAttribute('data-key') || 'all'; paint(currentState); return; }
       else if (action === 'signup-period') { var _sk = actionBtn.getAttribute('data-key') || 'all'; adminSignupPeriod = _sk; if (_sk !== 'custom') { adminSignupStart = ''; adminSignupEnd = ''; } paint(currentState); return; }
       else if (action === 'list-order') { if (isAdminUnlocked) { listOrder = (listOrder === 'serial') ? 'recent' : 'serial'; paint(currentState); } return; }
+      else if (action === 'conn-edit') { if (isAdminUnlocked) handleEditConnEver(); return; }
       else if (action === 'fold-all') { toggleFoldAll(); return; }
       else if (action === 'broadcast') { handleBroadcast(); return; }
       else if (action === 'admin-msg-delall') {
