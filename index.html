@@ -904,10 +904,11 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-14-331';
+  var APP_VERSION = '2026-09-14-332';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
+  var SMS_ENABLED = false; /* Solapi 발신번호·키 세팅 + adminSendSms 배포 완료되면 true 로 (관리자 문자 버튼 노출) */
   var reloadPrompted = false;
   var appVersionWritten = false; /* 세션당 서버 버전 기록은 1회만 (옛 버그 클라이언트와 핑퐁 방지) */
   var switcherExpanded = false;  /* 전환창 친구 목록 펼침 여부 */
@@ -1367,6 +1368,67 @@
           modalNotice('백필 완료', '등록 ' + (d.ok || 0) + '건, 건너뜀 ' + (d.skip || 0) + '건. 이제 기존 회원도 지인 필터·SMS 대상이 돼요.');
         });
       }).catch(function (e) { modalNotice('오류', '백필 실패: ' + ((e && e.message) || e)); });
+    });
+  }
+
+  /* ── 관리자 수동 SMS (Solapi, adminSendSms CF) — 푸시 안 닿는 사람 fallback ──
+     번호는 서버가 sendContacts에서 복호화·발송 → 관리자는 번호를 보지 않음. 관리자 전용 토큰으로 인증(한 번 입력→기기 저장). */
+  var SMS_SITE = 'https://benny3s.github.io/benny-meeting/';
+  function getSmsToken(force) {
+    var t = '';
+    try { t = localStorage.getItem('benny-sms-token') || ''; } catch (e) {}
+    if (t && !force) return Promise.resolve(t);
+    return modalMessage('📱 문자 발송 토큰', '문자 발송용 관리자 토큰을 입력하세요. 한 번만 입력하면 이 기기에 저장돼요.', '저장', 'primary', '토큰 붙여넣기', true).then(function (v) {
+      v = (v || '').trim(); if (!v) return null;
+      try { localStorage.setItem('benny-sms-token', v); } catch (e) {}
+      return v;
+    });
+  }
+  function smsTemplate(kind, nick) {
+    if (kind === 'held') return '[베니브릿지] ' + nick + '님, 프로필 보완이 필요해 안내드려요. 앱에서 확인 부탁드려요 🙏 ' + SMS_SITE;
+    if (kind === 'req') return '[베니브릿지] ' + nick + '님, 회원님께 새 요청이 도착했어요. 앱에서 확인해 주세요 😊 ' + SMS_SITE;
+    return '[베니브릿지] ' + nick + '님, 안내드립니다. ' + SMS_SITE;
+  }
+  function recordSms(entryId, kind, ok) {
+    return db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data(); var log = Array.isArray(s.smsLog) ? s.smsLog.slice() : [];
+        log.push({ id: genId(), entryId: entryId, kind: kind, at: new Date().toISOString(), ok: !!ok });
+        if (log.length > 2000) log = log.slice(log.length - 2000);
+        tx.update(stateRef, { smsLog: log });
+      });
+    }).catch(function () {});
+  }
+  /* 이 회원에게 마지막으로 보낸 문자 정보 (없으면 null) — "이미 보냄" 표시용 */
+  function smsLastFor(state, entryId) {
+    var log = (state && state.smsLog) || [];
+    for (var i = log.length - 1; i >= 0; i--) { if (log[i].entryId === entryId && log[i].ok) return log[i]; }
+    return null;
+  }
+  function sendSmsFlow(entryId, kind) {
+    if (!isAdminUnlocked) { modalNotice('안내', '관리자 모드에서만 가능해요.'); return; }
+    if (!fns) { modalNotice('오류', '서버 연결이 안 됐어요. 새로고침 후 다시 시도해주세요.'); return; }
+    var ent = ((currentState.entries || []).concat(currentState.pendingEntries || [])).find(function (e) { return e.id === entryId; });
+    if (!ent) { modalNotice('안내', '대상을 찾을 수 없어요.'); return; }
+    var nick = ent.nickname || '회원';
+    var last = smsLastFor(currentState, entryId);
+    var head = last ? '이미 ' + new Date(last.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + '에 보낸 적이 있어요. 다시 보낼까요?\n\n' : '';
+    modalMessage('📱 ' + nick + '님에게 문자', head + '보낼 내용을 확인·수정하세요. 수신자 번호는 서버가 처리하며 화면에 표시되지 않아요. (건당 요금 발생)', '문자 보내기', 'primary', '', true, smsTemplate(kind, nick), 5).then(function (text) {
+      if (text === null || text === undefined) return;
+      text = (text || '').trim(); if (!text) return;
+      getSmsToken(false).then(function (token) {
+        if (!token) return;
+        callFn('adminSendSms', { token: token, sends: [{ entryId: entryId, text: text }] }).then(function (r) {
+          var d = (r && r.data) || {}; var res = (d.results && d.results[0]) || {};
+          recordSms(entryId, kind, !!res.ok);
+          if (res.ok) { appendLog('sms', '관리자', '문자 발송(' + kind + ') → ' + nick); refreshNow(); modalNotice('발송 완료', nick + '님에게 문자를 보냈어요.'); }
+          else { modalNotice('발송 실패', ((res.detail || '알 수 없는 오류') + '')); }
+        }).catch(function (e) {
+          var m = ((e && e.message) || e) + '';
+          if (/permission-denied|토큰|token/i.test(m)) { try { localStorage.removeItem('benny-sms-token'); } catch (e2) {} modalNotice('토큰 오류', '관리자 토큰이 올바르지 않아요. 다시 시도하면 새로 입력할 수 있어요.'); }
+          else modalNotice('오류', '발송 실패: ' + m);
+        });
+      });
     });
   }
 
@@ -3931,10 +3993,10 @@
             '<input type="tel" id="f-contact" name="contact" maxlength="11" inputmode="numeric" data-numeric placeholder="예: 01012345678" required>' +
             '<span class="hint">' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
           '<div class="field"><label for="f-referrer">알게 된 경로 <span class="req">필수</span></label>' +
-            '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 홍길동 소개 / 베니 지인" required>' +
+            '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 홍길동(회사동료)" required>' +
             '<span class="hint">어떻게 알게 됐는지 적어주세요 (소개자·경로 등). ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
           '<div class="field"><label for="f-admin-rel">관리자(베니)와 직접 아는 사이인가요? <span class="opt">(선택)</span></label>' +
-            '<input type="text" id="f-admin-rel" name="adminRel" maxlength="40" placeholder="예: 대학 동기 / 회사 동료 / 직접은 몰라요">' +
+            '<input type="text" id="f-admin-rel" name="adminRel" maxlength="40" placeholder="예: 베니 지인의 지인">' +
             '<span class="hint">아는 만큼만 적어주세요 — 신뢰 확인에 참고돼요. ' + ICON_LOCK + '</span></div>' +
           '<div class="field"><label for="f-pin">개인 PIN <span class="req">필수</span></label>' +
             '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,10}" maxlength="10" placeholder="숫자 4~10자리" required autocomplete="off" style="-webkit-text-security:disc;text-security:disc;">' +
@@ -4207,10 +4269,10 @@
                   '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 대학 후배 / 회사 동료">' +
                   '<span class="hint">' + ICON_LOCK + ' 주선자(나)와 소개 대상의 관계예요. 관리자만 볼 수 있어요.</span></div>'
               : '<div class="field"><label for="f-referrer">알게 된 경로 ' + (isEdit ? '<span class="opt">(비우면 기존 값 유지)</span>' : '<span class="req">필수</span>') + '</label>' +
-                  '<input type="text" id="f-referrer" name="referrerText" maxlength="60"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 홍길동 소개 / 베니 지인" required') + '>' +
+                  '<input type="text" id="f-referrer" name="referrerText" maxlength="60"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 홍길동(회사동료)" required') + '>' +
                   '<span class="hint">어떻게 알게 됐는지 적어주세요 (소개자·경로 등). ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
                   (isEdit ? '' : '<div class="field"><label for="f-admin-rel">관리자(베니)와 직접 아는 사이인가요? <span class="opt">(선택)</span></label>' +
-                  '<input type="text" id="f-admin-rel" name="adminRel" maxlength="40" placeholder="예: 대학 동기 / 회사 동료 / 직접은 몰라요">' +
+                  '<input type="text" id="f-admin-rel" name="adminRel" maxlength="40" placeholder="예: 베니 지인의 지인">' +
                   '<span class="hint">아는 만큼만 적어주세요 — 신뢰 확인에 참고돼요. ' + ICON_LOCK + '</span></div>')) +
             '<div class="field"><label>사진 ' + (isEdit ? '<span class="opt">(최대 3장)</span>' : '<span class="req">필수</span> <span class="opt">1~3장</span>') + '</label>' +
               '<span class="hint"><b class="ex">얼굴이 보이는 사진</b>을 1장 이상 등록해 주세요. 사진은 흐리게 표시되고, 📷 사진 요청을 승인한 사람에게만 원본이 보여요.</span>' +
@@ -4970,6 +5032,7 @@
       var ageStr = e.birthYear ? (String(e.birthYear).slice(2) + '년생') : '-';
       var heldNote = e.heldReason ? '<div class="p-meta" style="color:var(--accent);margin-top:3px;white-space:pre-wrap;">📌 보류 사유: ' + escapeHtml(e.heldReason) + '</div>' : '';
       var holdBtn = '<button type="button" class="card-btn" data-action="hold-pending" data-id="' + escapeHtml(e.id) + '">' + (e.heldReason ? '보류 사유 수정' : '보류') + '</button>';
+      var smsHeldBtn = (SMS_ENABLED && e.heldReason) ? '<button type="button" class="card-btn" data-action="sms-send" data-id="' + escapeHtml(e.id) + '" data-kind="held" style="background:#fff3e0;border-color:#f0c98a;">📱 보류 안내 문자</button>' : '';
       var heldChip = e.heldReason ? ' <span class="chip" style="background:var(--accent-soft);color:var(--accent);">📌 보류</span>' : '';
       var newChip = e.heldReason ? '' : '<span class="chip" style="background:#e8f0fe;color:#1a73e8;">🆕 신규</span>';
       if (e.isMatchmaker) {
@@ -4981,6 +5044,7 @@
             '<button type="button" class="card-btn" data-action="detail-pending" data-id="' + escapeHtml(e.id) + '">상세 보기</button>' +
             '<button type="button" class="card-btn approve" data-action="approve" data-id="' + escapeHtml(e.id) + '">승인</button>' +
             holdBtn +
+            smsHeldBtn +
             '<button type="button" class="card-btn danger" data-action="reject" data-id="' + escapeHtml(e.id) + '">거절</button>' +
           '</div>'
         );
@@ -5011,6 +5075,7 @@
           '<button type="button" class="card-btn" data-action="detail-pending" data-id="' + escapeHtml(e.id) + '">상세 보기</button>' +
           '<button type="button" class="card-btn approve" data-action="approve" data-id="' + escapeHtml(e.id) + '">승인</button>' +
           holdBtn +
+          smsHeldBtn +
           '<button type="button" class="card-btn danger" data-action="reject" data-id="' + escapeHtml(e.id) + '">거절</button>' +
         '</div>'
       );
@@ -5197,7 +5262,8 @@
       } else if (st === 'rejected') {
         actionBtns = '<span class="chip" style="background:#f1f3f4;color:#5f6368;">' + (r.rejectedBy === 'user' ? '본인 거절' : '관리자 거절') + '</span>' + manageBtns;
       } else {
-        actionBtns = decideBtns + manageBtns;
+        actionBtns = decideBtns + manageBtns +
+          (SMS_ENABLED && toId ? '<button type="button" class="card-btn" data-action="sms-send" data-id="' + escapeHtml(toId) + '" data-kind="req" style="flex:none;">📱 상대에게 문자</button>' : '');
       }
       /* 요청 나이: 24시간 이내=진한녹색 · 48시간 이내=연한녹색 · 108시간 이내=연회색 · 그 이상=진회색.
          명단 접속칩과 완전히 동일한 경과시간 기준(elapsedBucket) */
@@ -8553,6 +8619,7 @@
       else if (action === 'log-clear') { adminLogFilterActor = ''; adminLogFilterTime = ''; adminLogFilterNick = ''; paint(currentState); }
       else if (action === 'log-del') { if (isAdminUnlocked) handleDeleteLog(id); }
       else if (action === 'connlog-del') { if (isAdminUnlocked) handleDeleteConnLog(id); return; }
+      else if (action === 'sms-send') { if (isAdminUnlocked) sendSmsFlow(id, actionBtn.getAttribute('data-kind') || 'custom'); return; }
       else if (action === 'log-sort') { toggleSort(adminLogSort, actionBtn.getAttribute('data-col'), 'desc'); paint(currentState); }
       else if (action === 'cancel-sent') handleCancelSent(id);
       else if (action === 'reapply') handleReapplyRequest(id);

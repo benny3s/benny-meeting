@@ -2,6 +2,7 @@
 const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
 const nodeCrypto = require('crypto');
+const https = require('https');
 admin.initializeApp();
 const db = admin.firestore();
 
@@ -402,4 +403,69 @@ exports.remindPending = functions
       await Promise.all(result.sends.map((s) => notifyRecipient(result.entries, s.toId, s.title, s.body)));
     }
     return null;
+  });
+
+/* ── 관리자 수동 SMS 발송 (Solapi) ──
+   푸시가 안 닿는 사람(앱 미접속·알림 off)을 되돌리는 fallback. 관리자가 대상 보고 직접 발송.
+   인증: 관리자 전용 토큰(SMS_ADMIN_TOKEN). 번호는 서버가 sendContacts에서 복호화 → 관리자는 번호를 보지 않음.
+   입력: { token, sends:[{entryId, text}] } (최대 100). 항목별 결과 반환. 발송 이력 기록은 클라이언트가 함. */
+function solapiSend(apiKey, apiSecret, from, to, text) {
+  return new Promise((resolve) => {
+    const date = new Date().toISOString();
+    const salt = nodeCrypto.randomBytes(32).toString('hex');
+    const signature = nodeCrypto.createHmac('sha256', apiSecret).update(date + salt).digest('hex');
+    const message = { to: to, from: from, text: text };
+    if (Buffer.byteLength(text, 'utf8') > 90) { message.type = 'LMS'; message.subject = '베니브릿지'; } else { message.type = 'SMS'; }
+    const body = JSON.stringify({ message: message });
+    const req = https.request({
+      hostname: 'api.solapi.com',
+      path: '/messages/v4/send',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        'Authorization': 'HMAC-SHA256 apiKey=' + apiKey + ', date=' + date + ', salt=' + salt + ', signature=' + signature
+      }
+    }, (res) => {
+      let chunks = '';
+      res.on('data', (d) => { chunks += d; });
+      res.on('end', () => {
+        let json = null; try { json = JSON.parse(chunks); } catch (e) {}
+        const ok = res.statusCode >= 200 && res.statusCode < 300 && json && !json.errorCode;
+        resolve({ ok: ok, status: res.statusCode, detail: json ? (json.statusMessage || json.errorMessage || json.errorCode || String(res.statusCode)) : String(chunks).slice(0, 200) });
+      });
+    });
+    req.on('error', (e) => resolve({ ok: false, status: 0, detail: String((e && e.message) || e) }));
+    req.write(body); req.end();
+  });
+}
+
+exports.adminSendSms = functions
+  .region('asia-northeast3')
+  .runWith({ secrets: ['NUM_ENC_KEY', 'SOLAPI_KEY', 'SOLAPI_SECRET', 'SOLAPI_SENDER', 'SMS_ADMIN_TOKEN'], timeoutSeconds: 120, memory: '256MB' })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', '로그인이 필요해요.');
+    const token = String((data && data.token) || '');
+    const adminTok = process.env.SMS_ADMIN_TOKEN || '';
+    if (!adminTok || token !== adminTok) throw new functions.https.HttpsError('permission-denied', '관리자 토큰이 올바르지 않아요.');
+    const apiKey = process.env.SOLAPI_KEY || '';
+    const apiSecret = process.env.SOLAPI_SECRET || '';
+    const from = normPhone(process.env.SOLAPI_SENDER || '');
+    if (!apiKey || !apiSecret || !from) throw new functions.https.HttpsError('failed-precondition', 'SMS 발송 설정(SOLAPI_*)이 아직 안 됐어요.');
+    let sends = Array.isArray(data && data.sends) ? data.sends : [];
+    if (!sends.length) throw new functions.https.HttpsError('invalid-argument', '보낼 대상이 없어요.');
+    if (sends.length > 100) sends = sends.slice(0, 100);
+    const results = [];
+    for (const s of sends) {
+      const entryId = String((s && s.entryId) || '');
+      const text = String((s && s.text) || '').trim();
+      if (!entryId || !text) { results.push({ entryId: entryId, ok: false, detail: '정보 부족' }); continue; }
+      let phone = '';
+      try { const sc = (await db.doc('sendContacts/' + entryId).get()).data(); phone = sc ? decPhone(sc.enc) : ''; } catch (e) { phone = ''; }
+      if (!phone) { results.push({ entryId: entryId, ok: false, detail: '저장된 번호 없음' }); continue; }
+      const r = await solapiSend(apiKey, apiSecret, from, phone, text);
+      results.push({ entryId: entryId, ok: r.ok, detail: r.detail });
+    }
+    const okCount = results.filter((r) => r.ok).length;
+    return { ok: okCount, fail: results.length - okCount, results: results };
   });
