@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-14-336';
+  var APP_VERSION = '2026-09-14-337';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4845,7 +4845,8 @@
             ? '<button type="button" class="card-btn" id="cancel-mm-req" style="flex:none;">⏳ 주선자 승인 대기 (취소)</button>'
             : '<button type="button" class="card-btn" id="request-mm" style="flex:none;">🤝 주선자 요청</button>');
       headBtns = '<button type="button" class="card-btn primary" data-action="card-detail" data-id="' + escapeHtml(me.id) + '" style="flex:none;">👤 내 프로필 보기</button>' +
-        reqBtn + '<button type="button" class="card-btn" id="start-proxy" style="flex:none;">🤝 주선자 계정으로 전환</button>';
+        reqBtn + '<button type="button" class="card-btn" id="start-proxy" style="flex:none;">🤝 주선자 계정으로 전환</button>' +
+        (!me.deleteRequested ? '<button type="button" class="card-btn" data-action="report-couple" data-id="' + escapeHtml(me.id) + '" style="flex:none;background:#fce4ec;border-color:#f4a9c7;color:#c2185b;font-weight:700;">💕 좋은 인연 만났어요</button>' : '');
     }
     return (
       '<div class="admin-panel">' +
@@ -4856,7 +4857,6 @@
         (me.deleteRequested ? '<div class="mine-note reject" style="margin-top:10px;">🗑 삭제 요청이 접수되어 <b>관리자 확인 중</b>이에요. <button type="button" class="card-btn" data-action="cancel-delete" data-id="' + escapeHtml(me.id) + '" style="flex:none;padding:4px 12px;margin-left:8px;">삭제 요청 취소</button></div>' : '') +
         (me.deactivateRequested ? '<div class="mine-note" style="margin-top:10px;background:var(--gold-soft);border-color:var(--gold);">🗄 비활성화(보관) 요청이 접수되어 <b>관리자 확인 중</b>이에요. <button type="button" class="card-btn" data-action="cancel-deactivate" data-id="' + escapeHtml(me.id) + '" style="flex:none;padding:4px 12px;margin-left:8px;">요청 취소</button></div>' : '') +
         (me.deactivated ? '<div class="mine-note" style="margin-top:10px;background:var(--gold-soft);border-color:var(--gold);">🗄 <b>보관 상태</b>예요 (명단에 노출되지 않아요). 복구는 상단 <b>💬 Q&amp;A</b>로 문의하거나 카카오톡으로 요청해 주세요.</div>' : '') +
-        (!isSubProfile && !me.deactivated && !me.deleteRequested ? '<button type="button" class="card-btn" data-action="report-couple" data-id="' + escapeHtml(me.id) + '" style="width:100%;box-sizing:border-box;margin-top:12px;background:#fce4ec;border-color:#f4a9c7;color:#c2185b;font-weight:700;">💕 좋은 인연을 만났어요 (소개팅 성공 알리기)</button>' : '') +
         (isSubProfile ? '' : msgSection) + /* 관리자 메시지를 맨 위로 */
         (isSubProfile ? '' : joinRequestSectionHtml(state, false)) + /* 나에게 온 주선자 요청 있으면 표시 */
         sections +
