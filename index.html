@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-14-335';
+  var APP_VERSION = '2026-09-14-336';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -925,8 +925,8 @@
   var openMsgFolds = {}; /* 관리자 메시지: 펼쳐둔 회원 대화 (리페인트 후 유지용) */
   var _mmFoldOpen = {};  /* 주선자 탭: 카드별 접힘 상태 (리페인트 후 유지용, 기본 열림) */
   var adminEditMode = false; /* 관리자 섹션 편집(순서·기본 열림) 모드 */
-  var DEFAULT_SEC_ORDER = ['usage', 'connlog', 'pending', 'held', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'cap', 'seen', 'log'];
-  var SEC_NAMES = { usage: '📊 사용량 통계', connlog: '🔗 연결 이력', pending: '⏳ 승인 대기', held: '📌 보류 중', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록' };
+  var DEFAULT_SEC_ORDER = ['usage', 'connlog', 'couple', 'pending', 'held', 'editrev', 'deaclist', 'dellog', 'active', 'adminmsg', 'cap', 'seen', 'log'];
+  var SEC_NAMES = { usage: '📊 사용량 통계', connlog: '🔗 연결 이력', couple: '💕 커플 성사', pending: '⏳ 승인 대기', held: '📌 보류 중', editrev: '📝 프로필 변경', deaclist: '🗄 보관 계정', dellog: '🗑 삭제 이력', active: '📬 요청함', adminmsg: '💬 관리자 메시지', cap: '💾 서버 용량', seen: '👥 회원 명단', log: '📜 활동 기록' };
   /* 섹션 열림 상태는 "세션 메모리에만" 저장 → 리페인트(버튼 클릭 등) 동안엔 유지되지만,
      새로고침하면 초기화되어 모두 접힌 상태로 시작 (이전에 열었던 걸 기억하지 않음) */
   var _adminSecOpen = {}, _adminSecOrder = null;
@@ -4020,7 +4020,7 @@
             '<input type="text" id="f-referrer" name="referrerText" maxlength="60" placeholder="예: 홍길동(회사동료)" required>' +
             '<span class="hint">어떻게 알게 됐는지 적어주세요 (소개자·경로 등). ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
           '<div class="field"><label for="f-admin-rel">관리자(베니)와 직접 아는 사이인가요? <span class="opt">(선택)</span></label>' +
-            '<input type="text" id="f-admin-rel" name="adminRel" maxlength="40" placeholder="예: 베니 지인의 지인">' +
+            '<input type="text" id="f-admin-rel" name="adminRel" maxlength="40" placeholder="예: 소개자가 베니 지인의 지인">' +
             '<span class="hint">아는 만큼만 적어주세요 — 관리자 참고 목적이에요.' + ICON_LOCK + '</span></div>' +
           '<div class="field"><label for="f-pin">개인 PIN <span class="req">필수</span></label>' +
             '<input type="text" inputmode="numeric" id="f-pin" name="pin" data-numeric pattern="[0-9]{4,10}" maxlength="10" placeholder="숫자 4~10자리" required autocomplete="off" style="-webkit-text-security:disc;text-security:disc;">' +
@@ -4296,7 +4296,7 @@
                   '<input type="text" id="f-referrer" name="referrerText" maxlength="60"' + (isEdit ? ' class="keep-ph" placeholder="(비우면 기존 값 유지)"' : ' placeholder="예: 홍길동(회사동료)" required') + '>' +
                   '<span class="hint">어떻게 알게 됐는지 적어주세요 (소개자·경로 등). ' + ICON_LOCK + ' 암호화되어 관리자만 볼 수 있어요.</span></div>' +
                   (isEdit ? '' : '<div class="field"><label for="f-admin-rel">관리자(베니)와 직접 아는 사이인가요? <span class="opt">(선택)</span></label>' +
-                  '<input type="text" id="f-admin-rel" name="adminRel" maxlength="40" placeholder="예: 베니 지인의 지인">' +
+                  '<input type="text" id="f-admin-rel" name="adminRel" maxlength="40" placeholder="예: 소개자가 베니 지인의 지인">' +
                   '<span class="hint">아는 만큼만 적어주세요 — 관리자 참고 목적이에요.' + ICON_LOCK + '</span></div>')) +
             '<div class="field"><label>사진 ' + (isEdit ? '<span class="opt">(최대 3장)</span>' : '<span class="req">필수</span> <span class="opt">1~3장</span>') + '</label>' +
               '<span class="hint"><b class="ex">얼굴이 보이는 사진</b>을 1장 이상 등록해 주세요. 사진은 흐리게 표시되고, 📷 사진 요청을 승인한 사람에게만 원본이 보여요.</span>' +
@@ -4856,6 +4856,7 @@
         (me.deleteRequested ? '<div class="mine-note reject" style="margin-top:10px;">🗑 삭제 요청이 접수되어 <b>관리자 확인 중</b>이에요. <button type="button" class="card-btn" data-action="cancel-delete" data-id="' + escapeHtml(me.id) + '" style="flex:none;padding:4px 12px;margin-left:8px;">삭제 요청 취소</button></div>' : '') +
         (me.deactivateRequested ? '<div class="mine-note" style="margin-top:10px;background:var(--gold-soft);border-color:var(--gold);">🗄 비활성화(보관) 요청이 접수되어 <b>관리자 확인 중</b>이에요. <button type="button" class="card-btn" data-action="cancel-deactivate" data-id="' + escapeHtml(me.id) + '" style="flex:none;padding:4px 12px;margin-left:8px;">요청 취소</button></div>' : '') +
         (me.deactivated ? '<div class="mine-note" style="margin-top:10px;background:var(--gold-soft);border-color:var(--gold);">🗄 <b>보관 상태</b>예요 (명단에 노출되지 않아요). 복구는 상단 <b>💬 Q&amp;A</b>로 문의하거나 카카오톡으로 요청해 주세요.</div>' : '') +
+        (!isSubProfile && !me.deactivated && !me.deleteRequested ? '<button type="button" class="card-btn" data-action="report-couple" data-id="' + escapeHtml(me.id) + '" style="width:100%;box-sizing:border-box;margin-top:12px;background:#fce4ec;border-color:#f4a9c7;color:#c2185b;font-weight:700;">💕 좋은 인연을 만났어요 (소개팅 성공 알리기)</button>' : '') +
         (isSubProfile ? '' : msgSection) + /* 관리자 메시지를 맨 위로 */
         (isSubProfile ? '' : joinRequestSectionHtml(state, false)) + /* 나에게 온 주선자 요청 있으면 표시 */
         sections +
@@ -4960,6 +4961,47 @@
       '<p class="sub">대화 승인으로 맺어진 연결 기록이에요(=공개 배너의 <b>누적 연결</b>). <b>연결 중 ' + active + '</b> · 해제됨 ' + revoked + '<br>연결을 <b>해제</b>하면 여기 <b>해제됨</b>으로 남고 누적 숫자는 유지돼요. 누적에서 빼려면 <b>요청함</b>에서 그 대화 요청을 <b>완전삭제</b>하거나, 요청함에 없는 과거 해제분은 <b>해제됨 항목의 [🗑 기록 삭제]</b>로 여기서 바로 빼세요.</p>' +
       (log.length ? rows : '<p class="sub">아직 기록된 연결이 없어요. (이 기능 도입 이후의 대화 승인부터 쌓여요)</p>');
     return '<details class="admin-fold" data-sec="connlog"' + secOpenAttr('connlog', false) + '><summary>🔗 연결 이력<span class="pending-count">' + log.length + '</span></summary><div class="admin-fold-body">' + body + '</div></details>';
+  }
+  /* 💕 커플 성사: 회원이 알려온 소개팅 성공. 확인(카운트 반영)·후기 공개범위·삭제. connLog와 별개 */
+  function coupleSectionHtml(state) {
+    var list = (state.coupleReports || []).slice().sort(function (a, b) { return (b.at || '').localeCompare(a.at || ''); });
+    var confirmed = list.filter(function (r) { return r.confirmed; }).length;
+    var visLabel = { private: '비공개', anon: '익명공개', public: '공개' };
+    var rows = list.map(function (r) {
+      var on = r.confirmed;
+      var chip = on ? '<span class="chip" style="background:#e9f6ee;color:#2e8b52;">✅ 확인됨</span>' : '<span class="chip" style="background:#fef7e0;color:#b06000;">미확인</span>';
+      return '<details class="req-fold' + (on ? ' req-yesterday' : '') + '">' +
+        '<summary>' + chip + '<span class="req-sum-who">💕 ' + escapeHtml(r.byNick || '') + (r.partner ? ' ↔ ' + escapeHtml(r.partner) : '') + '</span>' +
+          '<span class="req-sum-when">' + (r.at ? new Date(r.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric' }) : '') + '</span></summary>' +
+        '<div class="req-fold-body">' +
+          (r.review ? '<div class="note">"' + escapeHtml(r.review) + '"</div>' : '<p class="sub">후기 없음</p>') +
+          '<div class="req-foot"><span class="when">공개범위: ' + (visLabel[r.vis || 'private']) + (r.confirmedAt ? ' · 확인 ' + new Date(r.confirmedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric' }) : '') + '</span>' +
+            '<div class="req-foot-btns">' +
+              '<button type="button" class="card-btn approve" data-action="couple-confirm" data-id="' + escapeHtml(r.id) + '" style="flex:none;">' + (on ? '확인 취소' : '✅ 확인(카운트)') + '</button>' +
+              '<button type="button" class="card-btn" data-action="couple-vis" data-id="' + escapeHtml(r.id) + '" style="flex:none;">공개범위 변경</button>' +
+              '<button type="button" class="card-btn danger" data-action="couple-del" data-id="' + escapeHtml(r.id) + '" style="flex:none;">🗑 삭제</button>' +
+            '</div>' +
+          '</div>' +
+        '</div></details>';
+    }).join('');
+    var body = '<p class="sub">회원이 알려온 소개팅 성공 소식이에요. <b>확인 ' + confirmed + '</b>쌍이 공개 배너 "커플 탄생"에 반영돼요. 공개(익명)로 표시한 후기는 메인 화면에 노출돼요.</p>' +
+      (list.length ? rows : '<p class="sub">아직 신고된 커플이 없어요.</p>');
+    return '<details class="admin-fold" data-sec="couple"' + secOpenAttr('couple', false) + '><summary>💕 커플 성사<span class="pending-count">' + list.length + '</span></summary><div class="admin-fold-body">' + body + '</div></details>';
+  }
+  /* 메인 화면 공개 후기 카드: 관리자가 확인한 커플 중 공개(anon/public) 후기만 노출 */
+  function coupleReviewsHtml(state) {
+    var list = (state.coupleReports || []).filter(function (r) { return r.confirmed && r.review && (r.vis === 'public' || r.vis === 'anon'); })
+      .sort(function (a, b) { return (b.confirmedAt || b.at || '').localeCompare(a.confirmedAt || a.at || ''); }).slice(0, 6);
+    if (!list.length) return '';
+    var cards = list.map(function (r) {
+      var who = r.vis === 'public' ? ('— ' + escapeHtml(r.byNick || '') + '님' + (r.partner ? ' ↔ ' + escapeHtml(r.partner) + '님' : '')) : '— 익명 회원';
+      return '<div style="background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px;">' +
+        '<div style="font-size:0.92rem;">"' + escapeHtml(r.review) + '"</div>' +
+        '<div class="sub" style="text-align:right;margin:4px 0 0;">' + who + '</div>' +
+      '</div>';
+    }).join('');
+    return '<div class="live-banner" style="display:block;background:#fdeef4;border-color:#f4a9c7;color:#c2185b;">' +
+      '<div style="font-weight:800;margin-bottom:8px;">💕 여기서 맺어진 인연들</div>' + cards + '</div>';
   }
 
   /* 가입 추이 그래프 (사용량 통계 안에 삽입): 회원·주선자·전체(테스트 제외) 누적선. 데이터=entries.submittedAt (활동기록과 무관) */
@@ -5688,7 +5730,7 @@
       (listReqs.length ? allReqItems : reqEmpty) +
       '<p class="sub" id="req-search-empty" hidden>검색 결과가 없어요.</p>', false, 'active');
     var secHtml = {
-      usage: usageStatsHtml(state), connlog: connLogHtml(state), pending: pendingSection, held: heldSection, editrev: editRevSection,
+      usage: usageStatsHtml(state), connlog: connLogHtml(state), couple: coupleSectionHtml(state), pending: pendingSection, held: heldSection, editrev: editRevSection,
       deaclist: deacListSection, dellog: delLogSection,
       active: activeReqSection, adminmsg: adminMsgSection,
       cap: capSection, seen: seenSection, log: logSection
@@ -5858,13 +5900,15 @@
     /* 누적 연결 = 연결 이력(connLog) 총 개수(해제됨 포함) → 배너와 이력이 항상 일치. 해제해도 유지, 요청함에서 대화 요청 완전삭제 시에만 감소. connLog 없으면 구식 폴백 */
     var connNow = (state.dateRequests || []).filter(function (r) { return (r.type || 'contact') === 'contact' && r.approved; }).length;
     var connCount = Array.isArray(state.connLog) ? state.connLog.length : Math.max((typeof state.connEver === 'number' ? state.connEver : 0), connNow);
+    var coupleCount = (state.coupleReports || []).filter(function (r) { return r.confirmed; }).length; /* 관리자 확인된 커플만 */
     var liveBits = [];
     if (newThisWeek > 0) liveBits.push('이번 주 새 멤버 <b>' + newThisWeek + '</b>명');
     if (connCount > 0) liveBits.push('누적 연결 <b>' + connCount + '</b>쌍');
+    if (coupleCount > 0) liveBits.push('🎉 커플 탄생 <b>' + coupleCount + '</b>쌍');
     if (!liveBits.length && liveMembers.length > 0) liveBits.push('함께하는 멤버 <b>' + liveMembers.length + '</b>명');
-    var liveBanner = liveBits.length
+    var liveBanner = (liveBits.length
       ? '<div class="live-banner">✨ ' + liveBits.join(' <span class="live-dot">·</span> ') + '</div>'
-      : '';
+      : '') + coupleReviewsHtml(state);
     /* 보류(보완 요청)된 신청자에게 모든 탭 상단에 눈에 띄는 안내 배너 */
     var myPendNow = currentUser ? findMyPending(state) : null;
     var heldBanner = (myPendNow && myPendNow.heldReason)
@@ -7104,6 +7148,99 @@
       }).then(function () {
         modalNotice('요청 접수', '관리자 확인 후 보관 상태로 전환돼요. 그때까지는 명단에 남아 있어요.');
       }).catch(function (err) { modalNotice('오류', '요청 실패: ' + (err.message || err)); });
+    });
+  }
+  /* ── 커플 성사 (소개팅 성공 신고) ──
+     회원 "좋은 인연을 만났어요" → coupleReports(미확인) + 후기·공개범위 + (선택)보관 요청. 관리자 확인 시 배너 카운트 반영. */
+  function handleReportCouple(id) {
+    var me = findMyEntry(currentState);
+    if (!me || me.id !== id) { modalNotice('안내', '본인 프로필에서만 알릴 수 있어요.'); return; }
+    var overlay = openModal(
+      '<h3>💕 좋은 인연을 만났어요</h3>' +
+      '<p class="modal-msg">축하해요! 소개팅이 잘 되셨다니 기뻐요 🎉 관리자에게 전해지고, 남겨주신 후기는 서비스에 큰 힘이 돼요.</p>' +
+      '<label style="display:block;font-weight:600;margin:4px 0 4px;">후기 <span style="color:var(--muted);font-weight:400;">(선택)</span></label>' +
+      '<textarea class="modal-input" id="cp-review" rows="3" maxlength="300" placeholder="예: 소개받고 대화 나눠보니 잘 통했어요. 감사해요!"></textarea>' +
+      '<label style="display:block;font-weight:600;margin:10px 0 4px;">후기 공개 범위</label>' +
+      '<div style="display:flex;flex-direction:column;gap:6px;font-size:0.92rem;">' +
+        '<label><input type="radio" name="cpvis" value="private" checked> 비공개 (관리자만 봐요)</label>' +
+        '<label><input type="radio" name="cpvis" value="anon"> 익명 공개 (닉네임 없이 후기만)</label>' +
+        '<label><input type="radio" name="cpvis" value="public"> 공개 (닉네임과 함께)</label>' +
+      '</div>' +
+      '<label style="display:block;font-weight:600;margin:10px 0 4px;">상대가 이 앱 회원인가요? <span style="color:var(--muted);font-weight:400;">(선택)</span></label>' +
+      '<input type="text" class="modal-input" id="cp-partner" maxlength="30" placeholder="상대 닉네임 (앱 밖이면 비워두세요)">' +
+      '<label style="display:flex;align-items:center;gap:8px;margin:12px 0 4px;font-size:0.92rem;"><input type="checkbox" id="cp-hide" checked> 이제 명단에서 내 프로필을 내려둘게요 (보관)</label>' +
+      '<div class="modal-actions">' +
+        '<button type="button" class="card-btn" id="cp-cancel">취소</button>' +
+        '<button type="button" class="card-btn primary" id="cp-ok">보내기</button>' +
+      '</div>'
+    );
+    overlay.querySelector('#cp-cancel').addEventListener('click', function () { closeModal(overlay); });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(overlay); });
+    overlay.querySelector('#cp-ok').addEventListener('click', function () {
+      var review = (overlay.querySelector('#cp-review').value || '').trim();
+      var visEl = overlay.querySelector('input[name="cpvis"]:checked');
+      var vis = visEl ? visEl.value : 'private';
+      var partner = (overlay.querySelector('#cp-partner').value || '').trim();
+      var hide = overlay.querySelector('#cp-hide').checked;
+      closeModal(overlay);
+      var rec = { id: genId(), byId: me.id, byNick: me.nickname || '', partner: partner, review: review, vis: vis, at: new Date().toISOString(), confirmed: false };
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var list = Array.isArray(s.coupleReports) ? s.coupleReports.slice() : [];
+          list.push(rec);
+          if (list.length > 1000) list = list.slice(list.length - 1000);
+          var patch = { coupleReports: list };
+          if (hide && !me.deactivateRequested && !me.deactivated) {
+            patch.entries = (s.entries || []).map(function (e) {
+              if (e.id !== me.id) return e;
+              var c = JSON.parse(JSON.stringify(e)); c.deactivateRequested = true; c.deactivateReqAt = new Date().toISOString(); c.deactivateReason = '좋은 인연을 만났어요 (커플 성사)'; return c;
+            });
+          }
+          tx.update(stateRef, patch);
+        });
+      }).then(function () {
+        appendLog('couple', me.nickname || '회원', '커플 성사 신고' + (partner ? ' (상대: ' + partner + ')' : '') + (hide ? ' · 보관 요청' : ''));
+        notifyAdmin('💕 커플 성사!', (me.nickname || '회원') + '님이 좋은 인연을 만났다고 알려왔어요' + (review ? ': "' + review.slice(0, 40) + '"' : '.'));
+        return refreshNow();
+      }).then(function () {
+        modalNotice('감사해요 💕', '소식 잘 받았어요. 두 분의 앞날을 진심으로 응원할게요!' + (hide ? ' (명단 보관은 관리자 확인 후 적용돼요.)' : ''));
+      }).catch(function (err) { modalNotice('오류', '전송 실패: ' + ((err && err.message) || err)); });
+    });
+  }
+  function handleConfirmCouple(id) {
+    if (!isAdminUnlocked) return;
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var list = (s.coupleReports || []).map(function (r) { if (r.id !== id) return r; var c = Object.assign({}, r); c.confirmed = !r.confirmed; c.confirmedAt = c.confirmed ? new Date().toISOString() : null; return c; });
+        tx.update(stateRef, { coupleReports: list });
+      });
+    }).then(function () { appendLog('admin', '관리자', '커플 성사 확인 토글'); return refreshNow(); })
+      .catch(function (err) { modalNotice('오류', '실패: ' + ((err && err.message) || err)); });
+  }
+  function handleSetCoupleVis(id) {
+    if (!isAdminUnlocked) return;
+    var order = ['private', 'anon', 'public'];
+    db.runTransaction(function (tx) {
+      return tx.get(stateRef).then(function (doc) {
+        var s = doc.data();
+        var list = (s.coupleReports || []).map(function (r) { if (r.id !== id) return r; var c = Object.assign({}, r); c.vis = order[(order.indexOf(r.vis || 'private') + 1) % 3]; return c; });
+        tx.update(stateRef, { coupleReports: list });
+      });
+    }).then(function () { return refreshNow(); }).catch(function () {});
+  }
+  function handleDeleteCoupleReport(id) {
+    if (!isAdminUnlocked) return;
+    modalConfirm('기록 삭제', '이 커플 성사 기록을 삭제할까요? 카운트에서도 빠져요.', '삭제', 'danger').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var list = (s.coupleReports || []).filter(function (r) { return r.id !== id; });
+          tx.update(stateRef, { coupleReports: list });
+        });
+      }).then(function () { appendLog('admin', '관리자', '커플 성사 기록 삭제'); return refreshNow(); }).catch(function () {});
     });
   }
   /* 관리자: 프로필 수정 검토 완료 → editReviewAt 플래그 제거 (목록에서 사라짐) */
@@ -8609,6 +8746,10 @@
       else if (action === 'detail-pending') handleDetailPending(id);
       else if (action === 'edit') handleEdit(id);
       else if (action === 'withdraw-pending') handleWithdrawPending(id);
+      else if (action === 'report-couple') handleReportCouple(id);
+      else if (action === 'couple-confirm') { if (isAdminUnlocked) handleConfirmCouple(id); return; }
+      else if (action === 'couple-vis') { if (isAdminUnlocked) handleSetCoupleVis(id); return; }
+      else if (action === 'couple-del') { if (isAdminUnlocked) handleDeleteCoupleReport(id); return; }
       else if (action === 'cancel-request') handleCancelRequest(id);
       else if (action === 'user-approve') handleUserApproveRequest(id);
       else if (action === 'user-hold') handleUserHoldRequest(id);
