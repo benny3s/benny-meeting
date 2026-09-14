@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-14-333';
+  var APP_VERSION = '2026-09-14-334';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2620,13 +2620,15 @@
       }
       function renderList() {
         var q = searchInput.value.trim().toLowerCase();
-        var matches = pooled().filter(function (o) { return !q || o.search.indexOf(q) >= 0; });
+        var matches = pooled().filter(function (o) { return !q || o.search.indexOf(q) >= 0; })
+          .sort(function (a, b) { return (a.nickname || '').localeCompare(b.nickname || '', 'ko'); }); /* 가나다순 (검색은 고유번호도 매칭하되 화면엔 안 보임) */
         if (!matches.length) {
           listEl.innerHTML = '<div class="combo-empty">' + (mode === 'mm' ? '주선자 계정이 없어요. "새 주선자로 등록"을 이용하세요.' : '검색 결과가 없어요') + '</div>';
         } else {
           listEl.innerHTML = matches.map(function (o) {
+            var pendMark = o.uid ? '' : '<span style="color:var(--muted);font-size:0.78rem;margin-right:8px;">승인대기</span>'; /* 고유번호는 숨기고, 대기자만 표시 */
             return '<div class="login-item' + (o.id === selectedId ? ' sel' : '') + '" data-cid="' + escapeHtml(o.id) + '">' +
-              '<span style="color:var(--muted);font-size:0.8rem;font-variant-numeric:tabular-nums;margin-right:10px;">' + escapeHtml(o.uid || '승인대기') + '</span><b style="color:var(--ink);">' + escapeHtml(o.nickname) + '</b></div>';
+              pendMark + '<b style="color:var(--ink);">' + escapeHtml(o.nickname) + '</b></div>';
           }).join('');
         }
       }
