@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-14-329';
+  var APP_VERSION = '2026-09-14-330';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -7154,6 +7154,8 @@
         return;
       }
       var remainToday = typeLimit - sentTodayType; /* 이번 건 포함 남은 횟수 */
+      /* 실제 신청 노트 모달 — 아래 "사진 먼저 볼까요?" 게이트 뒤에서 호출 */
+      function proceedToNote() {
       var icon = isPhoto ? '📷' : '💌';
       /* 주선자가 친구 프로필로 전환해 대신 요청 중이면 예시 문구를 "친구 대신" 톤으로 */
       var isViaMm = !!(fromEntry.managedBy && fromEntry.managedBy === currentUser.id && !fromEntry.ownerSelf && isMatchmakerEntry(myAuthEntry(state)));
@@ -7211,6 +7213,25 @@
       }).catch(function (err) {
         modalNotice('오류', '요청에 실패했어요: ' + (err.message || err));
       });
+      } /* end proceedToNote */
+      /* 부드러운 확인: 대화 신청인데 아직 상대 사진을 못 봤고, 상대에게 사진이 있으면 → 사진 먼저 권유(막지 않음) */
+      if (!isPhoto && !canViewPhotoOf(state, fromEntry.id, toId) && photoCountOf(target) > 0) {
+        var pgOv = openModal(
+          '<h3>📷 사진을 먼저 보고 시작할까요?</h3>' +
+          '<p class="modal-msg">아직 <b>' + escapeHtml(target.nickname) + '</b>님의 사진을 보지 않았어요. 사진을 먼저 보면 서로 더 편하게 시작할 수 있어요. 그래도 괜찮다면 사진 없이 바로 대화를 신청할 수 있어요 🙂</p>' +
+          '<div class="modal-actions" style="flex-wrap:wrap;gap:6px;">' +
+            '<button type="button" class="card-btn" id="pg-cancel">취소</button>' +
+            '<button type="button" class="card-btn" id="pg-skip">사진 없이 대화 신청</button>' +
+            '<button type="button" class="card-btn primary" id="pg-photo">📷 사진 먼저 요청</button>' +
+          '</div>'
+        );
+        pgOv.querySelector('#pg-cancel').addEventListener('click', function () { closeModal(pgOv); });
+        pgOv.querySelector('#pg-photo').addEventListener('click', function () { closeModal(pgOv); handleRequest(toId, 'photo'); });
+        pgOv.querySelector('#pg-skip').addEventListener('click', function () { closeModal(pgOv); proceedToNote(); });
+        pgOv.addEventListener('click', function (e) { if (e.target === pgOv) closeModal(pgOv); });
+        return;
+      }
+      proceedToNote();
     });
   }
 
