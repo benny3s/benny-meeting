@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-15-343';
+  var APP_VERSION = '2026-09-15-344';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2485,11 +2485,8 @@
     var friends = subs.filter(function (e) { return !e.ownerSelf; });
     if (friends.length) return modalNotice('삭제 불가', '내가 관리하는 친구가 있어요. 친구를 각각 정리(독립 전환 또는 삭제)한 뒤에 계정을 삭제할 수 있어요.');
     var ownSelf = subs.find(function (e) { return e.ownerSelf; });
-    var msg = ownSelf
-      ? '주선자 계정과 내 소개팅 프로필(' + ownSelf.nickname + ')을 모두 삭제할까요? 되돌릴 수 없어요.'
-      : '주선자 계정을 삭제할까요? 되돌릴 수 없어요.';
-    modalConfirm('계정 삭제', msg, '삭제', 'danger').then(function (ok) {
-      if (!ok) return;
+    /* 실제 삭제(즉시) — 2단계 확인 뒤에만 실행 */
+    function doDelete() {
       var delIds = {}; delIds[me.id] = true; if (ownSelf) delIds[ownSelf.id] = true;
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
@@ -2508,6 +2505,30 @@
         activeTab = 'list'; paint(currentState);
         modalNotice('삭제 완료', '계정이 삭제되었어요.');
       }).catch(function (err) { modalNotice('오류', '삭제 실패: ' + (err.message || err)); });
+    }
+    /* 본인 프로필이 없는 빈 주선자 껍데기 → 잃을 게 없어 간단 확인 후 삭제 */
+    if (!ownSelf) {
+      modalConfirm('계정 삭제', '주선자 계정을 삭제할까요? 되돌릴 수 없어요.', '삭제', 'danger').then(function (ok) { if (ok) doDelete(); });
+      return;
+    }
+    /* 프로필이 있는 경우 → 전환 유도 + 2단계 확인 (실수로 프로필까지 지우는 것 방지) */
+    var ov = openModal(
+      '<h3>🗑 주선자 계정 삭제</h3>' +
+      '<p class="modal-msg">이 계정엔 내 소개팅 프로필 <b>' + escapeHtml(ownSelf.nickname) + '</b>이 들어 있어요.</p>' +
+      '<p class="modal-msg" style="background:#fce8e6;border:1px solid #e0a3a0;border-radius:8px;color:#8a2a24;padding:8px 10px;">삭제하면 <b>프로필·사진·요청·대화 기록이 모두 영구 삭제</b>돼요. 되돌리려면 <b>처음부터 다시 가입하고 관리자 승인</b>을 받아야 해요.</p>' +
+      '<p class="modal-msg">주선자만 그만두고 <b>프로필은 그대로 쓰고 싶다면</b> 아래 <b>일반 계정으로 전환</b>을 추천해요 (프로필 유지).</p>' +
+      '<div class="modal-actions" style="flex-wrap:wrap;gap:6px;">' +
+        '<button type="button" class="card-btn" id="dm-cancel">취소</button>' +
+        '<button type="button" class="card-btn danger" id="dm-del">그래도 삭제</button>' +
+        '<button type="button" class="card-btn primary" id="dm-convert">🙋 일반 계정으로 전환 (프로필 유지)</button>' +
+      '</div>'
+    );
+    ov.querySelector('#dm-cancel').addEventListener('click', function () { closeModal(ov); });
+    ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(ov); });
+    ov.querySelector('#dm-convert').addEventListener('click', function () { closeModal(ov); handleConvertToMember(); });
+    ov.querySelector('#dm-del').addEventListener('click', function () {
+      closeModal(ov);
+      modalConfirm('정말 삭제할까요? (마지막 확인)', escapeHtml(ownSelf.nickname) + ' 프로필과 모든 기록이 영구 삭제되고 되돌릴 수 없어요. 그래도 삭제할까요?', '영구 삭제', 'danger').then(function (ok) { if (ok) doDelete(); });
     });
   }
   /* 로그인 유지: localStorage에 저장해 기기에서 오래 유지 (로그아웃 전까지) */
