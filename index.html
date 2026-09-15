@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-15-342';
+  var APP_VERSION = '2026-09-15-343';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -6406,6 +6406,19 @@
       modalNotice('안내', '관리자가 아직 PIN을 설정하지 않았어요. 관리자에게 문의해주세요.');
       return;
     }
+    /* 익명 인증이 안 잡힌 세션(카톡/인앱 브라우저·사파리 시크릿 등)에서 제출하면 서버가 쓰기를 거부(Missing or insufficient permissions).
+       → 제출 전에 인증을 보장하고, 성공하면 다시 제출. 실패하면 정식 브라우저로 안내. */
+    try {
+      if (!firebase.auth().currentUser) {
+        var _sm0 = document.getElementById('status-msg');
+        if (_sm0) { _sm0.textContent = '연결 확인 중…'; _sm0.className = 'status-msg'; }
+        firebase.auth().signInAnonymously().then(function () { handleFormSubmit(); }).catch(function () {
+          var _sm = document.getElementById('status-msg');
+          if (_sm) { _sm.textContent = '연결 인증이 안 됐어요. 새로고침하거나 크롬·사파리(정식 브라우저)로 열어주세요. 카카오톡 등 인앱 브라우저에서는 제출이 막힐 수 있어요.'; _sm.className = 'status-msg error'; }
+        });
+        return;
+      }
+    } catch (e) {}
     /* 보류(보완 요청)된 신청을 수정·제출할 때 → 먼저 팝업으로 "관리자에게 전할 메시지"(필수)를 받고 재진입 */
     var _wasHeld = !!(editingEntryId && (state.pendingEntries || []).some(function (e) { return e.id === editingEntryId && e.heldReason; }));
     if (_wasHeld && _resubmitMsgPending == null) {
@@ -6705,7 +6718,13 @@
       }
     }).catch(function (err) {
       btn.disabled = false;
-      msg.textContent = '오류가 발생했어요: ' + (err.message || err);
+      var _code = (err && err.code) || '';
+      if (_code === 'permission-denied' || /insufficient permissions|permission-denied/i.test((err && err.message) || '')) {
+        try { firebase.auth().signInAnonymously().catch(function () {}); } catch (e) {} /* 다음 시도를 위해 인증 재시도 */
+        msg.textContent = '연결 인증이 안 됐어요. 새로고침 후 다시 제출해주세요. 계속 안 되면 크롬·사파리(정식 브라우저)로 열어주세요 (카카오톡 등 인앱 브라우저에서는 막힐 수 있어요).';
+      } else {
+        msg.textContent = '오류가 발생했어요: ' + (err.message || err);
+      }
       msg.className = 'status-msg error';
     });
   }
@@ -9841,11 +9860,14 @@
     firebase.auth().onAuthStateChanged(function (user) {
       if (user) startApp();
     });
-    firebase.auth().signInAnonymously().catch(function (e) {
-      /* 익명 인증이 콘솔에서 아직 안 켜졌거나 실패해도 앱은 뜨도록 */
-      try { console.warn('anonymous auth unavailable:', e && e.code); } catch (e2) {}
-      startApp();
-    });
+    /* 익명 인증 재시도(일시 실패 자가복구) — LTE·인앱 브라우저 등에서 첫 시도가 실패해도 몇 번 더 시도 */
+    (function anonSignIn(tries) {
+      firebase.auth().signInAnonymously().catch(function (e) {
+        if (tries > 0) { setTimeout(function () { anonSignIn(tries - 1); }, 1500); return; }
+        try { console.warn('anonymous auth unavailable:', e && e.code); } catch (e2) {}
+        startApp(); /* 끝내 실패해도 앱은 뜨도록(읽기 캐시). 쓰기 시 인증 가드가 안내 */
+      });
+    })(3);
   } catch (e) {
     startApp();
   }
