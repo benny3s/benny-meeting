@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-15-341';
+  var APP_VERSION = '2026-09-15-342';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -5103,7 +5103,6 @@
       var ageStr = e.birthYear ? (String(e.birthYear).slice(2) + '년생') : '-';
       var heldNote = e.heldReason ? '<div class="p-meta" style="color:var(--accent);margin-top:3px;white-space:pre-wrap;">📌 보류 사유: ' + escapeHtml(e.heldReason) + '</div>' : '';
       var holdBtn = '<button type="button" class="card-btn" data-action="hold-pending" data-id="' + escapeHtml(e.id) + '">' + (e.heldReason ? '보류 사유 수정' : '보류') + '</button>';
-      var smsHeldBtn = ''; /* 문자는 요청함/보류에서 빼고 회원 대화(openAdminChat) 안으로 이동 */
       var heldChip = e.heldReason ? ' <span class="chip" style="background:var(--accent-soft);color:var(--accent);">📌 보류</span>' : '';
       var newChip = e.heldReason ? '' : '<span class="chip" style="background:#e8f0fe;color:#1a73e8;">🆕 신규</span>';
       if (e.isMatchmaker) {
@@ -5115,7 +5114,8 @@
             '<button type="button" class="card-btn" data-action="detail-pending" data-id="' + escapeHtml(e.id) + '">상세 보기</button>' +
             '<button type="button" class="card-btn approve" data-action="approve" data-id="' + escapeHtml(e.id) + '">승인</button>' +
             holdBtn +
-            smsHeldBtn +
+            '<button type="button" class="card-btn" data-action="admin-msg" data-id="' + escapeHtml(e.id) + '" style="background:#e8f0fe;border-color:#c3d7fb;color:#1a73e8;">💬 대화·문자</button>' +
+            '<button type="button" class="card-btn" data-action="edit" data-id="' + escapeHtml(e.id) + '">✏️ 수정</button>' +
             '<button type="button" class="card-btn danger" data-action="reject" data-id="' + escapeHtml(e.id) + '">거절</button>' +
           '</div>'
         );
@@ -5146,7 +5146,8 @@
           '<button type="button" class="card-btn" data-action="detail-pending" data-id="' + escapeHtml(e.id) + '">상세 보기</button>' +
           '<button type="button" class="card-btn approve" data-action="approve" data-id="' + escapeHtml(e.id) + '">승인</button>' +
           holdBtn +
-          smsHeldBtn +
+          '<button type="button" class="card-btn" data-action="admin-msg" data-id="' + escapeHtml(e.id) + '" style="background:#e8f0fe;border-color:#c3d7fb;color:#1a73e8;">💬 대화·문자</button>' +
+          '<button type="button" class="card-btn" data-action="edit" data-id="' + escapeHtml(e.id) + '">✏️ 수정</button>' +
           '<button type="button" class="card-btn danger" data-action="reject" data-id="' + escapeHtml(e.id) + '">거절</button>' +
         '</div>'
       );
