@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-15-345';
+  var APP_VERSION = '2026-09-15-346';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1430,6 +1430,37 @@
         });
       });
     });
+  }
+
+  /* 내 휴대폰 문자앱으로 바로 보내기 (무료·내 번호) — 번호는 관리자 키로 복호화해 sms: 링크 구성. Solapi(서버·유료) 대신 수동 발송용 */
+  function openSmsNative(entryId) {
+    if (!isAdminUnlocked || !adminPrivateKey) { modalNotice('안내', '관리자 모드에서만 가능해요.'); return; }
+    var ent = ((currentState.entries || []).concat(currentState.pendingEntries || [])).find(function (e) { return e.id === entryId; });
+    if (!ent) { modalNotice('안내', '대상을 찾을 수 없어요.'); return; }
+    var nick = ent.nickname || '회원';
+    if (!ent.contactEnc) { modalNotice('연락처 없음', nick + '님의 연락처가 저장돼 있지 않아 문자를 보낼 수 없어요.'); return; }
+    decryptWithAdmin(adminPrivateKey, ent.contactEnc).then(function (raw) {
+      var num = (raw || '').replace(/[^0-9]/g, '');
+      if (!num) { modalNotice('오류', '연락처 복호화에 실패했어요.'); return; }
+      var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+      var sep = isIOS ? '&' : '?';
+      var ov = openModal(
+        '<h3>📱 ' + escapeHtml(nick) + '님에게 문자</h3>' +
+        '<p class="modal-msg">내 <b>휴대폰 문자앱</b>이 수신자·내용까지 채워진 채 열려요. 확인·수정 후 <b>직접 전송</b>하면 돼요. <b>요금 없음</b>(내 번호로 발송).</p>' +
+        '<textarea class="modal-input" id="sn-text" rows="4" maxlength="500">' + escapeHtml(smsTemplate('custom', nick)) + '</textarea>' +
+        '<p class="modal-msg" style="color:var(--muted);font-size:0.78rem;margin:6px 0 0;">※ PC에서는 문자앱이 없어 안 열릴 수 있어요. 휴대폰에서 눌러주세요.</p>' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="card-btn" id="sn-cancel">닫기</button>' +
+          '<a id="sn-open" class="card-btn primary" href="#" style="text-decoration:none;text-align:center;">📱 문자앱 열기</a>' +
+        '</div>'
+      );
+      var ta = ov.querySelector('#sn-text'), a = ov.querySelector('#sn-open');
+      function upd() { a.href = 'sms:' + num + sep + 'body=' + encodeURIComponent(ta.value || ''); }
+      upd(); ta.addEventListener('input', upd);
+      a.addEventListener('click', function () { try { appendLog('sms', '관리자', '내 폰 문자 → ' + nick); } catch (e) {} setTimeout(function () { closeModal(ov); }, 400); });
+      ov.querySelector('#sn-cancel').addEventListener('click', function () { closeModal(ov); });
+      ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(ov); });
+    }).catch(function () { modalNotice('오류', '연락처 복호화에 실패했어요.'); });
   }
 
   /* ---- utils ---- */
@@ -3065,13 +3096,13 @@
       '<textarea class="modal-input" id="ac-text" rows="2" maxlength="1000" placeholder="메시지 입력 (최대 1000자)"></textarea>' +
       '<div class="modal-actions">' +
         '<button type="button" class="card-btn" id="modal-cancel">닫기</button>' +
-        (SMS_ENABLED ? '<button type="button" class="card-btn" id="ac-sms" style="background:#e8f0fe;border-color:#c3d7fb;color:#1a73e8;">📱 문자 보내기</button>' : '') +
+        '<button type="button" class="card-btn" id="ac-sms" style="background:#e8f0fe;border-color:#c3d7fb;color:#1a73e8;">📱 문자 (내 폰)</button>' +
         '<button type="button" class="card-btn primary" id="ac-send">보내기</button>' +
       '</div>'
     );
     overlay.classList.add('wide-modal');
     var _acSms = overlay.querySelector('#ac-sms');
-    if (_acSms) _acSms.addEventListener('click', function () { sendSmsFlow(entryId, 'custom'); }); /* 앱 채팅 대신 문자로 (푸시 안 받는 사람용) */
+    if (_acSms) _acSms.addEventListener('click', function () { openSmsNative(entryId); }); /* 내 폰 문자앱으로 (무료). Solapi 서버발송은 sendSmsFlow 로 남겨둠(자동화·070용) */
     function draw() {
       var thread = threadFor(currentState, entryId, 'admin');
       var el = overlay.querySelector('#ac-body');
