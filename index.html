@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-15-340';
+  var APP_VERSION = '2026-09-15-341';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3044,10 +3044,13 @@
       '<textarea class="modal-input" id="ac-text" rows="2" maxlength="1000" placeholder="메시지 입력 (최대 1000자)"></textarea>' +
       '<div class="modal-actions">' +
         '<button type="button" class="card-btn" id="modal-cancel">닫기</button>' +
+        (SMS_ENABLED ? '<button type="button" class="card-btn" id="ac-sms" style="background:#e8f0fe;border-color:#c3d7fb;color:#1a73e8;">📱 문자 보내기</button>' : '') +
         '<button type="button" class="card-btn primary" id="ac-send">보내기</button>' +
       '</div>'
     );
     overlay.classList.add('wide-modal');
+    var _acSms = overlay.querySelector('#ac-sms');
+    if (_acSms) _acSms.addEventListener('click', function () { sendSmsFlow(entryId, 'custom'); }); /* 앱 채팅 대신 문자로 (푸시 안 받는 사람용) */
     function draw() {
       var thread = threadFor(currentState, entryId, 'admin');
       var el = overlay.querySelector('#ac-body');
@@ -5100,7 +5103,7 @@
       var ageStr = e.birthYear ? (String(e.birthYear).slice(2) + '년생') : '-';
       var heldNote = e.heldReason ? '<div class="p-meta" style="color:var(--accent);margin-top:3px;white-space:pre-wrap;">📌 보류 사유: ' + escapeHtml(e.heldReason) + '</div>' : '';
       var holdBtn = '<button type="button" class="card-btn" data-action="hold-pending" data-id="' + escapeHtml(e.id) + '">' + (e.heldReason ? '보류 사유 수정' : '보류') + '</button>';
-      var smsHeldBtn = (SMS_ENABLED && e.heldReason) ? '<button type="button" class="card-btn" data-action="sms-send" data-id="' + escapeHtml(e.id) + '" data-kind="held" style="background:#fff3e0;border-color:#f0c98a;">📱 보류 안내 문자</button>' : '';
+      var smsHeldBtn = ''; /* 문자는 요청함/보류에서 빼고 회원 대화(openAdminChat) 안으로 이동 */
       var heldChip = e.heldReason ? ' <span class="chip" style="background:var(--accent-soft);color:var(--accent);">📌 보류</span>' : '';
       var newChip = e.heldReason ? '' : '<span class="chip" style="background:#e8f0fe;color:#1a73e8;">🆕 신규</span>';
       if (e.isMatchmaker) {
@@ -5330,8 +5333,7 @@
       } else if (st === 'rejected') {
         actionBtns = '<span class="chip" style="background:#f1f3f4;color:#5f6368;">' + (r.rejectedBy === 'user' ? '본인 거절' : '관리자 거절') + '</span>' + manageBtns;
       } else {
-        actionBtns = decideBtns + manageBtns +
-          (SMS_ENABLED && toId ? '<button type="button" class="card-btn" data-action="sms-send" data-id="' + escapeHtml(toId) + '" data-kind="req" style="flex:none;">📱 상대에게 문자</button>' : '');
+        actionBtns = decideBtns + manageBtns;
       }
       /* 요청 나이: 24시간 이내=진한녹색 · 48시간 이내=연한녹색 · 108시간 이내=연회색 · 그 이상=진회색.
          명단 접속칩과 완전히 동일한 경과시간 기준(elapsedBucket) */
@@ -8747,7 +8749,7 @@
       else if (action === 'detail-pending') handleDetailPending(id);
       else if (action === 'edit') handleEdit(id);
       else if (action === 'withdraw-pending') handleWithdrawPending(id);
-      else if (action === 'applicant-inquiry') { openGuestMsgModal({ title: '💬 관리자에게 문의', intro: '승인·보류 관련해 궁금한 점이나 요청을 남겨주세요. 답변드릴 수 있게 <b>이름·연락처</b>도 함께 남겨주세요.' }); return; }
+      else if (action === 'applicant-inquiry') { openMemberMsgCenter(); return; } /* 대기·보류 신청자도 로그인 상태 → 로그인 Q&A로 바로 남김 (이름·연락처 재입력 없음) */
       else if (action === 'report-couple') handleReportCouple(id);
       else if (action === 'couple-confirm') { if (isAdminUnlocked) handleConfirmCouple(id); return; }
       else if (action === 'couple-vis') { if (isAdminUnlocked) handleSetCoupleVis(id); return; }
