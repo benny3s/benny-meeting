@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-15-339';
+  var APP_VERSION = '2026-09-15-340';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4653,6 +4653,7 @@
     if (!me && myPending) {
       var editBtn = '<button type="button" class="submit-btn" data-action="edit" data-id="' + escapeHtml(myPending.id) + '" style="width:100%;box-sizing:border-box;margin-top:12px;">✏️ 신청서 수정해서 다시 제출</button>';
       var cancelBtn = '<button type="button" class="card-btn danger" data-action="withdraw-pending" data-id="' + escapeHtml(myPending.id) + '" style="width:100%;box-sizing:border-box;margin-top:8px;">🗑 신청 취소(철회)</button>';
+      var inquiryBtn = '<button type="button" class="card-btn" data-action="applicant-inquiry" style="width:100%;box-sizing:border-box;margin-top:8px;">💬 관리자에게 문의 남기기</button>';
       var waitBox;
       if (myPending.heldReason) {
         waitBox = '<div class="mine-status-box">' +
@@ -4660,7 +4661,7 @@
             '<h3>신청 보류 안내 (프로필 보완이 필요해요)</h3>' +
             '<div class="mine-note" style="text-align:left;white-space:pre-wrap;margin:8px 0;">' + escapeHtml(myPending.heldReason) + '</div>' +
             '<p class="sub">관리자가 위 사유로 <b>보완을 요청</b>했어요. 프로필을 수정하고, 다시 제출할 때 <b>변경 내용을 메시지로 남겨</b> 주세요. (승인되면 명단에 올라가요)</p>' +
-            editBtn +
+            editBtn + inquiryBtn +
           '</div>';
       } else {
         waitBox = '<div class="mine-status-box">' +
@@ -4668,7 +4669,7 @@
             '<h3>승인 대기 중이에요</h3>' +
             '<p class="sub">관리자(베니)가 신청서를 확인하고 있어요. 승인되면 명단에 등록되고, 사진 요청·대화 신청을 주고받을 수 있어요.</p>' +
             '<p class="sub" style="margin-top:8px;">신청일: ' + fmtDate(myPending.submittedAt) + '</p>' +
-            editBtn + cancelBtn +
+            editBtn + inquiryBtn + cancelBtn +
           '</div>';
       }
       return '<div class="admin-panel"><h2>메시지함</h2>' + waitBox + '</div>';
@@ -8746,6 +8747,7 @@
       else if (action === 'detail-pending') handleDetailPending(id);
       else if (action === 'edit') handleEdit(id);
       else if (action === 'withdraw-pending') handleWithdrawPending(id);
+      else if (action === 'applicant-inquiry') { openGuestMsgModal({ title: '💬 관리자에게 문의', intro: '승인·보류 관련해 궁금한 점이나 요청을 남겨주세요. 답변드릴 수 있게 <b>이름·연락처</b>도 함께 남겨주세요.' }); return; }
       else if (action === 'report-couple') handleReportCouple(id);
       else if (action === 'couple-confirm') { if (isAdminUnlocked) handleConfirmCouple(id); return; }
       else if (action === 'couple-vis') { if (isAdminUnlocked) handleSetCoupleVis(id); return; }
