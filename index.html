@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-15-344';
+  var APP_VERSION = '2026-09-15-345';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -2515,11 +2515,11 @@
     var ov = openModal(
       '<h3>🗑 주선자 계정 삭제</h3>' +
       '<p class="modal-msg">이 계정엔 내 소개팅 프로필 <b>' + escapeHtml(ownSelf.nickname) + '</b>이 들어 있어요.</p>' +
-      '<p class="modal-msg" style="background:#fce8e6;border:1px solid #e0a3a0;border-radius:8px;color:#8a2a24;padding:8px 10px;">삭제하면 <b>프로필·사진·요청·대화 기록이 모두 영구 삭제</b>돼요. 되돌리려면 <b>처음부터 다시 가입하고 관리자 승인</b>을 받아야 해요.</p>' +
-      '<p class="modal-msg">주선자만 그만두고 <b>프로필은 그대로 쓰고 싶다면</b> 아래 <b>일반 계정으로 전환</b>을 추천해요 (프로필 유지).</p>' +
+      '<p class="modal-msg" style="background:#fce8e6;border:1px solid #e0a3a0;border-radius:8px;color:#8a2a24;padding:8px 10px;">삭제하면 <b>프로필·사진·요청·대화 기록이 모두 사라져요.</b> 실수 방지를 위해 <b>바로 삭제되지 않고 관리자 확인(승인) 후</b> 삭제돼요.</p>' +
+      '<p class="modal-msg">주선자만 그만두고 <b>프로필은 그대로 쓰고 싶다면</b> 아래 <b>일반 계정으로 전환</b>을 추천해요 (프로필 유지, 즉시 적용).</p>' +
       '<div class="modal-actions" style="flex-wrap:wrap;gap:6px;">' +
         '<button type="button" class="card-btn" id="dm-cancel">취소</button>' +
-        '<button type="button" class="card-btn danger" id="dm-del">그래도 삭제</button>' +
+        '<button type="button" class="card-btn danger" id="dm-del">그래도 삭제 요청</button>' +
         '<button type="button" class="card-btn primary" id="dm-convert">🙋 일반 계정으로 전환 (프로필 유지)</button>' +
       '</div>'
     );
@@ -2528,7 +2528,7 @@
     ov.querySelector('#dm-convert').addEventListener('click', function () { closeModal(ov); handleConvertToMember(); });
     ov.querySelector('#dm-del').addEventListener('click', function () {
       closeModal(ov);
-      modalConfirm('정말 삭제할까요? (마지막 확인)', escapeHtml(ownSelf.nickname) + ' 프로필과 모든 기록이 영구 삭제되고 되돌릴 수 없어요. 그래도 삭제할까요?', '영구 삭제', 'danger').then(function (ok) { if (ok) doDelete(); });
+      requestDeletion(ownSelf.id); /* 즉시 삭제 대신 삭제 요청 → 관리자 승인 (승인 시 빈 주선자 껍데기도 함께 정리) */
     });
   }
   /* 로그인 유지: localStorage에 저장해 기기에서 오래 유지 (로그아웃 전까지) */
@@ -7109,18 +7109,26 @@
       db.runTransaction(function (tx) {
         return tx.get(stateRef).then(function (doc) {
           var s = doc.data();
-          var newEntries = (s.entries || []).filter(function (e) { return e.id !== id; });
-          var newRequests = (s.dateRequests || []).filter(function (r) { return r.toId !== id && r.fromId !== id; });
+          var delSet = {}; delSet[id] = true;
+          /* 이 프로필이 주선자의 '본인' 프로필이고, 삭제 후 그 주선자가 관리하는 다른 프로필이 없으면 → 빈 주선자 껍데기도 함께 삭제 */
+          if (entry.managedBy && entry.ownerSelf) {
+            var stillManaged = (s.entries || []).some(function (e) { return e.id !== id && e.managedBy === entry.managedBy; });
+            if (!stillManaged) delSet[entry.managedBy] = true;
+          }
+          var newEntries = (s.entries || []).filter(function (e) { return !delSet[e.id]; });
+          var newRequests = (s.dateRequests || []).filter(function (r) { return !delSet[r.toId] && !delSet[r.fromId]; });
+          var newJoin = (s.joinRequests || []).filter(function (j) { return !delSet[j.fromId] && !delSet[j.toId]; });
           /* 삭제 이력 누적 — 1년 지난 항목 정리 + 최근 200건까지 */
           var dl = (s.deletedLog || []).concat([tomb]);
           var cutoff = Date.now() - 365 * 86400000;
           dl = dl.filter(function (t) { return !t.deletedAt || Date.parse(t.deletedAt) >= cutoff; });
           if (dl.length > 200) dl = dl.slice(dl.length - 200);
-          tx.update(stateRef, { entries: newEntries, dateRequests: newRequests, deletedLog: dl });
+          tx.update(stateRef, { entries: newEntries, dateRequests: newRequests, joinRequests: newJoin, deletedLog: dl });
         });
       }).then(function () {
         photosRef.doc(id).delete().catch(function () {});
         delete photoCache[id];
+        if (entry.managedBy && entry.ownerSelf) { try { photosRef.doc(entry.managedBy).delete().catch(function () {}); pushTokensRef.doc(entry.managedBy).delete().catch(function () {}); } catch (e) {} } /* 껍데기 정리 */
         appendLog('admin', '관리자', '삭제 요청 승인 · ' + entry.nickname);
         return refreshNow();
       }).then(function () {
