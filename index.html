@@ -910,7 +910,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-16-356';
+  var APP_VERSION = '2026-09-17-357';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -9416,14 +9416,11 @@
       if (!currentUser) restoreSession(state);
       checkVersion(state);
 
-      if (prevPendingCount >= 0 && state.pendingEntries.length > prevPendingCount) {
-        showNotification('새 접수!', '새로운 인연 신청서가 도착했어요. (' + state.pendingEntries.length + '건 대기중)');
-      }
-      if (prevRequestCount >= 0 && state.dateRequests.length > prevRequestCount) {
-        showNotification('새 요청!', '새로운 사진 요청·대화 신청이 도착했어요.');
-      }
-      prevPendingCount = state.pendingEntries.length;
-      prevRequestCount = state.dateRequests.length;
+      /* [제거] 예전엔 여기서 pendingEntries/dateRequests 길이가 늘면 로컬 알림을 띄웠는데,
+         이는 "받는 사람"과 무관하게 앱을 켜 둔 모든 회원에게 브로드캐스트돼서
+         (누가·누구에게 요청하든) 관계없는 사람에게 "새로운 사진 요청·대화 신청이 도착했어요" 팬텀 알림이 갔다.
+         → 열어봐도 메시지함엔 아무것도 없는 문제. 개인별 알림은 FCM 푸시(onStateChange→notifyRecipient, 받는 사람만)
+         와 인앱 '새 소식' 팝업(collectNews, 본인 것만)이 이미 정확히 담당하므로 이 브로드캐스트는 삭제. */
 
       currentState = state;
       decryptAllAdminData(state).then(function () {
