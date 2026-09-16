@@ -907,7 +907,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-16-350';
+  var APP_VERSION = '2026-09-16-351';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3416,15 +3416,15 @@
     if (r.userApproved) return 'user_approved';
     return 'pending';
   }
-  /* 내가(fromId) 상대(toId)에게 보낸 이 유형(type)의 최신 요청 상태 — 카드에 "대기중/거절됨" 표시용. 없으면 null */
-  function myReqStatusTo(state, fromId, toId, type) {
+  /* 내가(fromId) 상대(toId)에게 보낸 이 유형(type)의 최신 요청 객체 — 카드에 "대기중/거절됨·다시요청" 표시용. 없으면 null (숨긴 것 제외) */
+  function myLatestReqTo(state, fromId, toId, type) {
     if (!fromId || !toId) return null;
     var rs = (state.dateRequests || []).filter(function (r) {
       return r.fromId === fromId && r.toId === toId && (r.type || 'contact') === type && (r.hiddenBy || []).indexOf(fromId) < 0;
     });
     if (!rs.length) return null;
     rs.sort(function (a, b) { return (b.submittedAt || '').localeCompare(a.submittedAt || ''); });
-    return reqStatus(rs[0]);
+    return rs[0];
   }
   function statusLabel(st) {
     return st === 'approved' ? '승인됨' : st === 'rejected' ? '거절됨' : st === 'held' ? '보류 중' : st === 'user_approved' ? '본인 승인' : '대기중';
@@ -3795,9 +3795,10 @@
     var photoBtn;
     if (canSeePhoto) photoBtn = '<button type="button" class="card-btn approve" data-action="gallery" data-id="' + escapeHtml(entry.id) + '">📷 사진 볼 수 있어요</button>';
     else {
-      var _ps = viewer ? myReqStatusTo(state, viewer.id, entry.id, 'photo') : null;
+      var _pr = viewer ? myLatestReqTo(state, viewer.id, entry.id, 'photo') : null;
+      var _ps = _pr ? reqStatus(_pr) : null;
       if (_ps === 'pending' || _ps === 'held' || _ps === 'user_approved') photoBtn = _pendChip('📷 요청 대기중');
-      else if (_ps === 'rejected') photoBtn = _rejChip('📷 사진 거절됨');
+      else if (_ps === 'rejected') photoBtn = '<button type="button" class="card-btn" data-action="reapply" data-id="' + escapeHtml(_pr.id) + '" style="background:#f6e9e7;color:#c5221f;border-color:#e0a3a0;">📷 거절됨 · 다시 요청</button>';
       else photoBtn = '<button type="button" class="card-btn orange" data-action="request-photo" data-id="' + escapeHtml(entry.id) + '">📷 사진 요청</button>';
     }
     /* 대화 신청(구 번호 요청): 성사되면 앱 내 채팅. 이미 성사면 "채팅하기" */
@@ -3805,9 +3806,10 @@
     var dateBtn;
     if (matched) dateBtn = '<button type="button" class="card-btn approve" data-action="dm-chat" data-id="' + escapeHtml(entry.id) + '">💬 채팅하기</button>';
     else {
-      var _cs = viewer ? myReqStatusTo(state, viewer.id, entry.id, 'contact') : null;
+      var _cr = viewer ? myLatestReqTo(state, viewer.id, entry.id, 'contact') : null;
+      var _cs = _cr ? reqStatus(_cr) : null;
       if (_cs === 'pending' || _cs === 'held' || _cs === 'user_approved') dateBtn = _pendChip('💌 대화 대기중');
-      else if (_cs === 'rejected') dateBtn = _rejChip('💌 대화 거절됨');
+      else if (_cs === 'rejected') dateBtn = '<button type="button" class="card-btn" data-action="reapply" data-id="' + escapeHtml(_cr.id) + '" style="background:#f6e9e7;color:#c5221f;border-color:#e0a3a0;">💌 거절됨 · 다시 요청</button>';
       else dateBtn = '<button type="button" class="card-btn primary" data-action="request-contact" data-id="' + escapeHtml(entry.id) + '">💌 대화 신청</button>';
     }
     /* 같은 주선자 소속(형제)끼리는 사진·대화 요청 불가 — 임시 PIN으로 직접 로그인한 경우도 포함 */
@@ -4021,7 +4023,7 @@
     overlay.classList.add('card-detail-modal');
     /* 관리자: 알람 설정 여부를 pushTokens에서 조회해 채움 */
     if (isAdminUnlocked) fillNotifStatus(entry.id);
-    var closeActions = ['edit', 'delete', 'admin-manage', 'request-photo', 'request-contact', 'detail', 'card-detail'];
+    var closeActions = ['edit', 'delete', 'admin-manage', 'request-photo', 'request-contact', 'reapply', 'detail', 'card-detail'];
     overlay.addEventListener('click', function (e) {
       if (e.target === overlay) { closeModal(overlay); return; }
       if (e.target.closest('#card-detail-close')) { closeModal(overlay); return; }
@@ -4901,13 +4903,16 @@
         '</details>'
       );
     }).join('');
+    /* 숨긴(내역 삭제한) 요청 복구 — 삭제는 완전삭제가 아니라 숨김이라 되돌릴 수 있음 */
+    var _hiddenMine = reqs.filter(function (r) { return (r.fromId === me.id || r.toId === me.id) && (r.hiddenBy || []).indexOf(me.id) >= 0; }).length;
+    if (_hiddenMine) sections += '<div class="mine-section" style="text-align:right;padding:2px 0;"><button type="button" class="card-btn" data-action="restore-hidden" style="flex:none;background:var(--card);color:var(--muted);font-size:0.82rem;">🗑 숨긴 내역 ' + _hiddenMine + '건 복구</button></div>';
     var thread = threadFor(state, me.id, 'user');
     var hasUnreadAdmin = thread.some(function (m) { return m.from === 'admin' && (m.at || '') > (me.mineSeenAt || ''); });
     var msgBody = thread.length
       ? thread.map(function (m) { return msgLineHtml(m, 'user'); }).join('')
       : '<p class="sub" style="margin:0;">아직 관리자와 주고받은 메시지가 없어요.</p>';
     var msgSection =
-      '<details class="mine-section"' + (thread.length ? ' open' : '') + '>' +
+      '<details class="mine-section"' + (hasUnreadAdmin ? ' open' : '') + '>' + /* 새 관리자 메시지 있을 때만 펼침, 아니면 접힘(공간 절약) */
         '<summary style="cursor:pointer;font-weight:700;list-style:revert;">💬 관리자 메시지<span class="count' + (hasUnreadAdmin ? ' blink' : '') + '">' + thread.length + '</span></summary>' +
         '<div style="margin-top:8px;">' +
           msgBody +
@@ -8304,7 +8309,7 @@
     if (!me) return modalNotice('로그인 필요', '먼저 로그인해주세요.');
     var req = (state.dateRequests || []).find(function (r) { return r.id === id; });
     if (!req || (req.fromId !== me.id && req.toId !== me.id)) return;
-    modalConfirm('내역 삭제', '이 내역을 목록에서 삭제할까요?').then(function (ok) {
+    modalConfirm('내역 삭제(숨김)', '이 내역을 목록에서 숨길까요?\n(완전 삭제가 아니라 숨김이라, 아래 "숨긴 내역 복구"로 되돌릴 수 있어요. 다시 요청은 삭제 안 해도 카드의 "다시 요청"으로 가능해요.)', '숨기기').then(function (ok) {
       if (!ok) return;
       /* 즉시 화면에서 숨김 (서버 재조회 전에 바로 사라지게) */
       try {
@@ -8333,6 +8338,30 @@
       }).catch(function (err) {
         modalNotice('오류', '삭제에 실패했어요: ' + (err.message || err));
       });
+    });
+  }
+  /* 내가 숨긴(내역 삭제한) 요청을 모두 되돌리기 — hiddenBy에서 내 id 제거 */
+  function handleRestoreHidden() {
+    var me = findMyEntry(currentState);
+    if (!me) return modalNotice('로그인 필요', '먼저 로그인해주세요.');
+    var n = (currentState.dateRequests || []).filter(function (r) { return (r.fromId === me.id || r.toId === me.id) && (r.hiddenBy || []).indexOf(me.id) >= 0; }).length;
+    if (!n) return modalNotice('안내', '숨긴 내역이 없어요.');
+    modalConfirm('숨긴 내역 복구', '숨긴 요청 ' + n + '건을 다시 목록에 표시할까요?', '복구', 'primary').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var reqs = (s.dateRequests || []).map(function (r) {
+            if ((r.fromId !== me.id && r.toId !== me.id) || (r.hiddenBy || []).indexOf(me.id) < 0) return r;
+            var c = JSON.parse(JSON.stringify(r));
+            c.hiddenBy = (c.hiddenBy || []).filter(function (x) { return x !== me.id; });
+            return c;
+          });
+          tx.update(stateRef, { dateRequests: reqs });
+        });
+      }).then(function () { appendLog('request', me.nickname, '숨긴 요청 복구 ' + n + '건'); return refreshNow(); })
+        .then(function () { modalNotice('복구 완료', '숨긴 내역을 다시 표시했어요.'); })
+        .catch(function (err) { modalNotice('오류', '복구 실패: ' + ((err && err.message) || err)); });
     });
   }
 
@@ -8940,6 +8969,7 @@
       else if (action === 'log-sort') { toggleSort(adminLogSort, actionBtn.getAttribute('data-col'), 'desc'); paint(currentState); }
       else if (action === 'cancel-sent') handleCancelSent(id);
       else if (action === 'reapply') handleReapplyRequest(id);
+      else if (action === 'restore-hidden') { handleRestoreHidden(); return; }
       else if (action === 'hide-request') handleHideRequest(id);
       else if (action === 'reset-pin') handleAdminResetPin(id);
       else if (action === 'admin-msg') openAdminChat(id);
