@@ -19,20 +19,31 @@
 
 ## 배포 워크플로 (모든 코드 변경 시 반드시)
 1. `index.html` 편집 후 **`var APP_VERSION = 'YYYY-MM-DD-NNN';`** (파일 상단, ~907줄) **버전 올리기**. 새 버전 뜨면 열려있는 다른 탭에 새로고침 안내가 뜸.
-2. **문법 검사** (인라인 app-logic 스크립트만 검사, state-json은 제외):
+2. **문법 검사** (인라인 app-logic 스크립트만 검사, state-json은 제외). **프로젝트 루트에서 실행**(절대경로 하드코딩 금지 — 환경마다 경로 다름. 필요하면 `cd "$(git rev-parse --show-toplevel)"`):
    ```bash
-   cd /c/Users/1/Downloads/Claude-Benny/matchmaking && node -e 'const fs=require("fs"),vm=require("vm");const h=fs.readFileSync("index.html","utf8");const re=/<script(?![^>]*\bsrc=)(?![^>]*type="application\/json")[^>]*>([\s\S]*?)<\/script>/gi;let m,i=0,bad=0;while((m=re.exec(h))){i++;try{new vm.Script(m[1]);}catch(e){bad++;console.log("BLOCK "+i+" ERR: "+e.message);}}console.log("scanned "+i+" block(s), "+bad+" error(s)");'
+   node -e 'const fs=require("fs"),vm=require("vm");const h=fs.readFileSync("index.html","utf8");const re=/<script(?![^>]*\bsrc=)(?![^>]*type="application\/json")[^>]*>([\s\S]*?)<\/script>/gi;let m,i=0,bad=0;while((m=re.exec(h))){i++;try{new vm.Script(m[1]);}catch(e){bad++;console.log("BLOCK "+i+" ERR: "+e.message);}}console.log("scanned "+i+" block(s), "+bad+" error(s)");'
    ```
    (functions 변경 시 `node --check functions/index.js`)
-3. **커밋 + 푸시** (`master`). 커밋 메시지는 한국어로 무엇을 왜 바꿨는지 + 끝에 버전.
+3. **커밋 + 푸시**. 커밋 메시지는 한국어로 무엇을 왜 바꿨는지 + 끝에 버전.
+   - **브랜치 정책**: 로컬 데스크톱 세션은 **`master` 직푸시**(GitHub Pages가 master에서 배포). **단, 샌드박스/클라우드 세션이 "특정 브랜치에만 푸시" 같은 제한을 두면 그 세션 지침이 우선** — 그때는 세션 브랜치에 푸시하고 사용자가 master로 병합. 어느 쪽인지 애매하면 사용자에게 확인.
 4. **라이브 확인** — Pages 반영에 1~2분. 새 버전 뜰 때까지 폴링:
    ```bash
    for i in 1 2 3 4 5 6; do v=$(curl -s "https://benny3s.github.io/benny-meeting/index.html?cb=$RANDOM" | grep -o "APP_VERSION = '[0-9-]*'" | head -1); echo "try $i: $v"; case "$v" in *NNN*) echo LIVE; break;; esac; sleep 15; done
    ```
+   - ⚠️ **일부 환경(클라우드/샌드박스)에선 `benny3s.github.io` 접속이 네트워크 정책으로 차단**될 수 있음(예: 403 to CONNECT). 그러면 이 폴링은 실패 → 배포 반영은 **사용자가 직접 확인**하거나, GitHub API로 Pages 빌드 상태만 확인. (api.github.com·firestore.googleapis.com은 대개 열려 있음)
 - **커밋 attribution**: 커밋 메시지 끝에 `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` (세션 지침이 다르면 그걸 우선).
 
+## 환경별 주의 (로컬 데스크톱 vs 클라우드/샌드박스)
+이 프로젝트의 풀 워크플로(배포·라이브확인·QA·라이브 데이터)는 **로컬 데스크톱 세션**을 전제로 한다. 클라우드/샌드박스(원격) 세션은 제약이 있으니 주의:
+- **브라우저 도구(`mcp__Claude_Browser__*`)** 는 데스크톱 앱 세션에만 있음. 없는 환경에선 **QA·data-ops·라이브 Firestore 조작이 불가**(컨테이너에 Chromium+Playwright가 있으면 대체 경로를 별도로 만들 수 있음).
+- **`benny3s.github.io` 접속 차단** 가능 → 라이브 버전 폴링 불가(위 4단계 참고).
+- **경로**는 환경마다 다름(로컬 `/c/Users/...`, 컨테이너 `/home/user/...`) → 절대경로 하드코딩 금지, 프로젝트 루트 기준 상대경로.
+- **브랜치 제한**을 두는 세션에선 master 직푸시 금지 → 세션 브랜치로(위 3단계).
+- **에이전트 정의**는 세션 시작 시 로드됨. git으로 방금 받아온 에이전트는 그 세션에서 이름 호출이 안 될 수 있음 → **새 세션**을 열면 확실.
+- **결론**: 배포·QA·데이터·라이브확인이 필요하면 **로컬 데스크톱 세션**에서. 클라우드/원격 세션은 planner(기획)·dev(코드 초안 작성)까지가 무난.
+
 ## 라이브 데이터 확인/수정 (Firestore)
-- 인앱 브라우저로: **먼저 `navigate` 로 라이브 사이트 로드**(턴 사이에 탭이 비므로), 그다음 `javascript_tool`에서 `firebase.firestore().doc('app/state')` 로 읽기/쓰기.
+- 인앱 브라우저(데스크톱 세션)로: **먼저 `navigate` 로 라이브 사이트 로드**(턴 사이에 탭이 비므로), 그다음 `javascript_tool`에서 `firebase.firestore().doc('app/state')` 로 읽기/쓰기.
 - **읽기는 자유롭게. 쓰기는 프로덕션 데이터**라 신중히(가능하면 임시 필드→삭제, 실회원 건드리지 않기).
 - firebase 시크릿/배포 명령은 Claude Code 자동모드에서 "Credential Materialization"으로 막힐 수 있음 → 사용자에게 안내.
 

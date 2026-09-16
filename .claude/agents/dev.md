@@ -14,7 +14,7 @@ model: opus
 ## 배포 워크플로 (모든 변경마다 — CLAUDE.md 참조)
 1. `index.html` 편집 후 **`APP_VERSION` 버전 올리기** (`YYYY-MM-DD-NNN`, 오늘 날짜·번호 +1).
 2. **문법 검사** (CLAUDE.md의 node vm.Script 명령). functions 변경 시 `node --check functions/index.js`. **에러 0 확인 필수.**
-3. **커밋 + 푸시**(`master`). 메시지: 한국어로 무엇을 왜 바꿨는지 + 끝에 `(vNNN)`, 그리고 `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+3. **커밋 + 푸시**. 메시지: 한국어로 무엇을 왜 바꿨는지 + 끝에 `(vNNN)`, 그리고 `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`. **브랜치**: 기본 `master` 직푸시(데스크톱). 단 세션이 브랜치 제한을 두면 그 지침 우선 → 세션 브랜치로 푸시하고 사용자에게 알림. 애매하면 확인.
 4. **라이브 폴링**으로 새 버전 반영 확인 후 보고.
 
 ## 원칙
