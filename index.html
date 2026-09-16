@@ -904,7 +904,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-15-346';
+  var APP_VERSION = '2026-09-16-347';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -4133,6 +4133,7 @@
         contactEnc: r[0], pinAuth: r[1], contactSelfEnc: r[2], realNameEnc: r[3], referrerEnc: r[4],
         submittedAt: new Date().toISOString()
       };
+      if (/^qa_/i.test(nickname)) entry.testAccount = true; /* 닉네임 QA_로 시작 → 테스트 계정 자동 지정 */
       return stateRef.update({ pendingEntries: firebase.firestore.FieldValue.arrayUnion(entry) });
     }).then(function () {
       currentUser = { id: entryId, nickname: nickname, pin: pin };
@@ -6725,6 +6726,7 @@
             entry.managedBy = currentUser.id;      /* 주선자 아래 '본인' 프로필 */
             entry.ownerSelf = true;
           }
+          if (/^qa_/i.test(nickname)) entry.testAccount = true; /* 닉네임 QA_로 시작 → 테스트 계정 자동 지정(명단·집계 숨김) */
           return stateRef.update({
             pendingEntries: firebase.firestore.FieldValue.arrayUnion(entry)
           });
