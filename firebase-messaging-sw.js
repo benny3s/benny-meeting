@@ -18,25 +18,34 @@ var NOTIF_BADGE = 'https://benny3s.github.io/benny-meeting/notif-badge.png'; /* 
 
 /* 앱이 꺼져 있거나 백그라운드일 때 (data 메시지) */
 messaging.onBackgroundMessage(function (payload) {
-  var n = (payload && payload.notification) || (payload && payload.data) || {};
+  var d = (payload && payload.data) || {};
+  var n = (payload && payload.notification) || d || {};
   var title = n.title || '베니브릿지';
   var options = {
     body: n.body || '',
     icon: n.icon || NOTIF_ICON,
     badge: NOTIF_BADGE,
-    data: { url: (payload && payload.data && payload.data.url) || APP_URL }
+    /* route/focusId: 클릭 시 앱이 해당 화면으로 이동하는 데 사용 (서버가 넣어주면 정밀, 없으면 앱이 로그인 기준 기본값) */
+    data: { url: d.url || APP_URL, route: d.route || '', focusId: d.focusId || '' }
   };
   self.registration.showNotification(title, options);
 });
 
-/* 알림 클릭 시 앱 열기/포커스 */
+/* 알림 클릭 → 열린 앱이 있으면 포커스 + 라우트 전달(postMessage), 없으면 해시로 새로 열기 */
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
-  var url = (event.notification.data && event.notification.data.url) || APP_URL;
+  var nd = event.notification.data || {};
+  var route = nd.route || '', focusId = nd.focusId || '';
+  var hash = route ? ('#notif=' + encodeURIComponent(route) + (focusId ? (':' + encodeURIComponent(focusId)) : '')) : '';
+  var url = (nd.url || APP_URL) + hash;
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
       for (var i = 0; i < list.length; i++) {
-        if ('focus' in list[i]) return list[i].focus();
+        var c = list[i];
+        if (c.url && c.url.indexOf('benny-meeting') >= 0 && 'focus' in c) {
+          try { c.postMessage({ type: 'notif-click', route: route, focusId: focusId }); } catch (e) {}
+          return c.focus();
+        }
       }
       if (clients.openWindow) return clients.openWindow(url);
     })

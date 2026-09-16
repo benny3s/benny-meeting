@@ -182,6 +182,9 @@
   .count.blink { animation: count-blink 1.1s ease-in-out infinite; }
   @keyframes soft-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
   .blink-soft { animation: soft-blink 1.05s ease-in-out infinite; }
+  /* 알림 클릭 시 해당 항목 강조 */
+  .notif-flash { animation: notif-flash 2.1s ease-out; }
+  @keyframes notif-flash { 0%,15% { box-shadow: 0 0 0 3px var(--accent, #B23A48); background: var(--gold-soft, #f6ecd9); } 100% { box-shadow: 0 0 0 0 transparent; } }
   @media (prefers-reduced-motion: reduce) {
     .tab-btn .count.blink, .count.blink, .blink-soft { animation: none; }
   }
@@ -904,7 +907,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-16-347';
+  var APP_VERSION = '2026-09-16-348';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1113,6 +1116,43 @@
       } catch (e) { resolve(false); }
     });
     return _primePromise;
+  }
+  /* ── 알림 클릭 → 관련 화면으로 이동·하이라이트 ──
+     서비스워커가 클릭을 postMessage로 알려주면(앱 열린 상태) 이동. 콜드스타트는 URL #notif 해시로. */
+  function handleNotifNavigate(route, focusId) {
+    var tab;
+    if (route === 'admin') tab = 'admin';
+    else if (route === 'mine' || route === 'request' || route === 'message' || route === 'dm') tab = 'mine';
+    else tab = isAdminUnlocked ? 'admin' : (currentUser ? 'mine' : 'list'); /* route 없으면 로그인 주체 기준 기본값 */
+    if (tab === 'admin' && !isAdminUnlocked) tab = currentUser ? 'mine' : 'list';
+    if (tab === 'mine' && !currentUser) tab = 'list';
+    activeTab = tab;
+    try { paint(currentState); } catch (e) {}
+    setTimeout(function () {
+      try {
+        var el = focusId ? document.querySelector('[data-id="' + focusId + '"], [data-eid="' + focusId + '"], [data-cid="' + focusId + '"]') : null;
+        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('notif-flash'); setTimeout(function () { try { el.classList.remove('notif-flash'); } catch (e2) {} }, 2200); }
+        else { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+      } catch (e) {}
+    }, 250);
+  }
+  try {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', function (e) {
+        var m = (e && e.data) || {};
+        if (m && m.type === 'notif-click') handleNotifNavigate(m.route || '', m.focusId || '');
+      });
+    }
+  } catch (e) {}
+  /* 콜드 스타트: 새 창이 #notif=route:focusId 로 열리면 그 위치로 이동 */
+  function consumeNotifHash() {
+    try {
+      var mt = (location.hash || '').match(/notif=([^:&]*)(?::([^&]*))?/);
+      if (!mt) return;
+      var route = decodeURIComponent(mt[1] || ''), focusId = decodeURIComponent(mt[2] || '');
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+      setTimeout(function () { handleNotifNavigate(route, focusId); }, 600);
+    } catch (e) {}
   }
   /* Functions 콜러블 호출 전에 messaging SW가 준비되도록 보장.
      - 푸시 불가 기기(iOS 사파리 탭): messaging 미로드 → Functions가 토큰을 안 붙임 → 즉시 통과
@@ -9880,6 +9920,7 @@
     setTimeout(showAnnouncement, 800);
     setTimeout(maybeShowOneOffPopup, 2600); /* 1회성 공지 팝업 (있으면) */
     setTimeout(maybeShowCheckin, 3400); /* 주간 예약 팝업 (겹치면 알아서 뒤로 미룸) */
+    try { consumeNotifHash(); } catch (e) {} /* 알림 클릭으로 새로 열린 경우 해당 화면으로 이동 */
   }
   /* 아이폰 홈화면 앱(standalone)은 네이티브 "당겨서 새로고침"이 없음 → 직접 구현 */
   function setupPullRefresh() {
