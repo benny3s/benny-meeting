@@ -907,7 +907,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-16-351';
+  var APP_VERSION = '2026-09-16-352';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1152,6 +1152,46 @@
       var route = decodeURIComponent(mt[1] || ''), focusId = decodeURIComponent(mt[2] || '');
       try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
       setTimeout(function () { handleNotifNavigate(route, focusId); }, 600);
+    } catch (e) {}
+  }
+  /* ── 인앱 새 소식 배너 (푸시 대체·보완) ──
+     앱을 열 때 새 소식(받은 요청·관리자 메시지 / 관리자는 승인대기·문의)이 있으면 상단에 배너로 알림.
+     푸시 설정 안 한 사람도 볼 수 있고, 눌러서 해당 화면으로 이동. 앱 열 때 1회만. */
+  function showNewsToast() {
+    try {
+      if (document.getElementById('news-toast')) return;
+      var s = currentState || {};
+      var bits = [], route = '';
+      if (currentUser) {
+        var me = findMyEntry(s);
+        if (me) {
+          var un = userUnread(s, me);
+          try { entriesManagedByMe(s).forEach(function (f) { if (!f.ownerSelf) un += userUnread(s, f); }); } catch (e) {}
+          if (un > 0) { bits.push('새 소식 ' + un + '건'); route = 'mine'; }
+        }
+      }
+      if (isAdminUnlocked) {
+        var ab = [];
+        var pend = (s.pendingEntries || []).filter(function (e) { return !e.heldReason; }).length;
+        var qna = (s.messages || []).filter(function (m) { return m.from === 'user' && !m.hiddenByAdmin && !m.readByAdmin; }).length;
+        if (pend) ab.push('승인 대기 ' + pend);
+        if (qna) ab.push('새 문의 ' + qna);
+        if (ab.length) { bits = ab; route = 'admin'; }
+      }
+      if (!bits.length) return;
+      var bar = document.createElement('div');
+      bar.id = 'news-toast';
+      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9998;display:flex;align-items:center;gap:10px;justify-content:center;flex-wrap:wrap;background:var(--accent,#B23A48);color:#fff;padding:10px 14px;font-size:0.92rem;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.18);cursor:pointer;';
+      bar.innerHTML = '🔔 ' + escapeHtml(bits.join(' · ')) +
+        '<span style="background:#fff;color:var(--accent,#B23A48);border-radius:999px;padding:3px 12px;font-weight:800;">보기</span>' +
+        '<button type="button" id="news-toast-x" aria-label="닫기" style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;padding:2px 6px;line-height:1;">✕</button>';
+      function close() { try { bar.remove(); } catch (e) {} }
+      bar.addEventListener('click', function (e) {
+        if (e.target && e.target.id === 'news-toast-x') { close(); return; }
+        close(); handleNotifNavigate(route, '');
+      });
+      document.body.appendChild(bar);
+      setTimeout(close, 12000); /* 12초 후 자동 사라짐 */
     } catch (e) {}
   }
   /* Functions 콜러블 호출 전에 messaging SW가 준비되도록 보장.
@@ -9975,6 +10015,7 @@
     setTimeout(maybeShowOneOffPopup, 2600); /* 1회성 공지 팝업 (있으면) */
     setTimeout(maybeShowCheckin, 3400); /* 주간 예약 팝업 (겹치면 알아서 뒤로 미룸) */
     try { consumeNotifHash(); } catch (e) {} /* 알림 클릭으로 새로 열린 경우 해당 화면으로 이동 */
+    setTimeout(function () { try { showNewsToast(); } catch (e) {} }, 1400); /* 인앱 새 소식 배너 (푸시 없이도 새 소식 확인) */
   }
   /* 아이폰 홈화면 앱(standalone)은 네이티브 "당겨서 새로고침"이 없음 → 직접 구현 */
   function setupPullRefresh() {
