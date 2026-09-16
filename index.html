@@ -907,7 +907,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-16-353';
+  var APP_VERSION = '2026-09-16-354';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3886,7 +3886,7 @@
       var _pr = viewer ? myLatestReqTo(state, viewer.id, entry.id, 'photo') : null;
       var _ps = _pr ? reqStatus(_pr) : null;
       if (_ps === 'pending' || _ps === 'held' || _ps === 'user_approved') photoBtn = _pendChip('📷 요청 대기중');
-      else if (_ps === 'rejected') photoBtn = '<button type="button" class="card-btn" data-action="reapply" data-id="' + escapeHtml(_pr.id) + '" style="background:#f6e9e7;color:#c5221f;border-color:#e0a3a0;">📷 거절됨 · 다시 요청</button>';
+      else if (_ps === 'rejected') photoBtn = _rejChip('📷 거절됨');
       else photoBtn = '<button type="button" class="card-btn orange" data-action="request-photo" data-id="' + escapeHtml(entry.id) + '">📷 사진 요청</button>';
     }
     /* 대화 신청(구 번호 요청): 성사되면 앱 내 채팅. 이미 성사면 "채팅하기" */
@@ -3897,7 +3897,7 @@
       var _cr = viewer ? myLatestReqTo(state, viewer.id, entry.id, 'contact') : null;
       var _cs = _cr ? reqStatus(_cr) : null;
       if (_cs === 'pending' || _cs === 'held' || _cs === 'user_approved') dateBtn = _pendChip('💌 대화 대기중');
-      else if (_cs === 'rejected') dateBtn = '<button type="button" class="card-btn" data-action="reapply" data-id="' + escapeHtml(_cr.id) + '" style="background:#f6e9e7;color:#c5221f;border-color:#e0a3a0;">💌 거절됨 · 다시 요청</button>';
+      else if (_cs === 'rejected') dateBtn = _rejChip('💌 거절됨');
       else dateBtn = '<button type="button" class="card-btn primary" data-action="request-contact" data-id="' + escapeHtml(entry.id) + '">💌 대화 신청</button>';
     }
     /* 같은 주선자 소속(형제)끼리는 사진·대화 요청 불가 — 임시 PIN으로 직접 로그인한 경우도 포함 */
@@ -4611,24 +4611,25 @@
           '<button type="button" class="card-btn" data-action="cancel-sent" data-id="' + escapeHtml(r.id) + '">요청 취소</button>' +
         '</div>';
     } else if (!incoming && st === 'rejected') {
-      /* 보낸 요청이 거절됨 → 정보 담아 다시 요청 가능 */
+      /* 보낸 요청이 거절됨 → 정보 담아 다시 요청하거나, 내 목록에서 숨기기 */
       actions =
         '<div class="mine-actions">' +
           '<button type="button" class="card-btn primary" data-action="reapply" data-id="' + escapeHtml(r.id) + '">다시 요청</button>' +
-          '<button type="button" class="card-btn" data-action="hide-request" data-id="' + escapeHtml(r.id) + '">내역 삭제</button>' +
-        '</div>';
+          '<button type="button" class="card-btn" data-action="hide-request" data-id="' + escapeHtml(r.id) + '">🙈 숨기기</button>' +
+        '</div>' +
+        '<div class="mine-note" style="font-size:0.8rem;color:var(--muted);margin-top:6px;">💡 <b>다시 요청</b>하면 상대에게 알림이 다시 가요. 그냥 정리하려면 <b>🙈 숨기기</b>(내 목록에서만 사라져요 · 복구 가능).</div>';
     } else if (incoming && (st === 'approved' || st === 'user_approved')) {
       /* 받은 요청을 승인함 → 승인 취소(상대 접근 차단) 또는 내역만 삭제 */
       actions =
         '<div class="mine-actions">' +
           '<button type="button" class="card-btn danger" data-action="revoke-approve" data-id="' + escapeHtml(r.id) + '">승인 취소</button>' +
-          '<button type="button" class="card-btn" data-action="hide-request" data-id="' + escapeHtml(r.id) + '">내역 삭제</button>' +
+          '<button type="button" class="card-btn" data-action="hide-request" data-id="' + escapeHtml(r.id) + '">🙈 숨기기</button>' +
         '</div>';
     } else if (st === 'approved' || st === 'rejected') {
-      /* (승인된 보낸 요청 또는 거절 내역) 내역 삭제 */
+      /* (승인된 보낸 요청 또는 거절 내역) 내 목록에서 숨기기 */
       actions =
         '<div class="mine-actions">' +
-          '<button type="button" class="card-btn" data-action="hide-request" data-id="' + escapeHtml(r.id) + '">내역 삭제</button>' +
+          '<button type="button" class="card-btn" data-action="hide-request" data-id="' + escapeHtml(r.id) + '">🙈 숨기기</button>' +
         '</div>';
     }
     /* 답장 메시지 표시 */
@@ -8397,7 +8398,7 @@
     if (!me) return modalNotice('로그인 필요', '먼저 로그인해주세요.');
     var req = (state.dateRequests || []).find(function (r) { return r.id === id; });
     if (!req || (req.fromId !== me.id && req.toId !== me.id)) return;
-    modalConfirm('내역 삭제(숨김)', '이 내역을 목록에서 숨길까요?\n(완전 삭제가 아니라 숨김이라, 아래 "숨긴 내역 복구"로 되돌릴 수 있어요. 다시 요청은 삭제 안 해도 카드의 "다시 요청"으로 가능해요.)', '숨기기').then(function (ok) {
+    modalConfirm('목록에서 숨기기', '이 내역을 내 목록에서 숨길까요?\n(완전 삭제가 아니라 숨김이라, 아래 "숨긴 내역 복구"로 되돌릴 수 있어요. 상대에게는 아무 알림도 가지 않아요.)', '숨기기').then(function (ok) {
       if (!ok) return;
       /* 즉시 화면에서 숨김 (서버 재조회 전에 바로 사라지게) */
       try {
