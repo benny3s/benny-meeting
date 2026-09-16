@@ -13,6 +13,10 @@ firebase.initializeApp({
 
 var messaging = firebase.messaging();
 var APP_URL = 'https://benny3s.github.io/benny-meeting/';
+
+/* 새 SW가 즉시 교체·제어되도록 (안 하면 기존 탭이 닫힐 때까지 예전 SW가 남아 알림클릭 이동이 안 됨) */
+self.addEventListener('install', function () { self.skipWaiting(); });
+self.addEventListener('activate', function (e) { e.waitUntil(self.clients.claim()); });
 var NOTIF_ICON = 'https://benny3s.github.io/benny-meeting/notif-icon.png';   /* 큰 아이콘(브랜드 로고) */
 var NOTIF_BADGE = 'https://benny3s.github.io/benny-meeting/notif-badge.png'; /* 상태바 모노크롬 배지 */
 
