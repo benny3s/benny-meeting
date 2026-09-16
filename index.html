@@ -907,7 +907,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-16-348';
+  var APP_VERSION = '2026-09-16-349';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -3416,6 +3416,16 @@
     if (r.userApproved) return 'user_approved';
     return 'pending';
   }
+  /* 내가(fromId) 상대(toId)에게 보낸 이 유형(type)의 최신 요청 상태 — 카드에 "대기중/거절됨" 표시용. 없으면 null */
+  function myReqStatusTo(state, fromId, toId, type) {
+    if (!fromId || !toId) return null;
+    var rs = (state.dateRequests || []).filter(function (r) {
+      return r.fromId === fromId && r.toId === toId && (r.type || 'contact') === type && (r.hiddenBy || []).indexOf(fromId) < 0;
+    });
+    if (!rs.length) return null;
+    rs.sort(function (a, b) { return (b.submittedAt || '').localeCompare(a.submittedAt || ''); });
+    return reqStatus(rs[0]);
+  }
   function statusLabel(st) {
     return st === 'approved' ? '승인됨' : st === 'rejected' ? '거절됨' : st === 'held' ? '보류 중' : st === 'user_approved' ? '본인 승인' : '대기중';
   }
@@ -3778,15 +3788,28 @@
     var mineOrManaged = !!(currentUser && (entry.id === currentUser.id || entry.managedBy === currentUser.id));
     /* 이미 이 사람 사진을 볼 수 있으면(상대가 공개했거나 내 요청이 승인됨) 요청 대신 "볼 수 있어요"(초록) 표시 → 중복 요청 방지 */
     var viewer = currentUser ? findMyEntry(state) : null;
+    /* 과거 요청 상태(내가 이 사람에게 보낸 것) → 카드에 "대기중/거절됨" 표시. 사람 많아져도 이미 보냈는지·거절됐는지 바로 앎 */
+    var _pendChip = function (label) { return '<span class="card-btn" style="background:var(--card);color:var(--muted);cursor:default;border-color:var(--line);">' + label + '</span>'; };
+    var _rejChip = function (label) { return '<span class="card-btn" style="background:#f6e9e7;color:#c5221f;cursor:default;border-color:#e0a3a0;">' + label + '</span>'; };
     var canSeePhoto = !!(viewer && pCount > 0 && canViewPhotoOf(state, viewer.id, entry.id));
-    var photoBtn = canSeePhoto
-      ? '<button type="button" class="card-btn approve" data-action="gallery" data-id="' + escapeHtml(entry.id) + '">📷 사진 볼 수 있어요</button>'
-      : '<button type="button" class="card-btn orange" data-action="request-photo" data-id="' + escapeHtml(entry.id) + '">📷 사진 요청</button>';
+    var photoBtn;
+    if (canSeePhoto) photoBtn = '<button type="button" class="card-btn approve" data-action="gallery" data-id="' + escapeHtml(entry.id) + '">📷 사진 볼 수 있어요</button>';
+    else {
+      var _ps = viewer ? myReqStatusTo(state, viewer.id, entry.id, 'photo') : null;
+      if (_ps === 'pending' || _ps === 'held' || _ps === 'user_approved') photoBtn = _pendChip('📷 요청 대기중');
+      else if (_ps === 'rejected') photoBtn = _rejChip('📷 사진 거절됨');
+      else photoBtn = '<button type="button" class="card-btn orange" data-action="request-photo" data-id="' + escapeHtml(entry.id) + '">📷 사진 요청</button>';
+    }
     /* 대화 신청(구 번호 요청): 성사되면 앱 내 채팅. 이미 성사면 "채팅하기" */
     var matched = !!(viewer && canViewContactOf(state, viewer.id, entry.id));
-    var dateBtn = matched
-      ? '<button type="button" class="card-btn approve" data-action="dm-chat" data-id="' + escapeHtml(entry.id) + '">💬 채팅하기</button>'
-      : '<button type="button" class="card-btn primary" data-action="request-contact" data-id="' + escapeHtml(entry.id) + '">💌 대화 신청</button>';
+    var dateBtn;
+    if (matched) dateBtn = '<button type="button" class="card-btn approve" data-action="dm-chat" data-id="' + escapeHtml(entry.id) + '">💬 채팅하기</button>';
+    else {
+      var _cs = viewer ? myReqStatusTo(state, viewer.id, entry.id, 'contact') : null;
+      if (_cs === 'pending' || _cs === 'held' || _cs === 'user_approved') dateBtn = _pendChip('💌 대화 대기중');
+      else if (_cs === 'rejected') dateBtn = _rejChip('💌 대화 거절됨');
+      else dateBtn = '<button type="button" class="card-btn primary" data-action="request-contact" data-id="' + escapeHtml(entry.id) + '">💌 대화 신청</button>';
+    }
     /* 같은 주선자 소속(형제)끼리는 사진·대화 요청 불가 — 임시 PIN으로 직접 로그인한 경우도 포함 */
     var sibling = !!(viewer && viewer.managedBy && entry.managedBy && viewer.managedBy === entry.managedBy && viewer.id !== entry.id);
     var reqBtns = mineOrManaged ? '' : (sibling
@@ -4543,8 +4566,9 @@
       var unread = meNow ? dmUnreadFrom(state, meNow.id, otherId) : 0;
       chatBtn = '<div class="mine-actions"><button type="button" class="card-btn primary" data-action="dm-chat" data-id="' + escapeHtml(otherId) + '">💬 채팅하기' + (unread ? ' <span class="count blink">' + unread + '</span>' : '') + '</button></div>';
     }
-    /* 주의가 필요한 항목 강조: 받은 대기/보류(응답 필요), 보낸 보류/거절(다시 요청 가능) */
-    var needAction = (incoming && (st === 'pending' || st === 'held')) || (!incoming && (st === 'held' || st === 'rejected'));
+    /* 주의가 필요한 항목만 펼침·강조: 받은 대기/보류(응답 필요), 보낸 보류(다시 요청 가능).
+       보낸 "거절"은 급한 게 아니고 거절 메시지가 길어 → 접힌 채로(요약줄의 '거절됨' 칩만), 눌러서 펼쳐 보게 함 */
+    var needAction = (incoming && (st === 'pending' || st === 'held')) || (!incoming && st === 'held');
     /* 주선자가 대신 보낸 요청이면 받는 사람에게 안내 */
     var mmInfo = (incoming && r.viaMm)
       ? '<div class="mine-note" style="background:var(--gold-soft);border:1px solid var(--gold);border-radius:8px;">🤝 주선자가 보내는 요청이에요.' + (isPhoto ? '' : ' 채팅 화면에서 주선자와 소개팅 당사자는 구분됩니다.') + '</div>'
