@@ -12,7 +12,3 @@ index-merged.html
 functions/node_modules/
 .firebase/
 *.log
-
-# Claude Code 로컬 설정·프로젝트 문서·서브에이전트 (공개 레포 노출 방지 — 디스크에서 읽히므로 커밋 불필요)
-CLAUDE.md
-.claude/
