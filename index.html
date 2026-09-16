@@ -910,7 +910,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-16-355';
+  var APP_VERSION = '2026-09-16-356';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -992,6 +992,7 @@
   var adminLogFilterActor = '';                       /* 활동 기록 고유번호/닉네임 필터 (검색창, 부분일치) */
   var adminLogFilterTime = '';                        /* 활동 기록 시간 필터 */
   var adminLogFilterNick = '';                        /* 접속칸 클릭 시 정확히 그 닉네임만 (완전일치) */
+  var adminLogFilterDetail = '';                      /* 활동 기록 변경 내용(detail) 필터 (검색창, 부분일치) */
   var adminReqSort = 'req_desc';                       /* 요청(요청함+완료 통합) 정렬: req_desc|req_asc|dec_desc|dec_asc|gap_desc|gap_asc */
   var adminReqStatus = 'all';                          /* 요청 상태 필터: all|pending|held|approved|rejected */
   var adminReqAge = 'all';                             /* 요청 나이 필터(색상 기준): all|today|yesterday|few|old */
@@ -1690,13 +1691,15 @@
     var fa = (adminLogFilterActor || '').toLowerCase().trim();
     var ft = (adminLogFilterTime || '').toLowerCase().trim();
     var fn = (adminLogFilterNick || '').toLowerCase().trim();
+    var fd = (adminLogFilterDetail || '').toLowerCase().trim();
     var shown = 0;
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
       var okA = !fa || (r.getAttribute('data-actor') || '').indexOf(fa) >= 0;
       var okT = !ft || (r.getAttribute('data-time') || '').indexOf(ft) >= 0;
       var okN = !fn || (r.getAttribute('data-nick') || '') === fn; /* 완전일치 (비슷한 닉네임 섞임 방지) */
-      var show = okA && okT && okN;
+      var okD = !fd || (r.getAttribute('data-detail') || '').indexOf(fd) >= 0;
+      var show = okA && okT && okN && okD;
       r.hidden = !show;
       if (show) shown++;
     }
@@ -5923,7 +5926,7 @@
         : '<b>' + escapeHtml(d.actor || '-') + '</b>';
       var fActor = (d.uid + ' ' + d.actor).toLowerCase();
       var fTime = d.timeStr.toLowerCase();
-      return '<tr class="log-trow" data-actor="' + escapeHtml(fActor) + '" data-time="' + escapeHtml(fTime) + '" data-nick="' + escapeHtml((d.actor || '').toLowerCase()) + '">' +
+      return '<tr class="log-trow" data-actor="' + escapeHtml(fActor) + '" data-time="' + escapeHtml(fTime) + '" data-nick="' + escapeHtml((d.actor || '').toLowerCase()) + '" data-detail="' + escapeHtml((d.detail || '').toLowerCase()) + '">' +
         '<td style="font-size:0.84rem;">' + actorHtml + '</td>' +
         '<td style="font-size:0.84rem;color:var(--ink);">' + escapeHtml(d.detail) + '</td>' +
         '<td class="seen-date" style="font-size:0.76rem;color:var(--muted);">' + escapeHtml(d.timeStr) + '</td>' +
@@ -5933,7 +5936,7 @@
     function logTh(col, label) {
       return '<th data-action="log-sort" data-col="' + col + '" style="cursor:pointer;user-select:none;white-space:nowrap;">' + label + sortArrow(adminLogSort, col) + '</th>';
     }
-    var logFilterActive = !!(adminLogFilterActor || adminLogFilterTime || adminLogFilterNick);
+    var logFilterActive = !!(adminLogFilterActor || adminLogFilterTime || adminLogFilterNick || adminLogFilterDetail);
     var logSection =
       '<details class="admin-fold" id="activity-log-section" data-sec="log"' + secOpenAttr('log', logFilterActive) + '>' +
       '<summary>📜 활동 기록<span class="pending-count">' + logData.length + '</span></summary>' +
@@ -5941,7 +5944,7 @@
       '<p class="sub">헤더로 정렬, 아래 칸으로 검색해요. 최근 ' + LOG_LIMIT + '건까지 보관. (관리자만)</p>' +
       (logFilterActive
         ? '<p class="sub" style="margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
-            '<span class="chip" style="background:var(--gold-soft);color:var(--gold);">🔎 ' + escapeHtml(adminLogFilterNick || adminLogFilterActor || adminLogFilterTime) + '</span>' +
+            '<span class="chip" style="background:var(--gold-soft);color:var(--gold);">🔎 ' + escapeHtml(adminLogFilterNick || adminLogFilterActor || adminLogFilterDetail || adminLogFilterTime) + '</span>' +
             '<button type="button" class="card-btn" data-action="log-clear" style="flex:none;padding:2px 10px;">✕ 필터 해제</button>' +
           '</p>'
         : '') +
@@ -5950,7 +5953,7 @@
             '<tr>' + logTh('actor', '고유번호 · 닉네임') + logTh('detail', '변경 내용') + logTh('time', '시간') + '<th style="width:34px;"></th></tr>' +
             '<tr class="filter-row">' +
               '<th><input type="text" class="log-filter-input" data-logfilter="actor" placeholder="🔍 번호·닉네임" value="' + escapeHtml(adminLogFilterActor) + '"></th>' +
-              '<th></th>' +
+              '<th><input type="text" class="log-filter-input" data-logfilter="detail" placeholder="🔍 변경 내용" value="' + escapeHtml(adminLogFilterDetail) + '"></th>' +
               '<th><input type="text" class="log-filter-input" data-logfilter="time" placeholder="🔍 시간" value="' + escapeHtml(adminLogFilterTime) + '"></th>' +
               '<th></th>' +
             '</tr>' +
@@ -9125,11 +9128,11 @@
       else if (action === 'seen-type') { adminSeenType = actionBtn.getAttribute('data-type') || 'all'; paint(currentState); }
       else if (action === 'log-filter') {
         adminLogFilterNick = actionBtn.getAttribute('data-nick') || ''; /* 완전일치 필터 */
-        adminLogFilterActor = ''; adminLogFilterTime = '';
+        adminLogFilterActor = ''; adminLogFilterTime = ''; adminLogFilterDetail = '';
         paint(currentState);
         try { var sec = document.getElementById('activity-log-section'); if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e2) {}
       }
-      else if (action === 'log-clear') { adminLogFilterActor = ''; adminLogFilterTime = ''; adminLogFilterNick = ''; paint(currentState); }
+      else if (action === 'log-clear') { adminLogFilterActor = ''; adminLogFilterTime = ''; adminLogFilterNick = ''; adminLogFilterDetail = ''; paint(currentState); }
       else if (action === 'log-del') { if (isAdminUnlocked) handleDeleteLog(id); }
       else if (action === 'connlog-del') { if (isAdminUnlocked) handleDeleteConnLog(id); return; }
       else if (action === 'sms-send') { if (isAdminUnlocked) sendSmsFlow(id, actionBtn.getAttribute('data-kind') || 'custom'); return; }
@@ -9189,6 +9192,7 @@
       var which = e.target.getAttribute('data-logfilter');
       if (which === 'actor') adminLogFilterActor = e.target.value;
       else if (which === 'time') adminLogFilterTime = e.target.value;
+      else if (which === 'detail') adminLogFilterDetail = e.target.value;
       adminLogFilterNick = ''; /* 직접 검색 시 클릭 필터(완전일치) 해제 */
       applyLogFilter(); /* paint 없이 즉시 필터 → 입력 포커스 유지 */
     }
