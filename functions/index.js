@@ -207,6 +207,13 @@ function nameOf(entries, id) {
   const e = (entries || []).find((x) => x.id === id);
   return e ? e.nickname : '상대방';
 }
+/* 대리(주선자 관리) 친구가 '직접 로그인 가능한' 상태인지 = 유효한 임시 PIN 보유.
+   (클라이언트 subPinExpired 와 동일 규칙: 만료시각 없으면 만료 취급 안 함) */
+function subPinActive(e) {
+  if (!e || !e.pinAuth) return false;
+  if (!e.pinExpiresAt) return true;
+  return Date.now() <= new Date(e.pinExpiresAt).getTime();
+}
 async function tokensFor(id) {
   if (!id) return [];
   try {
@@ -257,9 +264,13 @@ function entryById(entries, id) {
 async function notifyRecipient(entries, id, title, body) {
   const e = entryById(entries, id);
   if (e && e.managedBy) {
-    /* 소개 대상 본인은 앱에 없을 수 있음 → 주선자에게 전달 */
-    await sendTo(e.managedBy, title, '[소개: ' + (e.nickname || '') + '] ' + body);
+    /* 대리(주선자 관리) 친구: 주선자에게 항상 전달(소개 대상 본인은 앱에 없을 수 있음).
+       + 친구가 유효한 임시 PIN으로 직접 쓰는 상태면 친구 본인에게도 (토큰 없으면 자동 무시) */
+    const jobs = [sendTo(e.managedBy, title, '[소개: ' + (e.nickname || '') + '] ' + body)];
+    if (subPinActive(e)) jobs.push(sendTo(id, title, body));
+    await Promise.all(jobs);
   } else {
+    /* 독립(자기 등록) 계정 → 본인에게 */
     await sendTo(id, title, body);
   }
 }
@@ -297,9 +308,9 @@ exports.onStateChange = functions
         /* approved 와 user_approved(당사자 승인·관리자 확정 대기) 를 하나의 "승인" 이벤트로 취급해 중복 알림 방지 */
         const wasApproved = (ps === 'approved' || ps === 'user_approved');
         const isApproved = (ns === 'approved' || ns === 'user_approved');
-        if (isApproved && !wasApproved) jobs.push(sendTo(r.fromId, type + ' 요청 승인 🎉', nameOf(entries, r.toId) + '님이 요청을 승인했어요'));
-        else if (ns === 'held' && ps !== 'held') jobs.push(sendTo(r.fromId, type + ' 요청 보류', nameOf(entries, r.toId) + '님이 요청을 보류했어요'));
-        else if (ns === 'rejected' && ps !== 'rejected') jobs.push(sendTo(r.fromId, type + ' 요청 거절', nameOf(entries, r.toId) + '님이 요청을 거절했어요'));
+        if (isApproved && !wasApproved) jobs.push(notifyRecipient(entries, r.fromId, type + ' 요청 승인 🎉', nameOf(entries, r.toId) + '님이 요청을 승인했어요'));
+        else if (ns === 'held' && ps !== 'held') jobs.push(notifyRecipient(entries, r.fromId, type + ' 요청 보류', nameOf(entries, r.toId) + '님이 요청을 보류했어요'));
+        else if (ns === 'rejected' && ps !== 'rejected') jobs.push(notifyRecipient(entries, r.fromId, type + ' 요청 거절', nameOf(entries, r.toId) + '님이 요청을 거절했어요'));
         else if (ns === 'pending' && (ps === 'held' || ps === 'rejected')) jobs.push(notifyRecipient(entries, r.toId, type + ' 재요청', nameOf(entries, r.fromId) + '님이 정보를 담아 다시 요청했어요'));
       }
     });
