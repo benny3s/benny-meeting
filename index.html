@@ -93,6 +93,8 @@
     margin-bottom: 12px;
   }
   .masthead-inner { max-width: 880px; margin: 0 auto; display: flex; align-items: center; gap: 14px; }
+  /* 최상단 로고/제목은 탭=새로고침이라, 탭·롱프레스 시 글자가 선택·복사되지 않도록 (특히 모바일) */
+  .masthead-inner, .masthead-icon, #masthead-title { -webkit-user-select: none; -moz-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
   .masthead-icon { color: var(--accent); flex-shrink: 0; }
   .masthead h1 { font-size: clamp(1.5rem, 4vw, 2.1rem); letter-spacing: 0.01em; }
   .masthead p { margin: 6px 0 0; color: var(--paper); opacity: 0.72; font-size: 0.92rem; }
@@ -910,7 +912,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-17-359';
+  var APP_VERSION = '2026-09-17-360';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
