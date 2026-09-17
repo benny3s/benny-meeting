@@ -910,7 +910,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-17-358';
+  var APP_VERSION = '2026-09-17-359';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1645,42 +1645,59 @@
     var ent = all.find(function (e) { return e.id === entryId; });
     if (!ent) { modalNotice('안내', '대상을 찾을 수 없어요.'); return; }
     var nick = ent.nickname || '회원';
-    /* 주선자가 관리하는 대리 등록 친구(본인 ownerSelf 프로필 제외)면, 회원 본인이 아니라 주선자에게 문자.
-       (FCM 푸시의 notifyRecipient 과 동일한 라우팅) 주선자에게 번호가 없으면 친구 본인 번호로 폴백. */
+    /* 주선자가 관리하는 대리 등록 친구(본인 ownerSelf 프로필 제외)면 기본 수신자는 '주선자'(창구·앱 사용자, FCM 푸시와 동일 라우팅).
+       독립(자기 등록) 계정이면 본인. 두 번호가 다 있으면 관리자가 모달에서 '주선자↔친구 본인'을 바꿀 수 있음. */
     var mm = (ent.managedBy && !ent.ownerSelf) ? all.find(function (e) { return e.id === ent.managedBy; }) : null;
-    var viaMm = !!(mm && mm.contactEnc);
-    var target = viaMm ? mm : ent;
-    var mmNoNum = !!(mm && !mm.contactEnc); /* 주선자인데 번호가 없어 친구 번호로 폴백된 경우 */
-    if (!target.contactEnc) {
-      modalNotice('연락처 없음', (mm ? ((mm.nickname || '주선자') + ' 주선자') : nick) + '님의 연락처가 저장돼 있지 않아 문자를 보낼 수 없어요.');
-      return;
-    }
-    decryptWithAdmin(adminPrivateKey, target.contactEnc).then(function (raw) {
-      var num = (raw || '').replace(/[^0-9]/g, '');
-      if (!num) { modalNotice('오류', '연락처 복호화에 실패했어요.'); return; }
+    var mmNick = mm ? (mm.nickname || '주선자') : '';
+    var decNum = function (encObj) { return encObj ? decryptWithAdmin(adminPrivateKey, encObj).then(function (raw) { return (raw || '').replace(/[^0-9]/g, ''); }).catch(function () { return ''; }) : Promise.resolve(''); };
+    Promise.all([decNum(ent.contactEnc), mm ? decNum(mm.contactEnc) : Promise.resolve('')]).then(function (res) {
+      var friendNum = res[0], mmNum = res[1];
+      if (!friendNum && !mmNum) { modalNotice('연락처 없음', (mm ? (mmNick + ' 주선자와 ' + nick + '님') : (nick + '님')) + '의 연락처가 저장돼 있지 않아 문자를 보낼 수 없어요.'); return; }
+      var canMm = !!mmNum, canFriend = !!friendNum, canBoth = canMm && canFriend;
+      var mode = canMm ? 'mm' : 'self'; /* 기본: 주선자 있으면 주선자 */
       var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
       var sep = isIOS ? '&' : '?';
-      var toLabel = viaMm ? (escapeHtml(mm.nickname || '주선자') + ' (주선자)') : escapeHtml(nick);
-      var routeNote = viaMm
-        ? '<p class="modal-msg" style="background:var(--gold-soft);color:var(--ink);padding:8px 10px;border-radius:8px;margin:0 0 8px;">🤝 <b>' + escapeHtml(nick) + '</b>님은 <b>' + escapeHtml(mm.nickname || '주선자') + '</b> 주선자가 관리하는 계정이라, <b>주선자에게</b> 문자를 보내요.</p>'
-        : (mmNoNum ? '<p class="modal-msg" style="background:var(--gold-soft);color:var(--ink);padding:8px 10px;border-radius:8px;margin:0 0 8px;">🤝 주선자가 관리하는 계정이지만 <b>주선자 연락처가 없어</b>, ' + escapeHtml(nick) + '님 본인에게 보내요.</p>' : '');
+      var chooser = canBoth
+        ? '<div style="display:flex;gap:6px;margin:0 0 8px;">' +
+            '<button type="button" class="card-btn" data-smsto="mm" style="flex:1;">🤝 주선자 ' + escapeHtml(mmNick) + '</button>' +
+            '<button type="button" class="card-btn" data-smsto="self" style="flex:1;">👤 ' + escapeHtml(nick) + ' 본인</button>' +
+          '</div>'
+        : '';
       var ov = openModal(
-        '<h3>📱 ' + toLabel + '님에게 문자</h3>' +
-        routeNote +
+        '<h3>📱 문자 보내기</h3>' +
+        chooser +
+        '<p class="modal-msg" id="sn-note" style="background:var(--gold-soft);color:var(--ink);padding:8px 10px;border-radius:8px;margin:0 0 8px;"></p>' +
         '<p class="modal-msg">내 <b>휴대폰 문자앱</b>이 수신자·내용까지 채워진 채 열려요. 확인·수정 후 <b>직접 전송</b>하면 돼요. <b>요금 없음</b>(내 번호로 발송).</p>' +
-        '<textarea class="modal-input" id="sn-text" rows="4" maxlength="500">' + escapeHtml(smsTemplate(viaMm ? 'mm' : 'custom', nick)) + '</textarea>' +
+        '<textarea class="modal-input" id="sn-text" rows="4" maxlength="500"></textarea>' +
         '<p class="modal-msg" style="color:var(--muted);font-size:0.78rem;margin:6px 0 0;">※ PC에서는 문자앱이 없어 안 열릴 수 있어요. 휴대폰에서 눌러주세요.</p>' +
         '<div class="modal-actions">' +
           '<button type="button" class="card-btn" id="sn-cancel">닫기</button>' +
           '<a id="sn-open" class="card-btn primary" href="#" style="text-decoration:none;text-align:center;">📱 문자앱 열기</a>' +
         '</div>'
       );
-      var ta = ov.querySelector('#sn-text'), a = ov.querySelector('#sn-open');
-      function upd() { a.href = 'sms:' + num + sep + 'body=' + encodeURIComponent(ta.value || ''); }
-      upd(); ta.addEventListener('input', upd);
-      a.addEventListener('click', function () { try { appendLog('sms', '관리자', '내 폰 문자 → ' + (viaMm ? ((mm.nickname || '주선자') + '(주선자·' + nick + ')') : nick)); } catch (e) {} setTimeout(function () { closeModal(ov); }, 400); });
+      var ta = ov.querySelector('#sn-text'), a = ov.querySelector('#sn-open'), noteEl = ov.querySelector('#sn-note');
+      var lastAuto = ''; /* 자동 채운 문구 — 관리자가 손대지 않았을 때만 수신자 전환 시 갱신 */
+      function linkNow() { var num = (mode === 'mm') ? mmNum : friendNum; a.href = 'sms:' + num + sep + 'body=' + encodeURIComponent(ta.value || ''); }
+      function render() {
+        if (mode === 'mm') noteEl.innerHTML = '🤝 <b>' + escapeHtml(nick) + '</b>님은 <b>' + escapeHtml(mmNick) + '</b> 주선자가 관리하는 계정이라, <b>주선자</b>에게 보내요.';
+        else if (mm && !canMm) noteEl.innerHTML = '🤝 주선자가 관리하지만 <b>주선자 연락처가 없어</b> <b>' + escapeHtml(nick) + '</b>님 본인에게 보내요.';
+        else if (mm) noteEl.innerHTML = '👤 <b>' + escapeHtml(nick) + '</b>님 <b>본인</b>에게 직접 보내요. <span style="color:var(--muted);">(주선자 대신)</span>';
+        else noteEl.innerHTML = '👤 <b>' + escapeHtml(nick) + '</b>님에게 보내요.';
+        if (canBoth) {
+          ov.querySelectorAll('[data-smsto]').forEach(function (b) {
+            var on = b.getAttribute('data-smsto') === mode;
+            b.classList.toggle('primary', on); b.style.opacity = on ? '1' : '0.6';
+          });
+        }
+        if (ta.value === lastAuto) { ta.value = smsTemplate(mode === 'mm' ? 'mm' : 'custom', nick); lastAuto = ta.value; }
+        linkNow();
+      }
+      if (canBoth) ov.querySelectorAll('[data-smsto]').forEach(function (b) { b.addEventListener('click', function () { mode = b.getAttribute('data-smsto'); render(); }); });
+      ta.addEventListener('input', linkNow);
+      a.addEventListener('click', function () { try { appendLog('sms', '관리자', '내 폰 문자 → ' + (mode === 'mm' ? (mmNick + '(주선자·' + nick + ')') : nick)); } catch (e) {} setTimeout(function () { closeModal(ov); }, 400); });
       ov.querySelector('#sn-cancel').addEventListener('click', function () { closeModal(ov); });
       ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(ov); });
+      render();
     }).catch(function () { modalNotice('오류', '연락처 복호화에 실패했어요.'); });
   }
 
