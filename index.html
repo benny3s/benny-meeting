@@ -912,7 +912,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-17-361';
+  var APP_VERSION = '2026-09-18-362';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -5492,7 +5492,8 @@
         (e.deleteReason ? '<div class="p-meta" style="color:var(--ink);">사유: "' + escapeHtml(e.deleteReason) + '"</div>' : '') +
         '<div class="pending-actions">' +
           '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(e.id) + '">👤 프로필</button>' +
-          '<button type="button" class="card-btn danger" data-action="approve-delete" data-id="' + escapeHtml(e.id) + '">삭제 승인</button>' +
+          '<button type="button" class="card-btn approve" data-action="archive-instead" data-id="' + escapeHtml(e.id) + '">🗄 보관으로 대신</button>' +
+          '<button type="button" class="card-btn danger" data-action="approve-delete" data-id="' + escapeHtml(e.id) + '">🗑 완전 삭제</button>' +
           '<button type="button" class="card-btn" data-action="cancel-delete" data-id="' + escapeHtml(e.id) + '">요청 취소</button>' +
         '</div>'
       );
@@ -5578,6 +5579,7 @@
                 '<button type="button" class="card-btn" data-action="card-detail" data-id="' + escapeHtml(e.id) + '">👤 프로필</button>' +
                 '<button type="button" class="card-btn approve" data-action="reactivate" data-id="' + escapeHtml(e.id) + '">♻️ 다시 활성화</button>' +
                 '<button type="button" class="card-btn' + (sent ? '' : ' primary') + '" data-action="notify-connected" data-id="' + escapeHtml(e.id) + '">📢 ' + (sent ? '다시 안내' : '연결 회원 안내') + '</button>' +
+                '<button type="button" class="card-btn danger" data-action="approve-delete" data-id="' + escapeHtml(e.id) + '">🗑 완전 삭제</button>' +
               '</div>'
             );
           }).join(''), false, 'deaclist')
@@ -7495,6 +7497,37 @@
       modalNotice('취소됨', '삭제 요청을 취소했어요.');
     }).catch(function (err) { modalNotice('오류', '취소 실패: ' + (err.message || err)); });
   }
+  /* 관리자: 삭제 요청을 '완전 삭제' 대신 '보관(비활성화)'으로 전환.
+     → 프로필·사진·연락처·연결 이력 전부 보존, 명단에서만 숨김. 나중에 완전 삭제할지/복구할지 결정 가능. */
+  function handleArchiveInsteadOfDelete(id) {
+    if (!isAdminUnlocked) return;
+    var entry = (currentState.entries || []).find(function (e) { return e.id === id; });
+    if (!entry) return;
+    modalConfirm('보관으로 대신', escapeHtml(entry.nickname) + '님을 <b>완전 삭제 대신 보관</b>할까요?\n명단에서만 숨겨지고 프로필·사진·연결 정보는 그대로 보존돼요. 나중에 완전 삭제하거나 다시 활성화할 수 있어요.', '보관 전환', 'primary').then(function (ok) {
+      if (!ok) return;
+      db.runTransaction(function (tx) {
+        return tx.get(stateRef).then(function (doc) {
+          var s = doc.data();
+          var entries = (s.entries || []).map(function (e) {
+            if (e.id !== id) return e;
+            var c = JSON.parse(JSON.stringify(e));
+            c.deactivated = true;
+            c.deactivatedAt = new Date().toISOString();
+            c.deactivatedReason = c.deleteReason || '(삭제 요청 → 보관 전환)';
+            delete c.testAccount;
+            delete c.deleteRequested; delete c.deleteReqAt; delete c.deleteReason;
+            return c;
+          });
+          tx.update(stateRef, { entries: entries });
+        });
+      }).then(function () {
+        appendLog('admin', '관리자', '삭제 요청 → 보관 전환 · ' + entry.nickname);
+        return refreshNow();
+      }).then(function () {
+        modalNotice('보관 전환 완료', entry.nickname + '님을 보관 상태로 전환했어요. 정보는 보존돼요. (🗄 보관 계정 목록에서 완전 삭제·다시 활성화 가능)');
+      }).catch(function (err) { modalNotice('오류', '전환 실패: ' + (err.message || err)); });
+    });
+  }
 
   /* ── 비활성화(보관) 흐름 — 본인이 요청 → 관리자 승인 시 보관(테스트 계정) 처리 ── */
   function handleDeactivate(id) {
@@ -9125,6 +9158,7 @@
       else if (action === 'hold-pending') handleHoldApplication(id);
       else if (action === 'reject') handleReject(id);
       else if (action === 'approve-delete') handleApproveDelete(id);
+      else if (action === 'archive-instead') handleArchiveInsteadOfDelete(id);
       else if (action === 'cancel-delete') handleCancelDeleteReq(id);
       else if (action === 'deactivate') handleDeactivate(id);
       else if (action === 'approve-deactivate') handleApproveDeactivate(id);
