@@ -912,7 +912,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-18-362';
+  var APP_VERSION = '2026-09-18-363';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -5587,13 +5587,17 @@
     /* 삭제 이력 (비식별 tombstone) — 닉네임·사유·성별·나이 등만, PII 없음 */
     var delLog = (state.deletedLog || []).slice().sort(function (a, b) { return (b.deletedAt || '').localeCompare(a.deletedAt || ''); });
     var delLogSection = adminFold('🗑 삭제 이력', delLog.length,
-          '<p class="sub">삭제된 계정의 <b>비식별 기록</b>이에요. 전화번호·실명·사진은 삭제 시 즉시 폐기됐어요. (1년 지나면 자동 정리)</p>' +
+          '<p class="sub">삭제된 계정의 기록이에요(누구였는지 확인용). <b>전화번호·실명·사진·알게된 경로</b>는 삭제 시 즉시 폐기됐어요. (1년 지나면 자동 정리)</p>' +
           (delLog.length ? delLog.map(function (t) {
             var ageStr = t.birthYear ? (String(t.birthYear).slice(2) + '년생') : '-';
             return foldItem(
               '<span class="req-sum-who"><span style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:0.8rem;">' + escapeHtml(t.uid || '—') + '</span> ' + escapeHtml(t.nickname || '(이름 없음)') + '</span> <span class="chip" style="background:#f1f3f4;color:#5f6368;">삭제됨</span>' + (t.deletedAt ? '<span class="req-sum-when">' + fmtDate(t.deletedAt) + '</span>' : ''),
-              '<div class="p-meta">' + genderLabel(t.gender) + ' · ' + escapeHtml(ageStr) + (t.joinedAt ? ' · 가입: ' + fmtDate(t.joinedAt) : '') + (t.deletedAt ? ' · 삭제: ' + fmtDate(t.deletedAt) : '') + (t.connectedN ? ' · 연결됐던 회원 ' + t.connectedN + '명' : '') + '</div>' +
+              '<div class="p-meta">' + genderLabel(t.gender) + ' · ' + escapeHtml(ageStr) + (t.height ? ' · ' + escapeHtml(String(t.height)) + 'cm' : '') + (t.joinedAt ? ' · 가입: ' + fmtDate(t.joinedAt) : '') + (t.deletedAt ? ' · 삭제: ' + fmtDate(t.deletedAt) : '') + (t.connectedN ? ' · 연결됐던 회원 ' + t.connectedN + '명' : '') + '</div>' +
+              ((t.region || t.workplace) ? '<div class="p-meta">📍 ' + escapeHtml([t.region, t.workplace].filter(Boolean).join(' · ')) + '</div>' : '') +
               (t.reason ? '<div class="p-meta" style="color:var(--ink);">사유: "' + escapeHtml(t.reason) + '"</div>' : '') +
+              (t.intro ? '<div class="p-meta" style="white-space:pre-wrap;color:var(--ink);">📝 자기소개: ' + escapeHtml(t.intro) + '</div>' : '') +
+              (t.idealType ? '<div class="p-meta" style="white-space:pre-wrap;">💘 이상형: ' + escapeHtml(t.idealType) + '</div>' : '') +
+              (t.dealbreaker ? '<div class="p-meta" style="white-space:pre-wrap;">🚫 비선호: ' + escapeHtml(t.dealbreaker) + '</div>' : '') +
               '<div class="pending-actions">' +
                 '<button type="button" class="card-btn danger" data-action="del-tombstone" data-id="' + escapeHtml(t.id || '') + '" style="flex:none;padding:4px 12px;">이력 삭제</button>' +
               '</div>'
@@ -7419,7 +7423,7 @@
     if (!entry) return;
     var connected = connectedMemberIds(currentState, id);
     function doDelete() {
-      /* 비식별 삭제 이력(tombstone): 닉네임·사유·성별·나이 등 운영 정보만. 전화번호·실명·사진 등 PII는 즉시 폐기 */
+      /* 삭제 이력(tombstone): 프로필 정보까지 보존(누구였는지 기억용). 단 전화번호·실명·사진·알게된경로 등 PII는 즉시 폐기 */
       var tomb = {
         id: genId(),
         serial: entry.serial || 0,
@@ -7427,6 +7431,13 @@
         nickname: entry.nickname || '',
         gender: entry.gender || '',
         birthYear: entry.birthYear || null,
+        height: entry.height || null,
+        region: entry.region || '',
+        workplace: entry.workplace || '',
+        degreeChoice: entry.degreeChoice || '',
+        intro: entry.intro || '',
+        idealType: entry.idealType || '',
+        dealbreaker: entry.dealbreaker || '',
         joinedAt: entry.submittedAt || '',
         reason: entry.deleteReason || '',
         connectedN: connected.length,
