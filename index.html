@@ -912,7 +912,7 @@
   'use strict';
 
   /* 배포할 때마다 올려주세요 (정렬 가능한 형식). 새 버전이 뜨면 다른 탭에 새로고침 안내가 떠요. */
-  var APP_VERSION = '2026-09-20-364';
+  var APP_VERSION = '2026-09-20-365';
   var DAILY_PHOTO_LIMIT = 3; /* 프로필별 하루(KST) 사진 요청 한도 */
   var DAILY_TALK_LIMIT = 3;  /* 프로필별 하루(KST) 대화 신청 한도 */
   var NOTIF_ENABLED = true; /* 발송 함수 배포 완료 → 알림 버튼 노출 */
@@ -1702,6 +1702,35 @@
       ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(ov); });
       render();
     }).catch(function () { modalNotice('오류', '연락처 복호화에 실패했어요.'); });
+  }
+
+  /* 임의 번호로 문자 (비회원 등 앱에 없는 사람 응대용) — 번호·내용을 직접 입력해 내 폰 문자앱을 엶. 번호는 로그에 안 남김. */
+  function openSmsCustom() {
+    if (!isAdminUnlocked) { modalNotice('안내', '관리자 모드에서만 가능해요.'); return; }
+    var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+    var sep = isIOS ? '&' : '?';
+    var ov = openModal(
+      '<h3>📱 임의 번호로 문자</h3>' +
+      '<p class="modal-msg">앱에 없는 <b>비회원</b>에게 문자할 때 써요. 번호·내용을 넣고 <b>문자앱 열기</b>를 누르면 내 폰 문자앱이 열려요. <b>요금 없음</b>(내 번호 발송).</p>' +
+      '<input type="tel" class="modal-input" id="sc-num" inputmode="numeric" autocomplete="off" placeholder="받는 번호 (예: 01012345678)" style="margin-bottom:8px;">' +
+      '<textarea class="modal-input" id="sc-text" rows="4" maxlength="500" placeholder="보낼 내용">' + escapeHtml('[베니브릿지] 안녕하세요, 관리자입니다. ') + '</textarea>' +
+      '<p class="modal-msg" style="color:var(--muted);font-size:0.78rem;margin:6px 0 0;">※ PC에서는 문자앱이 없어 안 열릴 수 있어요. 휴대폰에서 눌러주세요.</p>' +
+      '<div class="modal-actions">' +
+        '<button type="button" class="card-btn" id="sc-cancel">닫기</button>' +
+        '<a id="sc-open" class="card-btn primary" href="#" style="text-decoration:none;text-align:center;pointer-events:none;opacity:.45;">📱 문자앱 열기</a>' +
+      '</div>'
+    );
+    var numEl = ov.querySelector('#sc-num'), ta = ov.querySelector('#sc-text'), a = ov.querySelector('#sc-open');
+    function upd() {
+      var digits = (numEl.value || '').replace(/[^0-9]/g, '');
+      if (digits) { a.href = 'sms:' + digits + sep + 'body=' + encodeURIComponent(ta.value || ''); a.style.pointerEvents = ''; a.style.opacity = ''; }
+      else { a.href = '#'; a.style.pointerEvents = 'none'; a.style.opacity = '.45'; }
+    }
+    upd(); numEl.addEventListener('input', upd); ta.addEventListener('input', upd);
+    a.addEventListener('click', function () { if (!(numEl.value || '').replace(/[^0-9]/g, '')) return; try { appendLog('sms', '관리자', '내 폰 문자 → 임의 번호(비회원)'); } catch (e) {} setTimeout(function () { closeModal(ov); }, 400); });
+    ov.querySelector('#sc-cancel').addEventListener('click', function () { closeModal(ov); });
+    ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(ov); });
+    setTimeout(function () { try { numEl.focus(); } catch (e) {} }, 50);
   }
 
   /* ---- utils ---- */
@@ -6078,6 +6107,7 @@
     var headerBtns =
       '<div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
         '<button type="button" class="card-btn primary" data-action="broadcast" style="flex:none;">📢 전체 공지</button>' +
+        '<button type="button" class="card-btn" data-action="sms-custom" style="flex:none;">📱 임의 번호 문자</button>' +
         '<button type="button" class="card-btn" data-action="fold-all" style="flex:none;">🔁 전체 펼치기·접기</button>' +
         '<button type="button" class="card-btn' + (adminEditMode ? ' approve' : '') + '" id="admin-edit-toggle" style="flex:none;">' + (adminEditMode ? '✅ 편집 완료' : '✏️ 섹션 편집') + '</button>' +
         '<button type="button" class="card-btn' + (adminNotifActive() ? ' approve' : '') + '" id="admin-notif-toggle" style="flex:none;">' + (adminNotifBroken() ? '🔔 관리자 알림 재설정 필요' : (adminNotifActive() ? '🔔 관리자 알림 켜짐' : '🔔 관리자 알림 켜기')) + '</button>' +
@@ -9277,6 +9307,7 @@
       else if (action === 'list-order') { if (isAdminUnlocked) { listOrder = (listOrder === 'serial') ? 'recent' : 'serial'; paint(currentState); } return; }
       else if (action === 'fold-all') { toggleFoldAll(); return; }
       else if (action === 'broadcast') { handleBroadcast(); return; }
+      else if (action === 'sms-custom') { openSmsCustom(); return; }
       else if (action === 'admin-msg-delall') {
         if (isAdminUnlocked) modalConfirm('전체 삭제', nickForEntry(currentState, id) + '님과의 메시지를 모두 지울까요?').then(function (ok) { if (ok) deleteAdminThread(id); });
       }
